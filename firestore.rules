@@ -73,24 +73,26 @@ service cloud.firestore {
 
     // Domain Validators
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'isApproved', 'isActive', 'theme', 'createdAt']) &&
-             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() < 100 &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
+      return hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'isApproved', 'isActive', 'theme', 'createdAt', 'alertThresholdType', 'alertThresholdValue']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 200 &&
+             data.email is string && data.email.size() > 0 && data.email.size() < 200 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.role in ['admin', 'user'] &&
              (data.isApproved is bool || !('isApproved' in data)) &&
              (data.isActive is bool || !('isActive' in data)) &&
              (data.theme in ['light', 'dark'] || !('theme' in data)) &&
-             (data.createdAt is string || !('createdAt' in data));
+             (data.createdAt is string || !('createdAt' in data)) &&
+             (data.alertThresholdType in ['percentage', 'absolute'] || !('alertThresholdType' in data)) &&
+             (data.alertThresholdValue is number || !('alertThresholdValue' in data));
     }
 
     function isValidMenu(data) {
       return hasOnlyAllowedFields(['id', 'name', 'prices', 'recipe', 'notes', 'isArchived', 'createdAt', 'hasAlert', 'lastAcknowledgedCost']) &&
-             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 200 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              data.prices is map &&
              data.recipe is list && data.recipe.size() <= 100 &&
-             (data.notes is string && data.notes.size() <= 2000 || !('notes' in data)) &&
+             (data.notes is string && data.notes.size() <= 5000 || !('notes' in data)) &&
              (data.isArchived is bool || !('isArchived' in data)) &&
              (data.createdAt is string || !('createdAt' in data)) &&
              (data.hasAlert is bool || !('hasAlert' in data)) &&
@@ -99,8 +101,8 @@ service cloud.firestore {
 
     function isValidIngredient(data) {
       return hasOnlyAllowedFields(['id', 'name', 'spec', 'boxCost', 'boxQuantity', 'unitCost', 'salesPrice', 'unitSalesPrice', 'unit', 'isArchived', 'isSelectedForMenu', 'createdAt']) &&
-             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 300 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 300 &&
              (data.spec is string || !('spec' in data)) &&
              data.boxCost is number && data.boxCost >= 0 &&
              data.boxQuantity is number && data.boxQuantity > 0 &&
@@ -115,7 +117,8 @@ service cloud.firestore {
 
     function isValidIngredientChange(data) {
       return hasOnlyAllowedFields(['id', 'ingredientId', 'name', 'spec', 'type', 'prevPurchasePrice', 'currPurchasePrice', 'prevSalesPrice', 'currSalesPrice', 'timestamp']) &&
-             data.id is string && data.ingredientId is string &&
+             data.id is string && data.id.size() < 400 &&
+             data.ingredientId is string && data.ingredientId.size() < 300 &&
              data.name is string && data.name.size() > 0 &&
              (data.spec is string || !('spec' in data)) &&
              data.type in ['new', 'deleted', 'price_change', 'bulk_update'] &&
@@ -155,7 +158,9 @@ service cloud.firestore {
     match /ingredients/{ingredientId} {
       allow read: if isAdmin() || isApprovedUser();
       allow create: if (isAdmin() || isApprovedUser()) && isValidIngredient(request.resource.data);
-      allow update: if (isAdmin() || isApprovedUser()) && isValidIngredient(request.resource.data) && areImmutableFieldsUnchanged(['id', 'createdAt']);
+      allow update: if (isAdmin() || isApprovedUser()) && 
+                    isValidIngredient(request.resource.data) && 
+                    (isAdmin() || (areImmutableFieldsUnchanged(['id', 'createdAt']) || !('createdAt' in resource.data)));
       allow delete: if isAdmin() || isApprovedUser();
     }
 

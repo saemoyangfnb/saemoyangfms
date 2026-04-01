@@ -10,6 +10,8 @@ export interface User {
   isActive: boolean;
   theme?: 'light' | 'dark';
   createdAt: string;
+  alertThresholdType?: 'percentage' | 'absolute';
+  alertThresholdValue?: number;
 }
 
 export interface Ingredient {

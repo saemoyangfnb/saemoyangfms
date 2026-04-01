@@ -12,6 +12,11 @@ interface Props {
   onDeleteAll: () => void;
   onUnselectAll: () => void;
   isAdmin: boolean;
+  thresholdType: 'percentage' | 'absolute';
+  thresholdValue: number;
+  onThresholdTypeChange: (type: 'percentage' | 'absolute') => void;
+  onThresholdValueChange: (value: number) => void;
+  onSaveThreshold: () => void;
 }
 
 export const DatabaseView: React.FC<Props> = ({ 
@@ -20,7 +25,12 @@ export const DatabaseView: React.FC<Props> = ({
   onSave,
   onDeleteAll,
   onUnselectAll,
-  isAdmin
+  isAdmin,
+  thresholdType,
+  thresholdValue,
+  onThresholdTypeChange,
+  onThresholdValueChange,
+  onSaveThreshold
 }) => {
   const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
 
@@ -338,6 +348,45 @@ export const DatabaseView: React.FC<Props> = ({
           </button>
         </div>
       </div>
+
+      {/* Alert Sensitivity Settings */}
+      {isAdmin && (activeTab === 'active' || activeTab === 'all') && (
+        <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-500" />
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">변동 알림 민감도 설정:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select 
+              value={thresholdType}
+              onChange={(e) => onThresholdTypeChange(e.target.value as 'percentage' | 'absolute')}
+              className="text-xs border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            >
+              <option value="absolute">절대값 (원)</option>
+              <option value="percentage">퍼센트 (%)</option>
+            </select>
+            <input 
+              type="number"
+              step={thresholdType === 'absolute' ? '1' : '0.1'}
+              value={thresholdValue}
+              onChange={(e) => onThresholdValueChange(parseFloat(e.target.value) || 0)}
+              className="w-20 text-xs border border-slate-300 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-right"
+            />
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {thresholdType === 'absolute' ? '원 초과 변동 시 알림' : '% 초과 변동 시 알림'}
+            </span>
+          </div>
+          <button 
+            onClick={onSaveThreshold}
+            className="px-3 py-1 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded border border-slate-300 dark:border-slate-700 transition-colors font-medium"
+          >
+            설정 저장
+          </button>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+            * 매입단가 변동이 설정값보다 클 경우에만 '변동사항'에 기록되고 메뉴에 경고가 표시됩니다.
+          </p>
+        </div>
+      )}
 
       {(activeTab === 'active' || activeTab === 'all') && (
         <div 

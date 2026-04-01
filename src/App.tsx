@@ -107,6 +107,9 @@ export default function App() {
 
   const [globalError, setGlobalError] = useState<string | null>(null);
 
+  const [thresholdType, setThresholdType] = useState<'percentage' | 'absolute'>('absolute');
+  const [thresholdValue, setThresholdValue] = useState<number>(0.01);
+
   const tabs: TabType[] = ['수도권', '광역권', '지방권', '전체보기', '메뉴 관리', '데이터 베이스', '변동사항'];
 
   const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
@@ -242,6 +245,45 @@ export default function App() {
       unsubscribeChanges();
     };
   }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      setThresholdType(currentUser.alertThresholdType || 'absolute');
+      setThresholdValue(currentUser.alertThresholdValue ?? 0.01);
+    }
+  }, [currentUser]);
+
+  const handleSaveThreshold = async () => {
+    if (!currentUser) return;
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        alertThresholdType: thresholdType,
+        alertThresholdValue: thresholdValue
+      });
+      setCurrentUser({
+        ...currentUser,
+        alertThresholdType: thresholdType,
+        alertThresholdValue: thresholdValue
+      });
+      alert('알림 설정이 저장되었습니다.');
+    } catch (error) {
+      console.error('Error saving threshold:', error);
+      alert('설정 저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  const shouldTriggerAlert = (oldPrice: number, newPrice: number) => {
+    const type = currentUser?.alertThresholdType || 'absolute';
+    const val = currentUser?.alertThresholdValue ?? 0.01;
+    
+    if (type === 'absolute') {
+      return Math.abs(oldPrice - newPrice) > val;
+    } else {
+      if (oldPrice === 0) return newPrice > 0;
+      const percentChange = (Math.abs(newPrice - oldPrice) / oldPrice) * 100;
+      return percentChange > val;
+    }
+  };
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -504,29 +546,34 @@ export default function App() {
               timestamp
             };
             allOps.push({ type: 'set', ref: doc(db, 'ingredient_changes', changeId), data: change });
-          } else if (Math.abs(prevIng.unitCost - ing.unitCost) > 0.01 || Math.abs((prevIng.unitSalesPrice || 0) - (ing.unitSalesPrice || 0)) > 0.01) {
-            changeCount++;
-            const changeId = `change-${Date.now()}-${ing.id}`;
-            const change: IngredientChange = {
-              id: changeId,
-              ingredientId: ing.id,
-              name: ing.name,
-              spec: ing.spec || '',
-              type: 'price_change',
-              prevPurchasePrice: prevIng.unitCost || 0,
-              currPurchasePrice: ing.unitCost || 0,
-              prevSalesPrice: prevIng.unitSalesPrice || 0,
-              currSalesPrice: ing.unitSalesPrice || 0,
-              timestamp
-            };
-            allOps.push({ type: 'set', ref: doc(db, 'ingredient_changes', changeId), data: change });
+          } else {
+            const isPurchasePriceChanged = shouldTriggerAlert(prevIng.unitCost, ing.unitCost);
+            const isSalesPriceChanged = Math.abs((prevIng.unitSalesPrice || 0) - (ing.unitSalesPrice || 0)) > 0.01;
 
-            // Mark menus using this ingredient as having an alert
-            menus.forEach(menu => {
-              if (menu.recipe.some(item => item.ingredientId === ing.id)) {
-                menusToAlert.add(menu.id);
-              }
-            });
+            if (isPurchasePriceChanged || isSalesPriceChanged) {
+              changeCount++;
+              const changeId = `change-${Date.now()}-${ing.id}`;
+              const change: IngredientChange = {
+                id: changeId,
+                ingredientId: ing.id,
+                name: ing.name,
+                spec: ing.spec || '',
+                type: 'price_change',
+                prevPurchasePrice: prevIng.unitCost || 0,
+                currPurchasePrice: ing.unitCost || 0,
+                prevSalesPrice: prevIng.unitSalesPrice || 0,
+                currSalesPrice: ing.unitSalesPrice || 0,
+                timestamp
+              };
+              allOps.push({ type: 'set', ref: doc(db, 'ingredient_changes', changeId), data: change });
+
+              // Mark menus using this ingredient as having an alert
+              menus.forEach(menu => {
+                if (menu.recipe.some(item => item.ingredientId === ing.id)) {
+                  menusToAlert.add(menu.id);
+                }
+              });
+            }
           }
         }
       });
@@ -650,11 +697,28 @@ export default function App() {
             const name = row['상품명'];
             if (!name) continue;
 
-            const spec = row['규격'] || '';
-            const unit = (row['단위'] || 'EA') as any;
+            let spec = row['규격'] || '';
+            let unit = (row['단위'] || 'EA') as any;
+            let boxQuantity = parseFloat(row['내품수량']) || 1;
+
+            // Auto-correction for [새모양] kg items: convert to 5000g
+            if (name.includes('[새모양]') && spec.toLowerCase().includes('kg')) {
+              boxQuantity = 5000;
+              unit = 'g';
+            }
+
+            // Logic for "미" (pieces): extract number and use as divisor for unit prices
+            const miMatch = (name + spec).match(/(\d+)미/);
+            if (miMatch) {
+              const miCount = parseInt(miMatch[1]);
+              if (miCount > 0) {
+                boxQuantity = miCount;
+                unit = '미';
+              }
+            }
+
             const purchasePrice = parseFloat(row['매입가']?.replace(/,/g, '')) || 0;
             const salesPrice = parseFloat(row['매출가']?.replace(/,/g, '')) || 0;
-            const boxQuantity = parseFloat(row['내품수량']) || 1;
             
             const id = `ing-${name}-${spec}`.replace(/\s+/g, '-');
             const prevIng = ingredients.find(p => p.id === id);
@@ -701,24 +765,29 @@ export default function App() {
                     timestamp
                   }
                 });
-              } else if (Math.abs(prevIng.unitCost - newIng.unitCost) > 0.01 || prevIng.salesPrice !== salesPrice) {
-                const changeId = `change-${Date.now()}-${id}`;
-                allOps.push({
-                  type: 'set',
-                  ref: doc(db, 'ingredient_changes', changeId),
-                  data: {
-                    id: changeId,
-                    ingredientId: id,
-                    name,
-                    spec: spec || '',
-                    type: 'price_change',
-                    prevPurchasePrice: prevIng.unitCost,
-                    currPurchasePrice: newIng.unitCost,
-                    prevSalesPrice: prevIng.salesPrice,
-                    currSalesPrice: salesPrice,
-                    timestamp
-                  }
-                });
+              } else {
+                const isPurchasePriceChanged = shouldTriggerAlert(prevIng.unitCost, newIng.unitCost);
+                const isSalesPriceChanged = Math.abs(prevIng.salesPrice - salesPrice) > 0.01;
+
+                if (isPurchasePriceChanged || isSalesPriceChanged) {
+                  const changeId = `change-${Date.now()}-${id}`;
+                  allOps.push({
+                    type: 'set',
+                    ref: doc(db, 'ingredient_changes', changeId),
+                    data: {
+                      id: changeId,
+                      ingredientId: id,
+                      name,
+                      spec: spec || '',
+                      type: 'price_change',
+                      prevPurchasePrice: prevIng.unitCost,
+                      currPurchasePrice: newIng.unitCost,
+                      prevSalesPrice: prevIng.salesPrice,
+                      currSalesPrice: salesPrice,
+                      timestamp
+                    }
+                  });
+                }
               }
 
               allOps.push({ type: 'set', ref: doc(db, 'ingredients', id), data: newIng });
@@ -938,6 +1007,11 @@ export default function App() {
               onDeleteAll={handleDeleteAllIngredients}
               onUnselectAll={handleUnselectAllIngredients}
               isAdmin={currentUser.role === 'admin'}
+              thresholdType={thresholdType}
+              thresholdValue={thresholdValue}
+              onThresholdTypeChange={setThresholdType}
+              onThresholdValueChange={setThresholdValue}
+              onSaveThreshold={handleSaveThreshold}
             />
           ) : activeTab === '변동사항' ? (
             <IngredientChangeView 
