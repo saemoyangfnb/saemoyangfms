@@ -82,7 +82,7 @@ export const DatabaseView: React.FC<Props> = ({
             const salesPriceStr = (row['매출가'] || row['Sales'] || row['sell'])?.toString().replace(/,/g, '');
             const salesPrice = parseFloat(salesPriceStr) || 0;
             const unitStr = (row['단위'] || row['Unit'] || row['unit'])?.trim().toLowerCase();
-            const boxQuantity = parseFloat(row['내품수량'] || row['Quantity'] || row['qty'] || row['count']) || 1;
+            const boxQuantity = Math.max(0.001, parseFloat(row['내품수량'] || row['Quantity'] || row['qty'] || row['count']) || 1);
 
             let unit: Unit = 'ea';
             if (unitStr === 'kg') unit = 'kg';

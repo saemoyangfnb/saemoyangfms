@@ -78,10 +78,10 @@ service cloud.firestore {
              data.email is string && data.email.size() > 0 && data.email.size() < 100 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
              data.role in ['admin', 'user'] &&
-             data.isApproved is bool &&
-             data.isActive is bool &&
+             (data.isApproved is bool || !('isApproved' in data)) &&
+             (data.isActive is bool || !('isActive' in data)) &&
              (data.theme in ['light', 'dark'] || !('theme' in data)) &&
-             data.createdAt is string;
+             (data.createdAt is string || !('createdAt' in data));
     }
 
     function isValidMenu(data) {
@@ -91,14 +91,14 @@ service cloud.firestore {
              data.prices is map &&
              data.recipe is list && data.recipe.size() <= 100 &&
              (data.notes is string && data.notes.size() <= 2000 || !('notes' in data)) &&
-             data.isArchived is bool &&
-             data.createdAt is string &&
+             (data.isArchived is bool || !('isArchived' in data)) &&
+             (data.createdAt is string || !('createdAt' in data)) &&
              (data.hasAlert is bool || !('hasAlert' in data)) &&
              (data.lastAcknowledgedCost is number || !('lastAcknowledgedCost' in data));
     }
 
     function isValidIngredient(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'spec', 'boxCost', 'boxQuantity', 'unitCost', 'salesPrice', 'unit', 'isArchived', 'isSelectedForMenu', 'createdAt']) &&
+      return hasOnlyAllowedFields(['id', 'name', 'spec', 'boxCost', 'boxQuantity', 'unitCost', 'salesPrice', 'unitSalesPrice', 'unit', 'isArchived', 'isSelectedForMenu', 'createdAt']) &&
              data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (data.spec is string || !('spec' in data)) &&
@@ -106,10 +106,11 @@ service cloud.firestore {
              data.boxQuantity is number && data.boxQuantity > 0 &&
              data.unitCost is number && data.unitCost >= 0 &&
              (data.salesPrice is number && data.salesPrice >= 0 || !('salesPrice' in data)) &&
-             data.unit in ['kg', 'g', 'ea', '미'] &&
-             data.isArchived is bool &&
+             (data.unitSalesPrice is number && data.unitSalesPrice >= 0 || !('unitSalesPrice' in data)) &&
+             (data.unit is string || !('unit' in data)) &&
+             (data.isArchived is bool || !('isArchived' in data)) &&
              (data.isSelectedForMenu is bool || !('isSelectedForMenu' in data)) &&
-             data.createdAt is string;
+             (data.createdAt is string || !('createdAt' in data));
     }
 
     function isValidIngredientChange(data) {
@@ -117,7 +118,7 @@ service cloud.firestore {
              data.id is string && data.ingredientId is string &&
              data.name is string && data.name.size() > 0 &&
              (data.spec is string || !('spec' in data)) &&
-             data.type in ['new', 'deleted', 'price_change'] &&
+             data.type in ['new', 'deleted', 'price_change', 'bulk_update'] &&
              (data.prevPurchasePrice is number || !('prevPurchasePrice' in data)) &&
              (data.currPurchasePrice is number || !('currPurchasePrice' in data)) &&
              (data.prevSalesPrice is number || !('prevSalesPrice' in data)) &&
@@ -160,7 +161,7 @@ service cloud.firestore {
 
     match /ingredient_changes/{changeId} {
       allow read: if isAdmin() || isApprovedUser();
-      allow create: if isAdmin() && isValidIngredientChange(request.resource.data);
+      allow create: if (isAdmin() || isApprovedUser()) && isValidIngredientChange(request.resource.data);
       allow delete: if isAdmin();
     }
   }

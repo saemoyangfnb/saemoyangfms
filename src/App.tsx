@@ -671,7 +671,7 @@ export default function App() {
               unitSalesPrice: boxQuantity > 0 ? salesPrice / boxQuantity : salesPrice,
               isArchived: false,
               isSelectedForMenu: prevIng?.isSelectedForMenu || false,
-              createdAt: timestamp
+              createdAt: prevIng?.createdAt || timestamp
             };
             
             const isNew = !prevIng;
