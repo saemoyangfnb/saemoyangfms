@@ -95,7 +95,7 @@ export default function App() {
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
-  const [activeTab, setActiveTab] = useState<TabType>('수도권');
+  const [activeTab, setActiveTab] = useState<TabType>('지방권');
   
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<Menu | undefined>(undefined);
@@ -147,7 +147,7 @@ export default function App() {
     marginRate: true,
   });
 
-  const tabs: TabType[] = ['수도권', '광역권', '지방권', '전체보기', '메뉴 관리', '데이터 베이스', '변동사항'];
+  const tabs: TabType[] = ['지방권', '광역권', '수도권', '전체보기', '메뉴 관리', '데이터 베이스', '변동사항'];
 
   const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
     const message = error instanceof Error ? error.message : String(error);
