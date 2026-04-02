@@ -16,6 +16,18 @@
       },
       "required": ["uid", "email", "name", "role", "isApproved", "isActive", "createdAt"]
     },
+    "MenuCategory": {
+      "title": "MenuCategory",
+      "description": "Category for grouping menus",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "order": { "type": "number" },
+        "isVisible": { "type": "boolean" }
+      },
+      "required": ["id", "name", "order", "isVisible"]
+    },
     "Menu": {
       "title": "Menu",
       "description": "Menu item with regional prices and recipe",
@@ -23,6 +35,9 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "order": { "type": "number" },
+        "isVisible": { "type": "boolean" },
         "prices": {
           "type": "object",
           "properties": {
@@ -92,6 +107,10 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profiles"
+    },
+    "/menu_categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/MenuCategory" },
+      "description": "Menu categories"
     },
     "/menus/{menuId}": {
       "schema": { "$ref": "#/entities/Menu" },

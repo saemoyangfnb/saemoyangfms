@@ -86,10 +86,21 @@ service cloud.firestore {
              (data.alertThresholdValue is number || !('alertThresholdValue' in data));
     }
 
-    function isValidMenu(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'prices', 'recipe', 'notes', 'isArchived', 'createdAt', 'hasAlert', 'lastAcknowledgedCost']) &&
+    function isValidMenuCategory(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'order', 'isVisible']) &&
              data.id is string && data.id.size() > 0 && data.id.size() < 200 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.order is number &&
+             data.isVisible is bool;
+    }
+
+    function isValidMenu(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'categoryId', 'order', 'isVisible', 'prices', 'recipe', 'notes', 'isArchived', 'createdAt', 'hasAlert', 'lastAcknowledgedCost']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 200 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             (data.categoryId is string || !('categoryId' in data)) &&
+             (data.order is number || !('order' in data)) &&
+             (data.isVisible is bool || !('isVisible' in data)) &&
              data.prices is map &&
              data.recipe is list && data.recipe.size() <= 100 &&
              (data.notes is string && data.notes.size() <= 5000 || !('notes' in data)) &&
@@ -145,6 +156,13 @@ service cloud.firestore {
       allow update: if (isOwner(userId) && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'email', 'role', 'isApproved', 'isActive', 'createdAt'])) ||
                     (isAdmin() && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']));
                     
+      allow delete: if isAdmin();
+    }
+
+    match /menu_categories/{categoryId} {
+      allow read: if isAdmin() || isApprovedUser();
+      allow create: if isAdmin() && isValidMenuCategory(request.resource.data);
+      allow update: if isAdmin() && isValidMenuCategory(request.resource.data) && areImmutableFieldsUnchanged(['id']);
       allow delete: if isAdmin();
     }
 

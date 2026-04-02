@@ -42,14 +42,31 @@ export interface IngredientChange {
   timestamp: string;
 }
 
+export type RecipeItemType = 'ingredient' | 'menu' | 'custom';
+
 export interface RecipeItem {
-  ingredientId: string;
+  type?: RecipeItemType;
+  ingredientId?: string;
+  menuId?: string;
+  customName?: string;
+  customCost?: number;
+  customUnit?: string;
   quantity: number;
+}
+
+export interface MenuCategory {
+  id: string;
+  name: string;
+  order: number;
+  isVisible: boolean;
 }
 
 export interface Menu {
   id: string;
   name: string;
+  categoryId?: string;
+  order?: number;
+  isVisible?: boolean;
   prices: Record<Region, number>;
   recipe: RecipeItem[];
   notes?: string;

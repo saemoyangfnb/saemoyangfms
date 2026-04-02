@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { Menu, Region } from '../types';
+import { Menu, Region, MenuCategory } from '../types';
 import { X, AlertTriangle } from 'lucide-react';
 
 interface Props {
   menu?: Menu;
+  menuCategories: MenuCategory[];
   onSave: (menu: Menu) => void;
   onClose: () => void;
   onArchive?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
 
-export const MenuModal: React.FC<Props> = ({ menu, onSave, onClose, onArchive, onDelete }) => {
+export const MenuModal: React.FC<Props> = ({ menu, menuCategories, onSave, onClose, onArchive, onDelete }) => {
   const isEdit = !!menu;
   const [name, setName] = useState(menu?.name || '');
+  const [categoryId, setCategoryId] = useState(menu?.categoryId || '');
   const [prices, setPrices] = useState<Record<Region, number>>(
     menu?.prices || { '지방권': 0, '광역권': 0, '수도권': 0 }
   );
@@ -21,14 +23,22 @@ export const MenuModal: React.FC<Props> = ({ menu, onSave, onClose, onArchive, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({
+    const newMenu: Menu = {
       id: menu?.id || Date.now().toString(),
       name,
+      order: menu?.order ?? 0,
+      isVisible: menu?.isVisible ?? true,
       prices,
       recipe: menu?.recipe || [],
       isArchived: menu?.isArchived || false,
       createdAt: menu?.createdAt || new Date().toISOString(),
-    });
+    };
+    
+    if (categoryId) {
+      newMenu.categoryId = categoryId;
+    }
+    
+    onSave(newMenu);
   };
 
   return (
@@ -52,6 +62,20 @@ export const MenuModal: React.FC<Props> = ({ menu, onSave, onClose, onArchive, o
                 className="w-full border border-slate-300 dark:border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 placeholder="예: 고등어구이"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">카테고리</label>
+              <select
+                value={categoryId}
+                onChange={e => setCategoryId(e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              >
+                <option value="">미분류</option>
+                {menuCategories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
             </div>
             
             <div className="pt-2 border-t border-slate-200 dark:border-slate-800">

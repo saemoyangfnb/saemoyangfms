@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Ingredient, Region, RecipeItem, User, IngredientChange } from './types';
+import { Menu, MenuCategory, Ingredient, Region, RecipeItem, User, IngredientChange } from './types';
 import { MenuTable } from './components/MenuTable';
 import { OverviewTable } from './components/OverviewTable';
 import { MenuModal } from './components/MenuModal';
+import { CategoryManagementModal } from './components/CategoryManagementModal';
 import { RecipeModal } from './components/RecipeModal';
 import { ArchiveView } from './components/ArchiveView';
 import { IngredientChangeView } from './components/IngredientChangeView';
@@ -32,7 +33,7 @@ import {
   History
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { calculateTotalCost, formatPercent } from './utils';
+import { calculateTotalCost, formatPercent, doesMenuContainIngredient } from './utils';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider, User as FirebaseUser } from 'firebase/auth';
 import { 
@@ -91,6 +92,7 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   const [menus, setMenus] = useState<Menu[]>([]);
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('수도권');
@@ -99,6 +101,34 @@ export default function App() {
   const [editingMenu, setEditingMenu] = useState<Menu | undefined>(undefined);
   
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  const handleSaveCategories = async (updatedCategories: MenuCategory[]) => {
+    try {
+      // Find deleted categories
+      const deletedCategories = menuCategories.filter(c => !updatedCategories.find(uc => uc.id === c.id));
+      
+      // Update or add categories
+      for (const cat of updatedCategories) {
+        await setDoc(doc(db, 'menu_categories', cat.id), cat);
+      }
+      
+      // Delete removed categories
+      for (const cat of deletedCategories) {
+        await deleteDoc(doc(db, 'menu_categories', cat.id));
+        
+        // Update menus that were in this category to be uncategorized
+        const affectedMenus = menus.filter(m => m.categoryId === cat.id);
+        for (const menu of affectedMenus) {
+          await updateDoc(doc(db, 'menus', menu.id), { categoryId: deleteField() });
+        }
+      }
+      
+      setIsCategoryModalOpen(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'menu_categories');
+    }
+  };
   const [recipeMenu, setRecipeMenu] = useState<Menu | null>(null);
   const [showDeleteAllMenusConfirm, setShowDeleteAllMenusConfirm] = useState(false);
 
@@ -109,6 +139,13 @@ export default function App() {
 
   const [thresholdType, setThresholdType] = useState<'percentage' | 'absolute'>('absolute');
   const [thresholdValue, setThresholdValue] = useState<number>(0.01);
+
+  const [visibleColumns, setVisibleColumns] = useState({
+    cost: true,
+    margin: true,
+    costRate: true,
+    marginRate: true,
+  });
 
   const tabs: TabType[] = ['수도권', '광역권', '지방권', '전체보기', '메뉴 관리', '데이터 베이스', '변동사항'];
 
@@ -214,6 +251,14 @@ export default function App() {
       handleFirestoreError(error, OperationType.GET, 'menus');
     });
 
+    const unsubscribeMenuCategories = onSnapshot(collection(db, 'menu_categories'), (snapshot) => {
+      const categoriesData: MenuCategory[] = [];
+      snapshot.forEach(doc => categoriesData.push(doc.data() as MenuCategory));
+      setMenuCategories(categoriesData.sort((a, b) => a.order - b.order));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'menu_categories');
+    });
+
     const unsubscribeIngredients = onSnapshot(collection(db, 'ingredients'), (snapshot) => {
       const ingredientsData: Ingredient[] = [];
       snapshot.forEach(doc => ingredientsData.push(doc.data() as Ingredient));
@@ -241,6 +286,7 @@ export default function App() {
 
     return () => {
       unsubscribeMenus();
+      unsubscribeMenuCategories();
       unsubscribeIngredients();
       unsubscribeChanges();
     };
@@ -335,6 +381,77 @@ export default function App() {
   const activeMenus = menus.filter(m => !m.isArchived);
   const archivedMenus = menus.filter(m => m.isArchived);
 
+  const handleReorderMenu = async (menuId: string, sourceCategoryId: string | undefined, destinationCategoryId: string | undefined, newIndex: number) => {
+    const menu = menus.find(m => m.id === menuId);
+    if (!menu) return;
+
+    try {
+      if (sourceCategoryId === destinationCategoryId) {
+        // Reordering within the same category
+        const categoryMenus = menus
+          .filter(m => m.categoryId === sourceCategoryId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        const oldIndex = categoryMenus.findIndex(m => m.id === menuId);
+        if (oldIndex === newIndex) return;
+
+        const newCategoryMenus = [...categoryMenus];
+        const [movedMenu] = newCategoryMenus.splice(oldIndex, 1);
+        newCategoryMenus.splice(newIndex, 0, movedMenu);
+
+        for (let i = 0; i < newCategoryMenus.length; i++) {
+          if (newCategoryMenus[i].order !== i) {
+            await updateDoc(doc(db, 'menus', newCategoryMenus[i].id), { order: i });
+          }
+        }
+      } else {
+        // Moving to a different category
+        const destCategoryMenus = menus
+          .filter(m => m.categoryId === destinationCategoryId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        const newDestCategoryMenus = [...destCategoryMenus];
+        newDestCategoryMenus.splice(newIndex, 0, menu);
+
+        // Update the moved menu's category
+        await updateDoc(doc(db, 'menus', menu.id), { 
+          categoryId: destinationCategoryId || deleteField(),
+          order: newIndex
+        });
+
+        // Update orders in the destination category
+        for (let i = 0; i < newDestCategoryMenus.length; i++) {
+          if (newDestCategoryMenus[i].id !== menu.id && newDestCategoryMenus[i].order !== i) {
+            await updateDoc(doc(db, 'menus', newDestCategoryMenus[i].id), { order: i });
+          }
+        }
+        
+        // Update orders in the source category
+        const sourceCategoryMenus = menus
+          .filter(m => m.categoryId === sourceCategoryId && m.id !== menu.id)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+          
+        for (let i = 0; i < sourceCategoryMenus.length; i++) {
+          if (sourceCategoryMenus[i].order !== i) {
+            await updateDoc(doc(db, 'menus', sourceCategoryMenus[i].id), { order: i });
+          }
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'menus');
+    }
+  };
+
+  const handleToggleMenuVisibility = async (menuId: string) => {
+    const menu = menus.find(m => m.id === menuId);
+    if (!menu) return;
+    try {
+      await updateDoc(doc(db, 'menus', menu.id), { isVisible: menu.isVisible === false ? true : false });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'menus');
+    }
+  };
+
   const handleSaveMenu = async (menu: Menu) => {
     try {
       await setDoc(doc(db, 'menus', menu.id), menu);
@@ -410,7 +527,7 @@ export default function App() {
     const menu = menus.find(m => m.id === menuId);
     if (!menu) return;
 
-    const currentCost = calculateTotalCost(menu.recipe, ingredients);
+    const currentCost = calculateTotalCost(menu.recipe, ingredients, menus);
     
     try {
       await updateDoc(doc(db, 'menus', menuId), {
@@ -569,7 +686,7 @@ export default function App() {
 
               // Mark menus using this ingredient as having an alert
               menus.forEach(menu => {
-                if (menu.recipe.some(item => item.ingredientId === ing.id)) {
+                if (doesMenuContainIngredient(menu.recipe, ing.id, menus)) {
                   menusToAlert.add(menu.id);
                 }
               });
@@ -581,7 +698,7 @@ export default function App() {
       // Also mark menus with deleted ingredients as having an alert
       deletedIngredients.forEach(ing => {
         menus.forEach(menu => {
-          if (menu.recipe.some(item => item.ingredientId === ing.id)) {
+          if (doesMenuContainIngredient(menu.recipe, ing.id, menus)) {
             menusToAlert.add(menu.id);
           }
         });
@@ -692,11 +809,14 @@ export default function App() {
 
   const handleExportCsv = () => {
     const data = activeMenus.map(m => {
-      const cost = calculateTotalCost(m.recipe, ingredients);
+      const cost = calculateTotalCost(m.recipe, ingredients, menus);
       const row: any = {
         '메뉴명': m.name,
-        '원가': cost,
       };
+      
+      if (visibleColumns.cost) {
+        row['원가'] = cost;
+      }
       
       (['지방권', '광역권', '수도권'] as Region[]).forEach(r => {
         const price = m.prices[r] || 0;
@@ -705,9 +825,9 @@ export default function App() {
         const marginRate = price > 0 ? margin / price : 0;
         
         row[`${r}_판매가`] = price;
-        row[`${r}_마진`] = margin;
-        row[`${r}_원가율`] = formatPercent(costRate);
-        row[`${r}_마진율`] = formatPercent(marginRate);
+        if (visibleColumns.margin) row[`${r}_마진`] = margin;
+        if (visibleColumns.costRate) row[`${r}_원가율`] = formatPercent(costRate);
+        if (visibleColumns.marginRate) row[`${r}_마진율`] = formatPercent(marginRate);
       });
       
       return row;
@@ -818,10 +938,13 @@ export default function App() {
           {activeTab === '전체보기' ? (
             <OverviewTable 
               menus={activeMenus} 
+              menuCategories={menuCategories}
               ingredients={ingredients} 
               isAdmin={currentUser.role === 'admin'}
+              visibleColumns={visibleColumns}
               onAcknowledgeAlert={handleAcknowledgeAlert}
               onNavigateToTab={setActiveTab}
+              onToggleColumn={(column) => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }))}
             />
           ) : activeTab === '메뉴 관리' ? (
             <div className="p-6">
@@ -831,6 +954,12 @@ export default function App() {
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">새로운 메뉴를 추가하거나 보관된 메뉴를 관리합니다.</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsCategoryModalOpen(true)}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 text-sm shadow-sm transition-colors border border-slate-200 dark:border-slate-700"
+                  >
+                    카테고리 관리
+                  </button>
                   <button 
                     onClick={() => setShowDeleteAllMenusConfirm(true)}
                     className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-lg flex items-center gap-2 text-sm shadow-sm transition-colors border border-rose-200 dark:border-rose-800"
@@ -885,23 +1014,37 @@ export default function App() {
           ) : (
             <MenuTable 
               menus={activeMenus} 
+              menuCategories={menuCategories}
               ingredients={ingredients} 
               region={activeTab as Region} 
+              visibleColumns={visibleColumns}
               onEditMenu={(menu) => { setEditingMenu(menu); setIsMenuModalOpen(true); }}
               onArchiveMenu={handleArchiveMenu}
               onEditRecipe={(menu) => { setRecipeMenu(menu); setIsRecipeModalOpen(true); }}
               isAdmin={currentUser.role === 'admin'}
               onAcknowledgeAlert={handleAcknowledgeAlert}
               onNavigateToTab={setActiveTab}
+              onReorderMenu={handleReorderMenu}
+              onToggleMenuVisibility={handleToggleMenuVisibility}
+              onToggleColumn={(column) => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }))}
             />
           )}
         </div>
       </div>
 
       {/* Modals */}
+      {isCategoryModalOpen && (
+        <CategoryManagementModal
+          categories={menuCategories}
+          onSave={handleSaveCategories}
+          onClose={() => setIsCategoryModalOpen(false)}
+        />
+      )}
+
       {isMenuModalOpen && (
         <MenuModal 
           menu={editingMenu} 
+          menuCategories={menuCategories}
           onSave={handleSaveMenu} 
           onClose={() => { setIsMenuModalOpen(false); setEditingMenu(undefined); }} 
           onArchive={handleArchiveMenu}
@@ -913,6 +1056,7 @@ export default function App() {
         <RecipeModal 
           menu={recipeMenu} 
           ingredients={ingredients}
+          menus={menus}
           onSave={handleSaveRecipe}
           onClose={() => { setIsRecipeModalOpen(false); setRecipeMenu(null); }}
         />

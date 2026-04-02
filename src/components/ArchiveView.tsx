@@ -25,7 +25,7 @@ export const ArchiveView: React.FC<Props> = ({ menus, ingredients, onRestoreMenu
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
           {menus.map(menu => {
-            const cost = calculateTotalCost(menu.recipe, ingredients);
+            const cost = calculateTotalCost(menu.recipe, ingredients, menus);
 
             return (
               <tr key={menu.id} className="bg-white dark:bg-slate-900 hover:bg-blue-50/40 dark:hover:bg-blue-900/20 transition-colors group">
