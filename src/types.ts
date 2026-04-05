@@ -31,6 +31,8 @@ export interface User {
   alertThresholdValue?: number;
 }
 
+export type CostCalcMethod = 'purchase_divide' | 'sales_divide' | 'manual';
+
 export interface Ingredient {
   id: string;
   brandId?: BrandId;
@@ -42,6 +44,7 @@ export interface Ingredient {
   salesPrice: number;
   unitSalesPrice: number;
   unit: Unit;
+  costCalcMethod?: CostCalcMethod;
   isArchived?: boolean;
   isSelectedForMenu?: boolean;
   createdAt?: string;

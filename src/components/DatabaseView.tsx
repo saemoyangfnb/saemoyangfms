@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Ingredient, Unit, IngredientChange } from '../types';
-import { Plus, Archive, Edit2, RotateCcw, Trash2, Upload, Search, AlertTriangle, CheckCircle2, Circle, Download } from 'lucide-react';
+import { Ingredient, Unit, IngredientChange, CostCalcMethod, User } from '../types';
+import { Plus, Archive, Edit2, RotateCcw, Trash2, Upload, Search, AlertTriangle, CheckCircle2, Circle, Download, History } from 'lucide-react';
 import { formatCurrency } from '../utils';
 import Papa from 'papaparse';
 import { PriceHistoryGraph } from './PriceHistoryGraph';
+import { IngredientChangeView } from './IngredientChangeView';
 
 interface Props {
   ingredients: Ingredient[];
@@ -12,6 +13,8 @@ interface Props {
   onDeleteAll: () => void;
   onUnselectAll: () => void;
   isAdmin: boolean;
+  currentUser: User;
+  onDeleteChange: (id: string) => void;
   thresholdType: 'percentage' | 'absolute';
   thresholdValue: number;
   onThresholdTypeChange: (type: 'percentage' | 'absolute') => void;
@@ -19,13 +22,15 @@ interface Props {
   onSaveThreshold: () => void;
 }
 
-export const DatabaseView: React.FC<Props> = ({ 
-  ingredients: initialIngredients, 
-  ingredientChanges, 
+export const DatabaseView: React.FC<Props> = ({
+  ingredients: initialIngredients,
+  ingredientChanges,
   onSave,
   onDeleteAll,
   onUnselectAll,
   isAdmin,
+  currentUser,
+  onDeleteChange,
   thresholdType,
   thresholdValue,
   onThresholdTypeChange,
@@ -45,7 +50,9 @@ export const DatabaseView: React.FC<Props> = ({
   const [boxQuantity, setBoxQuantity] = useState<number>(1);
   const [unit, setUnit] = useState<Unit>('kg');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'active' | 'archived' | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<'active' | 'archived' | 'all' | 'changes'>('all');
+  const [costCalcMethod, setCostCalcMethod] = useState<CostCalcMethod>('purchase_divide');
+  const [manualUnitCost, setManualUnitCost] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
@@ -220,29 +227,36 @@ export const DatabaseView: React.FC<Props> = ({
     link.click();
   };
 
+  const computeUnitCost = (bc: number, sp: number, bq: number, method: CostCalcMethod, manual: number): number => {
+    if (method === 'manual') return manual;
+    if (method === 'sales_divide') return bq > 0 ? Math.round(sp / bq) : 0;
+    return bq > 0 ? Math.round(bc / bq) : 0;
+  };
+
   const handleAddOrUpdate = () => {
     if (!name || boxCost < 0 || boxQuantity <= 0) return;
 
-    const unitCost = Math.round(boxCost / boxQuantity);
+    const unitCost = computeUnitCost(boxCost, salesPrice, boxQuantity, costCalcMethod, manualUnitCost);
     const unitSalesPrice = Math.round(salesPrice / boxQuantity);
     let updated: Ingredient[];
 
     if (editingId) {
-      updated = ingredients.map(ing => 
-        ing.id === editingId ? { ...ing, name, spec, boxCost, salesPrice, boxQuantity, unitCost, unitSalesPrice, unit } : ing
+      updated = ingredients.map(ing =>
+        ing.id === editingId ? { ...ing, name, spec, boxCost, salesPrice, boxQuantity, unitCost, unitSalesPrice, unit, costCalcMethod } : ing
       );
       setEditingId(null);
     } else {
-      updated = [...ingredients, { 
-        id: Date.now().toString(), 
-        name, 
+      updated = [...ingredients, {
+        id: Date.now().toString(),
+        name,
         spec,
-        boxCost, 
+        boxCost,
         salesPrice,
-        boxQuantity, 
-        unitCost, 
+        boxQuantity,
+        unitCost,
         unitSalesPrice,
-        unit, 
+        unit,
+        costCalcMethod,
         isArchived: false,
         createdAt: new Date().toISOString()
       }];
@@ -267,6 +281,8 @@ export const DatabaseView: React.FC<Props> = ({
     setSalesPrice(0);
     setBoxQuantity(1);
     setUnit('kg');
+    setCostCalcMethod('purchase_divide');
+    setManualUnitCost(0);
   };
 
   const handleEdit = (ing: Ingredient) => {
@@ -277,6 +293,8 @@ export const DatabaseView: React.FC<Props> = ({
     setSalesPrice(ing.salesPrice || 0);
     setBoxQuantity(ing.boxQuantity);
     setUnit(ing.unit);
+    setCostCalcMethod(ing.costCalcMethod || 'purchase_divide');
+    setManualUnitCost(ing.unitCost);
     
     // Scroll to form
     const formElement = document.getElementById('ingredient-form');
@@ -328,72 +346,83 @@ export const DatabaseView: React.FC<Props> = ({
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-4 pt-2 shrink-0 items-center">
-        <button 
+        <button
           onClick={() => setActiveTab('active')}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === 'active' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
           메뉴용 식자재
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('all')}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === 'all' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
           전체 데이터베이스
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('archived')}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === 'archived' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
           보관함
         </button>
+        <button
+          onClick={() => setActiveTab('changes')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 flex items-center gap-1.5 ${activeTab === 'changes' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          <History size={14} />
+          변동사항
+        </button>
         <div className="ml-auto pb-2 flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              type="text"
-              placeholder="식자재 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64"
-            />
-          </div>
-          <input
-            type="file"
-            accept=".csv"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <button 
-            onClick={downloadTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors font-medium border border-blue-200 dark:border-blue-800"
-            title="CSV 템플릿 다운로드"
-          >
-            <Download size={16} />
-            템플릿
-          </button>
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-md transition-colors font-medium border border-emerald-200 dark:border-emerald-800"
-          >
-            <Upload size={16} />
-            CSV 불러오기
-          </button>
-          <button 
-            onClick={() => {
-              setDeleteAllType(activeTab === 'active' ? 'active' : 'all');
-              setShowDeleteAllConfirm(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-md transition-colors font-medium border border-rose-200 dark:border-rose-800"
-          >
-            <Trash2 size={16} />
-            {activeTab === 'active' ? '메뉴용 식자재 전체 삭제' : '전체 데이터 삭제'}
-          </button>
+          {activeTab !== 'changes' && (
+            <>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="식자재 검색..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64"
+                />
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                onClick={downloadTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors font-medium border border-blue-200 dark:border-blue-800"
+                title="CSV 템플릿 다운로드"
+              >
+                <Download size={16} />
+                템플릿
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-md transition-colors font-medium border border-emerald-200 dark:border-emerald-800"
+              >
+                <Upload size={16} />
+                CSV 불러오기
+              </button>
+              <button
+                onClick={() => {
+                  setDeleteAllType(activeTab === 'active' ? 'active' : 'all');
+                  setShowDeleteAllConfirm(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-md transition-colors font-medium border border-rose-200 dark:border-rose-800"
+              >
+                <Trash2 size={16} />
+                {activeTab === 'active' ? '메뉴용 식자재 전체 삭제' : '전체 데이터 삭제'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Alert Sensitivity Settings */}
-      {isAdmin && (activeTab === 'active' || activeTab === 'all') && (
+      {isAdmin && (activeTab === 'active' || activeTab === 'all') && activeTab !== 'changes' && (
         <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-500" />
@@ -431,7 +460,7 @@ export const DatabaseView: React.FC<Props> = ({
         </div>
       )}
 
-      {(activeTab === 'active' || activeTab === 'all') && (
+      {(activeTab === 'active' || activeTab === 'all') && activeTab !== 'changes' && (
         <div 
           id="ingredient-form"
           className={`p-4 border-b shrink-0 transition-all duration-300 ${
@@ -536,12 +565,43 @@ export const DatabaseView: React.FC<Props> = ({
               <option value="미">미</option>
             </select>
           </div>
-          <div className="w-full sm:w-24 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 text-right">
-            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5 text-left uppercase">매입단가</label>
-            <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
-              {formatCurrency(boxQuantity > 0 ? Math.round(boxCost / boxQuantity) : 0)}
-            </span>
+          <div className="w-full sm:w-36">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase tracking-wider">단가 계산 방식</label>
+            <select
+              value={costCalcMethod}
+              onChange={e => {
+                const method = e.target.value as CostCalcMethod;
+                setCostCalcMethod(method);
+                if (method !== 'manual') setManualUnitCost(0);
+                else setManualUnitCost(computeUnitCost(boxCost, salesPrice, boxQuantity, 'purchase_divide', 0));
+              }}
+              className="w-full border border-slate-300 dark:border-slate-700 rounded-md px-2 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            >
+              <option value="purchase_divide">매입가 ÷ 수량</option>
+              <option value="sales_divide">매출가 ÷ 수량</option>
+              <option value="manual">직접 입력</option>
+            </select>
           </div>
+          {costCalcMethod === 'manual' ? (
+            <div className="w-full sm:w-24">
+              <label className="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mb-1 uppercase tracking-wider">매입단가 (직접)</label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={manualUnitCost}
+                onChange={e => setManualUnitCost(parseInt(e.target.value) || 0)}
+                className="w-full border border-amber-400 dark:border-amber-600 rounded-md px-3 py-2 text-sm text-right bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+          ) : (
+            <div className="w-full sm:w-24 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 text-right">
+              <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5 text-left uppercase">매입단가</label>
+              <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
+                {formatCurrency(computeUnitCost(boxCost, salesPrice, boxQuantity, costCalcMethod, 0))}
+              </span>
+            </div>
+          )}
           <div className="w-full sm:w-24 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-md border border-blue-100 dark:border-blue-800 text-right">
             <label className="block text-[10px] font-bold text-blue-500 dark:text-blue-400 mb-0.5 text-left uppercase">매출단가</label>
             <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
@@ -584,7 +644,19 @@ export const DatabaseView: React.FC<Props> = ({
       </div>
     )}
 
-      <div className="flex-1 overflow-auto p-4">
+      {/* 변동사항 탭 */}
+      {activeTab === 'changes' && (
+        <div className="flex-1 overflow-auto">
+          <IngredientChangeView
+            changes={ingredientChanges}
+            ingredients={ingredients}
+            currentUser={currentUser}
+            onDeleteChange={onDeleteChange}
+          />
+        </div>
+      )}
+
+      <div className={`flex-1 overflow-auto p-4 ${activeTab === 'changes' ? 'hidden' : ''}`}>
         {/* Desktop Table */}
         <div className="hidden md:block min-w-[800px]">
           <table className="w-full text-sm text-left">
@@ -625,7 +697,14 @@ export const DatabaseView: React.FC<Props> = ({
                   <td className="py-2 text-right text-slate-500 dark:text-slate-400">{formatCurrency(ing.salesPrice || 0)}</td>
                   <td className="py-2 text-right text-slate-500 dark:text-slate-400">{ing.boxQuantity}</td>
                   <td className="py-2 text-center text-slate-500 dark:text-slate-400">{ing.unit}</td>
-                  <td className="py-2 text-right text-slate-500 dark:text-slate-400">{formatCurrency(ing.unitCost)}</td>
+                  <td className="py-2 text-right">
+                    <div className="text-slate-500 dark:text-slate-400">{formatCurrency(ing.unitCost)}</div>
+                    {ing.costCalcMethod && ing.costCalcMethod !== 'purchase_divide' && (
+                      <div className={`text-[10px] font-bold mt-0.5 ${ing.costCalcMethod === 'manual' ? 'text-amber-500' : 'text-indigo-500'}`}>
+                        {ing.costCalcMethod === 'manual' ? '직접입력' : '매출가÷'}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2 text-right font-medium text-blue-600 dark:text-blue-400">{formatCurrency(ing.unitSalesPrice || 0)}</td>
                   <td className="py-2 text-center space-x-1">
                     {isAdmin && (activeTab === 'active' || activeTab === 'all') ? (
@@ -728,8 +807,8 @@ export const DatabaseView: React.FC<Props> = ({
         )}
       </div>
 
-      {hoveredId && (
-        <div 
+      {hoveredId && activeTab !== 'changes' && (
+        <div
           className="fixed z-[100] pointer-events-none"
           style={{ left: hoverPosition.x, top: hoverPosition.y }}
         >

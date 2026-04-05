@@ -15,6 +15,7 @@ import { IngredientChangeView } from './components/IngredientChangeView';
 import { DatabaseView } from './components/DatabaseView';
 import { Auth, ChangePasswordModal } from './components/Auth';
 import { AdminPanel } from './components/AdminPanel';
+import { ReviewDashboard } from './components/ReviewDashboard';
 import {
   Plus, Download, LogOut, KeyRound, Users, Sun, Moon,
   Archive, AlertTriangle, Trash2, X, ChevronLeft, ChevronRight,
@@ -36,7 +37,7 @@ enum OperationType {
 }
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -51,7 +52,6 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // 브랜드 상태
   const [brands, setBrands] = useState<Brand[]>(DEFAULT_BRANDS);
   const [expandedBrands, setExpandedBrands] = useState<Set<BrandId>>(new Set(['dalbitgo']));
   const [sidebar, setSidebar] = useState<SidebarState>({
@@ -60,19 +60,16 @@ export default function App() {
     costTab: '수도권',
   });
 
-  // 브랜드 편집
   const [editingBrandId, setEditingBrandId] = useState<BrandId | null>(null);
   const [editingBrandName, setEditingBrandName] = useState('');
   const [showAddBrand, setShowAddBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
 
-  // 데이터
   const [menus, setMenus] = useState<Menu[]>([]);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientChanges, setIngredientChanges] = useState<IngredientChange[]>([]);
 
-  // 모달
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<Menu | undefined>(undefined);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
@@ -89,9 +86,8 @@ export default function App() {
 
   const activeBrand = sidebar.brandId;
 
-  // 브랜드별 필터링
   const brandMenus = menus.filter(m => (m.brandId || 'dalbitgo') === activeBrand);
-  const brandIngredients = ingredients; // 전 브랜드 공유
+  const brandIngredients = ingredients;
   const brandCategories = menuCategories.filter(c => (c.brandId || 'dalbitgo') === activeBrand);
   const brandChanges = ingredientChanges;
 
@@ -142,12 +138,10 @@ export default function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // 브랜드 Firestore 연동
   useEffect(() => {
     if (!currentUser) return;
     const unsubscribe = onSnapshot(collection(db, 'brands'), (snapshot) => {
       if (snapshot.empty) {
-        // 최초 실행 시 기본 브랜드 저장
         DEFAULT_BRANDS.forEach(brand => {
           setDoc(doc(db, 'brands', brand.id), brand);
         });
@@ -241,7 +235,6 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // 브랜드 관리
   const handleAddBrand = async () => {
     if (!newBrandName.trim()) return;
     const id = `brand-${Date.now()}`;
@@ -290,7 +283,6 @@ export default function App() {
     }
   };
 
-  // 메뉴/식재료 핸들러
   const handleSaveCategories = async (updatedCategories: MenuCategory[]) => {
     try {
       const deletedCategories = brandCategories.filter(c => !updatedCategories.find(uc => uc.id === c.id));
@@ -582,7 +574,6 @@ export default function App() {
       {/* 사이드바 */}
       <aside className={`${sidebarCollapsed ? 'w-14' : 'w-60'} transition-all duration-300 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 shrink-0`}>
 
-        {/* 상단 로고 + 접기 버튼 */}
         <div className="flex items-center justify-between px-3 py-3 border-b border-slate-200 dark:border-slate-800">
           {!sidebarCollapsed && <span className="font-bold text-sm text-slate-900 dark:text-white tracking-tight">가맹관리시스템</span>}
           <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 ml-auto">
@@ -590,10 +581,8 @@ export default function App() {
           </button>
         </div>
 
-        {/* 스크롤 가능한 메뉴 영역 */}
         <div className="flex-1 overflow-y-auto py-2">
 
-          {/* 브랜드 목록 */}
           {!sidebarCollapsed && (
             <div className="px-3 mb-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">브랜드</p>
@@ -606,16 +595,13 @@ export default function App() {
 
             return (
               <div key={brand.id}>
-                {/* 브랜드 행 */}
                 <div className={`flex items-center gap-1 mx-2 rounded-md px-1 py-1.5 group ${isActiveBrand ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
-                  {/* 펼치기 버튼 */}
                   {!sidebarCollapsed && (
                     <button onClick={() => toggleBrandExpand(brand.id)} className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 shrink-0">
                       <ChevronDown size={13} className={`transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                     </button>
                   )}
 
-                  {/* 브랜드명 (편집 가능) */}
                   {editingBrandId === brand.id && !sidebarCollapsed ? (
                     <input
                       type="text"
@@ -636,26 +622,18 @@ export default function App() {
                     </button>
                   )}
 
-                  {/* 편집/삭제 버튼 (관리자만, 호버 시) */}
                   {!sidebarCollapsed && currentUser.role === 'admin' && (
                     <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                      <button
-                        onClick={() => { setEditingBrandId(brand.id); setEditingBrandName(brand.name); }}
-                        className="p-0.5 text-slate-400 hover:text-blue-600 rounded"
-                      >
+                      <button onClick={() => { setEditingBrandId(brand.id); setEditingBrandName(brand.name); }} className="p-0.5 text-slate-400 hover:text-blue-600 rounded">
                         <Edit2 size={11} />
                       </button>
-                      <button
-                        onClick={() => handleDeleteBrand(brand.id)}
-                        className="p-0.5 text-slate-400 hover:text-rose-600 rounded"
-                      >
+                      <button onClick={() => handleDeleteBrand(brand.id)} className="p-0.5 text-slate-400 hover:text-rose-600 rounded">
                         <Trash2 size={11} />
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* 하위 메뉴 */}
                 {isExpanded && !sidebarCollapsed && (
                   <div className="ml-6 mr-2 mb-1">
                     {brandSubMenus.map(item => (
@@ -674,7 +652,6 @@ export default function App() {
             );
           })}
 
-          {/* 브랜드 추가 */}
           {!sidebarCollapsed && currentUser.role === 'admin' && (
             <div className="mx-2 mt-1">
               {showAddBrand ? (
@@ -706,15 +683,14 @@ export default function App() {
             </div>
           )}
 
-          {/* 구분선 */}
           <div className="my-3 mx-3 border-t border-slate-200 dark:border-slate-800" />
 
-          {/* 공통 메뉴 */}
           {!sidebarCollapsed && (
             <div className="px-3 mb-1">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">공통</p>
             </div>
           )}
+
           <div className="mx-2 space-y-0.5">
             <button
               onClick={() => setSidebar(prev => ({ ...prev, brandId: null, section: 'database' }))}
@@ -722,6 +698,13 @@ export default function App() {
             >
               <Database size={14} />
               {!sidebarCollapsed && '식재료 데이터베이스'}
+            </button>
+            <button
+              onClick={() => setSidebar(prev => ({ ...prev, brandId: null, section: 'review' }))}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${sidebar.section === 'review' && sidebar.brandId === null ? 'bg-slate-900 dark:bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              <BarChart2 size={14} />
+              {!sidebarCollapsed && '가맹점 관제'}
             </button>
             {currentUser.role === 'admin' && (
               <button
@@ -735,7 +718,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 하단 유저 정보 */}
         <div className="px-3 py-3 border-t border-slate-200 dark:border-slate-800">
           <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2`}>
             {!sidebarCollapsed && (
@@ -763,6 +745,17 @@ export default function App() {
       <main className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
 
+          {/* 가맹점 관제 */}
+          {sidebar.section === 'review' && sidebar.brandId === null && (
+            <>
+              <div className="mb-6">
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white">가맹점 통합 관제</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">리뷰 수집 · 네이버 순위 추적 · 키워드 ROI · 경쟁사 모니터링</p>
+              </div>
+              <ReviewDashboard />
+            </>
+          )}
+
           {/* 식재료 데이터베이스 */}
           {sidebar.section === 'database' && sidebar.brandId === null && (
             <>
@@ -778,6 +771,8 @@ export default function App() {
                   onDeleteAll={handleDeleteAllIngredients}
                   onUnselectAll={handleUnselectAllIngredients}
                   isAdmin={currentUser.role === 'admin'}
+                  currentUser={currentUser}
+                  onDeleteChange={handleDeleteChange}
                   thresholdType={thresholdType}
                   thresholdValue={thresholdValue}
                   onThresholdTypeChange={setThresholdType}
@@ -802,7 +797,6 @@ export default function App() {
           {/* 브랜드별 콘텐츠 */}
           {sidebar.brandId !== null && currentBrand && (
             <>
-              {/* 헤더 */}
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h1 className="text-xl font-bold text-slate-900 dark:text-white">{currentBrand.name}</h1>
@@ -817,7 +811,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* 매출 현황 (준비중) */}
               {sidebar.section === 'sales' && (
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center">
                   <BarChart2 size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
@@ -826,7 +819,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* 원가 계산기 */}
               {sidebar.section === 'cost' && (
                 <>
                   <div className="bg-white dark:bg-slate-900 rounded-t-xl shadow-sm border-b border-slate-200 dark:border-slate-800">
