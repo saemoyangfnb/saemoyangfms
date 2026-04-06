@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../firebase';
+import { reviewDb as db } from '../firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   AlertTriangle, CheckCircle, Star, Minus, Search,
