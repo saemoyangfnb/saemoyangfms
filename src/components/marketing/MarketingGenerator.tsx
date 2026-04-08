@@ -103,7 +103,8 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       toast.error('매장명을 입력해주세요!');
       return;
     }
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    // Vite환경과 Vercel 일반 환경변수 모두 호환
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       toast.error('API 키가 설정되지 않았습니다.');
       return;
