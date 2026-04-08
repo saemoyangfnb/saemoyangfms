@@ -53,10 +53,10 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
 
           ctx.drawImage(img, 0, 0);
 
-          // Apply blur to top 15%
+          // Apply blur to top 15% — 소스는 img(원본)로 다시 그려야 함
           const blurHeight = Math.floor(img.height * 0.15);
           ctx.filter = 'blur(15px)';
-          ctx.drawImage(canvas, 0, 0, img.width, blurHeight, 0, 0, img.width, blurHeight);
+          ctx.drawImage(img, 0, 0, img.width, blurHeight, 0, 0, img.width, blurHeight);
           ctx.filter = 'none'; // reset
 
           resolve(canvas.toDataURL('image/jpeg', 0.8));
@@ -103,10 +103,9 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       toast.error('매장명을 입력해주세요!');
       return;
     }
-    // Vite환경과 Vercel 일반 환경변수 모두 호환
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      toast.error('API 키가 설정되지 않았습니다.');
+      toast.error('API 키가 설정되지 않았습니다. Vercel 환경변수에 VITE_GEMINI_API_KEY를 등록해주세요.');
       return;
     }
 
@@ -123,23 +122,24 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       매장 유형: ${storeType}, 톤앤매너: ${tone}
       각 구분자는 반드시 [NAVER], [INSTA], [DAANGN] 키워드를 사용하세요.`;
 
-      const contents: Array<any> = [{ text: promptStr }];
+      // SDK 규격: parts 배열 안에 text/inlineData를 묶어야 함
+      const parts: Array<any> = [{ text: promptStr }];
 
       // Process Review Images (apply mosaic)
       for (const file of reviewFiles) {
         const processedUrl = await processImageToDataUrl(file);
-        contents.push(convertDataUrlToInlineData(processedUrl));
+        parts.push(convertDataUrlToInlineData(processedUrl));
       }
 
       // Add Photo files unmodified
       for (const file of photoFiles) {
         const inlineData = await fileToInlineData(file);
-        contents.push(inlineData);
+        parts.push(inlineData);
       }
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
-        contents: contents,
+        contents: [{ role: 'user', parts }],
       });
 
       const fullText = response.text || '';
