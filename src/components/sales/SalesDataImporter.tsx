@@ -62,7 +62,10 @@ export function SalesDataImporter({ activeBrand }: { activeBrand: string | null 
             const storeName = String(row['매장_요약'] ?? row['매장'] ?? '').trim();
             if (!storeName) continue;
 
+            // 결정론적 ID: 같은 기간+매장 재업로드 시 자동 덮어쓰기
+            const docId = `${ym}_${storeName}`.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
             records.push({
+              docId,
               brandId: activeBrand,
               yearMonth: ym,
               city: String(row['도시'] ?? '미분류').trim(),
@@ -140,7 +143,10 @@ export function SalesDataImporter({ activeBrand }: { activeBrand: string | null 
                 // ③ 매출 파싱
                 const totalSales = Number(String(salesRaw ?? '0').replace(/,/g, '').trim()) || 0;
 
+                // 결정론적 ID: 같은 날짜+매장 재업로드 시 자동 덮어쓰기
+                const docId = `${String(dateRaw).trim()}_${storeName}`.replace(/[^a-zA-Z0-9가-힣_\-]/g, '_');
                 records.push({
+                  docId,
                   brandId: activeBrand,
                   date: String(dateRaw).trim(),
                   storeName,
@@ -181,13 +187,15 @@ export function SalesDataImporter({ activeBrand }: { activeBrand: string | null 
     reader.readAsText(file, 'UTF-8');
   };
 
-  // ── Firestore 청크 쓰기 ──────────────────────────────────
+  // ── Firestore 청크 쓰기 (결정론적 ID → 재업로드 시 덮어쓰기) ──────
   const commitInChunks = async (records: any[], collName: string) => {
     for (let i = 0; i < records.length; i += CHUNK_SIZE) {
       const batch = writeBatch(db);
       records.slice(i, i + CHUNK_SIZE).forEach((r) => {
-        const ref = doc(collection(db, collName));
-        batch.set(ref, { ...r, id: ref.id });
+        const { docId, ...data } = r;
+        // docId를 문서 ID로 사용 → 동일 기간+매장 재업로드 시 덮어쓰기
+        const ref = doc(db, collName, docId);
+        batch.set(ref, { ...data, id: docId });
       });
       await batch.commit();
     }
