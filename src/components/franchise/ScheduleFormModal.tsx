@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FranchiseSchedule, ScheduleStatus, TeamSetting } from '../../types';
-import { X, Calculator } from 'lucide-react';
+import { X, Calculator, Plus } from 'lucide-react';
 import { useToast } from '../Toast';
 import { addDays } from '../../utils';
 
@@ -180,6 +180,94 @@ export function ScheduleFormModal({ initial, teams, onSave, onClose }: Props) {
                  </label>
               </div>
             </div>
+
+            {/* 커스텀 공정 (동적) */}
+            <div className="bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mt-6 relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+               <div className="flex items-center justify-between mb-4">
+                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">추가 공정 (자율 항목)</h4>
+                 <button 
+                   type="button" 
+                   onClick={() => {
+                     const newPhase = {
+                       id: crypto.randomUUID(), name: '', type: '단기' as const, startDate: '', endDate: '', notes: ''
+                     };
+                     set('customPhases', [...(form.customPhases || []), newPhase]);
+                   }}
+                   className="text-xs flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-2 py-1 rounded text-slate-600 hover:bg-slate-50 dark:text-slate-300"
+                 >
+                   <Plus size={12} /> 공정 추가
+                 </button>
+               </div>
+               
+               <div className="space-y-4">
+                 {(form.customPhases || []).map((phase, idx) => (
+                   <div key={phase.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg relative group">
+                     <button type="button" onClick={() => {
+                        const newArr = [...(form.customPhases || [])];
+                        newArr.splice(idx, 1);
+                        set('customPhases', newArr);
+                     }} className="absolute top-2 right-2 text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X size={14} />
+                     </button>
+                     
+                     <div className="flex flex-wrap gap-3 pr-6">
+                        <div className="w-1/4 min-w-[120px]">
+                           <label className={labelCls}>공정명</label>
+                           <input type="text" className={inputCls} placeholder="예: 인테리어 점검" value={phase.name} onChange={e => {
+                             const newArr = [...(form.customPhases || [])];
+                             newArr[idx].name = e.target.value;
+                             set('customPhases', newArr);
+                           }} />
+                        </div>
+                        <div className="w-20">
+                           <label className={labelCls}>형태</label>
+                           <select className={inputCls} value={phase.type} onChange={e => {
+                             const newArr = [...(form.customPhases || [])];
+                             newArr[idx].type = e.target.value as '단기' | '장기';
+                             if(e.target.value === '단기') { newArr[idx].endDate = newArr[idx].startDate; }
+                             set('customPhases', newArr);
+                           }}>
+                              <option value="단기">단기(1일)</option>
+                              <option value="장기">장기</option>
+                           </select>
+                        </div>
+                        <div className="flex-1 min-w-[160px]">
+                           <label className={labelCls}>시작일</label>
+                           <input type="date" className={inputCls} value={phase.startDate} onChange={e => {
+                             const newArr = [...(form.customPhases || [])];
+                             newArr[idx].startDate = e.target.value;
+                             if(newArr[idx].type === '단기') newArr[idx].endDate = e.target.value;
+                             set('customPhases', newArr);
+                           }} />
+                        </div>
+                        {phase.type === '장기' && (
+                          <div className="flex-1 min-w-[160px]">
+                             <label className={labelCls}>종료일</label>
+                             <input type="date" className={inputCls} value={phase.endDate} onChange={e => {
+                               const newArr = [...(form.customPhases || [])];
+                               newArr[idx].endDate = e.target.value;
+                               set('customPhases', newArr);
+                             }} />
+                          </div>
+                        )}
+                        <div className="w-full">
+                           <label className={labelCls}>특이사항</label>
+                           <input type="text" className={inputCls} placeholder="메모를 입력하세요" value={phase.notes} onChange={e => {
+                             const newArr = [...(form.customPhases || [])];
+                             newArr[idx].notes = e.target.value;
+                             set('customPhases', newArr);
+                           }} />
+                        </div>
+                     </div>
+                   </div>
+                 ))}
+                 {(!form.customPhases || form.customPhases.length === 0) && (
+                   <p className="text-xs text-center p-4 text-slate-400 font-medium">추가된 커스텀 공정이 없습니다.</p>
+                 )}
+               </div>
+            </div>
+            
           </div>
         </form>
 

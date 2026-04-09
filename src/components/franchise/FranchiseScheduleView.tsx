@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, ScheduleStatus, BrandId } from '../../types';
-import { Plus, Download, Search, FileDown, Settings, Calendar as CalendarIcon, AlignLeft, Printer } from 'lucide-react';
+import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { FranchiseSchedule, TeamSetting, BrandId } from '../../types';
+import { Plus, Search, FileDown, Settings } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import Papa from 'papaparse';
@@ -27,11 +27,11 @@ export function FranchiseScheduleView({ brandId }: Props) {
   const [loading, setLoading] = useState(true);
 
   // View states
-  const [viewMode, setViewMode] = useState<'timeline' | 'calendar'>('timeline');
+  const [showArchived, setShowArchived] = useState(false);
+  const [monthsView, setMonthsView] = useState<1 | 2>(1);
   const [search, setSearch] = useState('');
   const [filterTeam, setFilterTeam] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>(''); // empty means all
-  const [monthsView, setMonthsView] = useState<1 | 2>(1);
   
   // Date states for views
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -56,14 +56,14 @@ export function FranchiseScheduleView({ brandId }: Props) {
       const schData: FranchiseSchedule[] = [];
       schSnap.forEach(d => {
         const item = d.data() as FranchiseSchedule;
-        if (item.brandId === brandId) schData.push(item);
+        if (item.brandId === brandId) schData.push({ ...item, id: d.id });
       });
       setSchedules(schData);
 
       const teamData: TeamSetting[] = [];
       teamSnap.forEach(d => {
         const item = d.data() as TeamSetting;
-        if (item.brandId === brandId) teamData.push(item);
+        if (item.brandId === brandId) teamData.push({ ...item, id: d.id });
       });
       setTeams(teamData);
 
@@ -74,26 +74,10 @@ export function FranchiseScheduleView({ brandId }: Props) {
     }
   };
 
-  const handleSaveSchedule = async (data: Partial<FranchiseSchedule>) => {
-    try {
-      const isNew = !data.id;
-      const id = isNew ? `sch_${Date.now()}` : data.id!;
-      const fullData = {
-        ...data,
-        id,
-        brandId,
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, 'franchise_schedules', id), fullData);
-      toast.success(`일정이 ${isNew ? '등록' : '수정'}되었습니다.`);
-      setShowForm(false);
-      setEditingData(null);
-      fetchData();
-    } catch (err) {
-      toast.error('일정 저장에 실패했습니다.');
-      throw err; // Form 모달의 saving 상태 해제를 위해
-    }
+  const handleSaveSchedule = async () => {
+    setShowForm(false);
+    setEditingData(null);
+    fetchData();
   };
 
   const handleDeleteSchedule = async (id: string) => {
@@ -106,6 +90,24 @@ export function FranchiseScheduleView({ brandId }: Props) {
     } catch (err) {
       toast.error('삭제 실패');
     }
+  };
+
+  const handleToggleCalendar = async (id: string, currentVal: boolean | undefined) => {
+    try {
+      const newVal = currentVal === false ? true : false;
+      await updateDoc(doc(db, 'franchise_schedules', id), { showInCalendar: newVal });
+      fetchData();
+    } catch(e) { console.error(e); }
+  };
+
+  const handleArchive = async (id: string) => {
+    const ok = await confirm({ title: '오픈 완료 및 보관', message: '진행중인 매장 목록과 달력에서 제외하고 오픈 완료 상태로 보관하시겠습니까?', confirmLabel: '보관하기', variant: 'danger' }); // using danger or ok
+    if (!ok) return;
+    try {
+      await updateDoc(doc(db, 'franchise_schedules', id), { status: '오픈완료', archived: true });
+      fetchData();
+      toast.success('매장이 보관되었습니다.');
+    } catch(e) { console.error(e); }
   };
 
   const handleExportCsv = () => {
@@ -133,9 +135,13 @@ export function FranchiseScheduleView({ brandId }: Props) {
     link.click();
   };
 
-  // 필터링 적용
+  // 필터링 적용 (기본적으로 보관된 항목은 숨김)
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
+      // 보관 여부 필터
+      if (!showArchived && s.archived) return false;
+      if (showArchived && !s.archived) return false;
+      
       if (search && !s.storeName.includes(search)) return false;
       if (filterTeam && s.team !== filterTeam) return false;
       if (filterStatus && s.status !== filterStatus) return false;
@@ -147,15 +153,14 @@ export function FranchiseScheduleView({ brandId }: Props) {
        if (!b.openDate) return -1;
        return a.openDate.localeCompare(b.openDate);
     });
-  }, [schedules, search, filterTeam, filterStatus]);
+  }, [schedules, search, filterTeam, filterStatus, showArchived]);
 
   // 타임라인 날짜 범위: currentMonth 기준 전월 ~ 다담월 말
-  // → 타임라인과 달력이 동일한 currentMonth 상태를 공유하므로 충 연동됨
   const timelineDates = useMemo(() => {
     const y = currentMonth.getFullYear();
     const m = currentMonth.getMonth();
-    const start = new Date(y, m - 1, 1); // 전달 1일
-    const end   = new Date(y, m + 2, 0); // 다담월 말일
+    const start = new Date(y, m - 1, 1);
+    const end   = new Date(y, m + 2, 0);
     return {
       start: start.toISOString().split('T')[0],
       end:   end.toISOString().split('T')[0],
@@ -190,25 +195,12 @@ export function FranchiseScheduleView({ brandId }: Props) {
        {/* 상단 필터 바 */}
        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-              <button 
-                onClick={() => setViewMode('timeline')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'timeline' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-              ><AlignLeft size={14}/> 타임라인</button>
-              <button 
-                onClick={() => setViewMode('calendar')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'calendar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-              ><CalendarIcon size={14}/> 월간달력</button>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+               <button onClick={() => setMonthsView(1)} className={`px-2 py-1 text-xs font-bold rounded transition-colors ${monthsView === 1 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}>1개월</button>
+               <button onClick={() => setMonthsView(2)} className={`px-2 py-1 text-xs font-bold rounded transition-colors ${monthsView === 2 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}>2개월</button>
             </div>
             
-            {viewMode === 'calendar' && (
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg ml-2">
-                <button onClick={() => setMonthsView(1)} className={`px-2 py-1 text-xs font-bold rounded transition-colors ${monthsView === 1 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}>1개월</button>
-                <button onClick={() => setMonthsView(2)} className={`px-2 py-1 text-xs font-bold rounded transition-colors ${monthsView === 2 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500'}`}>2개월</button>
-              </div>
-            )}
-            
-            {/* 월 이동 컨트롤 — 타임라인과 달력 모두에서 항상 표시 (currentMonth 공유) */}
+            {/* 월 이동 컨트롤 (currentMonth 공유) */}
             <div className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 ml-4">
                <button
                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors text-slate-600 dark:text-slate-400"
@@ -251,106 +243,135 @@ export function FranchiseScheduleView({ brandId }: Props) {
          </div>
        </div>
 
-       {/* 메인 뷰 */}
+       {/* 메인 뷰 (수직 레이아웃) */}
        {loading ? (
           <div className="py-20 text-center text-slate-400 font-bold">데이터를 불러오는 중입니다...</div>
        ) : (
-          <div>
-            {viewMode === 'timeline' ? (
-              <div className="print-timeline">
-                <ScheduleTimeline 
-                   schedules={filteredSchedules} 
-                   viewStartDate={timelineDates.start} 
-                   viewEndDate={timelineDates.end} 
-                />
-              </div>
-            ) : (
-              <div className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
-                {/* 1번 달력 (기준 달) */}
-                <div>
-                  <h3 className="text-center font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm flex items-center justify-center gap-2">
-                    {currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월
-                  </h3>
-                  <ScheduleCalendar 
-                     schedules={filteredSchedules}
-                     currentMonth={currentMonth}
-                     teams={teams}
-                     onScheduleUpdate={async (id, data) => {
-                       try {
-                         await updateDoc(doc(db, 'franchise_schedules', id), data);
-                         fetchData(); // 리프레시
-                       } catch(e) {
-                         console.error(e);
-                       }
-                     }}
-                  />
-                </div>
-                {/* 2번 달력 (다음 달) */}
-                {monthsView === 2 && (
-                  <div>
-                    <h3 className="text-center font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm">
-                      {new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1).getFullYear()}년 {new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1).getMonth() + 1}월
-                    </h3>
-                    <ScheduleCalendar 
-                       schedules={filteredSchedules}
-                       currentMonth={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)}
-                       teams={teams}
-                       onScheduleUpdate={async (id, data) => {
-                         try {
-                           await updateDoc(doc(db, 'franchise_schedules', id), data);
-                           fetchData(); // 리프레시
-                         } catch(e) {
-                           console.error(e);
-                         }
-                       }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* 리스트 (빠른 수정/삭제용 하단 테이블) */}
-            {viewMode === 'timeline' && (
-              <div className="mt-8">
-                 <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 ml-1">진행중인 매장 목록 ({filteredSchedules.length}건)</h3>
-                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
-                      <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
-                        <tr>
-                          <th className="p-3">상호명</th>
-                          <th className="p-3">상태</th>
-                          <th className="p-3">담당</th>
-                          <th className="p-3">오픈예정</th>
-                          <th className="p-3">특이사항</th>
-                          <th className="p-3 w-20">관리</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredSchedules.map(sch => (
-                          <tr key={sch.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                            <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
-                              <button onClick={() => { setEditingData(sch); setShowForm(true); }} className="hover:underline hover:text-blue-600">
-                                {sch.storeName}
-                              </button>
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                {sch.status}
-                              </span>
-                            </td>
-                            <td className="p-3 text-xs text-slate-500">{sch.team} {sch.supervisor}</td>
-                            <td className="p-3 text-xs font-semibold text-rose-500">{sch.openDate}</td>
-                            <td className="p-3 text-xs text-slate-500 truncate max-w-[200px]">{sch.notes}</td>
-                            <td className="p-3 text-xs">
-                              <button onClick={() => handleDeleteSchedule(sch.id)} className="text-red-500 hover:underline">삭제</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+          <div className="flex flex-col gap-10">
+             
+             {/* 1. 월간 달력 영역 */}
+             <div className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
+               {/* 1번 달력 (기준 달) */}
+               <div>
+                 <h3 className="text-center font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm flex items-center justify-center gap-2">
+                   {currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월
+                 </h3>
+                 <ScheduleCalendar 
+                    schedules={filteredSchedules}
+                    currentMonth={currentMonth}
+                    teams={teams}
+                    onScheduleUpdate={async (id, data) => {
+                      try {
+                        await updateDoc(doc(db, 'franchise_schedules', id), data);
+                        fetchData();
+                      } catch(e) { console.error(e); }
+                    }}
+                 />
+               </div>
+               {/* 2번 달력 (다음 달) */}
+               {monthsView === 2 && (
+                 <div>
+                   <h3 className="text-center font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm">
+                     {new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1).getFullYear()}년 {new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1).getMonth() + 1}월
+                   </h3>
+                   <ScheduleCalendar 
+                      schedules={filteredSchedules}
+                      currentMonth={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)}
+                      teams={teams}
+                      onScheduleUpdate={async (id, data) => {
+                        try {
+                          await updateDoc(doc(db, 'franchise_schedules', id), data);
+                          fetchData();
+                        } catch(e) { console.error(e); }
+                      }}
+                   />
                  </div>
-              </div>
-            )}
+               )}
+             </div>
+           
+             {/* 2. 매장 리스트 테이블 영역 */}
+             <div>
+                <div className="flex items-center justify-between mb-3 ml-1">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200">
+                    {showArchived ? '보관된 오픈 완료 매장' : '진행중인 매장 목록'} ({filteredSchedules.length}건)
+                  </h3>
+                  <button 
+                    onClick={() => setShowArchived(!showArchived)}
+                    className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors ${showArchived ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/30 dark:border-rose-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}
+                  >
+                    {showArchived ? '진행중인 매장 보기' : '오픈완료 보관함'}
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm mb-4">
+                   <table className="w-full text-left text-sm whitespace-nowrap">
+                     <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
+                       <tr>
+                         <th className="p-3 w-10 text-center" title="달력 및 타임라인 표시 여부">분류</th>
+                         <th className="p-3">상호명</th>
+                         <th className="p-3">상태</th>
+                         <th className="p-3">담당</th>
+                         <th className="p-3">오픈일</th>
+                         <th className="p-3">특이사항</th>
+                         <th className="p-3 w-32">관리</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                       {filteredSchedules.map(sch => (
+                         <tr key={sch.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 ${sch.archived ? 'opacity-60 bg-slate-50 dark:bg-slate-800/20' : ''}`}>
+                           <td className="p-3 text-center">
+                              {/* 눈동자 토글 버튼 */}
+                              <button 
+                                onClick={() => handleToggleCalendar(sch.id, sch.showInCalendar)}
+                                className="text-slate-400 hover:text-blue-500 transition-colors"
+                                title={sch.showInCalendar === false ? "달력에서 숨김 상태" : "달력에 표시됨"}
+                              >
+                                {sch.showInCalendar === false ? <span className="opacity-50">👁️‍🗨️</span> : <span>👁️</span>}
+                              </button>
+                           </td>
+                           <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
+                             <button onClick={() => { setEditingData(sch); setShowForm(true); }} className="hover:underline hover:text-blue-600 truncate max-w-[120px] block">
+                               {sch.storeName}
+                             </button>
+                           </td>
+                           <td className="p-3">
+                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                               {sch.status}
+                             </span>
+                           </td>
+                           <td className="p-3 text-xs text-slate-500 truncate max-w-[100px]">{sch.team} {sch.supervisor}</td>
+                           <td className="p-3 text-xs font-semibold text-rose-500">{sch.openDate}</td>
+                           <td className="p-3 text-xs text-slate-500 truncate max-w-[200px]">{sch.notes}</td>
+                           <td className="p-3 text-xs">
+                             <div className="flex items-center gap-2">
+                               {!sch.archived && (
+                                 <button onClick={() => handleArchive(sch.id)} className="text-emerald-600 dark:text-emerald-400 hover:underline font-bold bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded">완료/보관</button>
+                               )}
+                               <button onClick={() => handleDeleteSchedule(sch.id)} className="text-red-400 hover:underline">삭제</button>
+                             </div>
+                           </td>
+                         </tr>
+                       ))}
+                       {filteredSchedules.length === 0 && (
+                         <tr><td colSpan={7} className="text-center p-6 text-slate-400">데이터가 없습니다.</td></tr>
+                       )}
+                     </tbody>
+                   </table>
+                </div>
+             </div>
+
+             {/* 3. 간트 타임라인 영역 (보관된 매장도 showInCalendar가 false면 숨김) */}
+             {!showArchived && (
+               <div className="print-timeline pb-10">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 ml-1">공정 타임라인 (Gantt)</h3>
+                  <ScheduleTimeline 
+                     schedules={filteredSchedules.filter(s => s.showInCalendar !== false)} 
+                     viewStartDate={timelineDates.start} 
+                     viewEndDate={timelineDates.end} 
+                  />
+               </div>
+             )}
+             
           </div>
        )}
 

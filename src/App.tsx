@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -303,6 +303,7 @@ export default function App() {
   const [editingBrandName, setEditingBrandName] = useState('');
   const [showAddBrand, setShowAddBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
+  const [dragOverBrandId, setDragOverBrandId] = useState<BrandId | null>(null);
 
   const [menus, setMenus] = useState<Menu[]>([]);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
@@ -521,6 +522,61 @@ export default function App() {
       else next.add(brandId);
       return next;
     });
+  };
+
+  const handleBrandDragStart = (e: React.DragEvent, brandId: BrandId) => {
+    e.dataTransfer.setData('sidebar-brand', brandId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleBrandDragOver = (e: React.DragEvent, brandId: BrandId) => {
+    if (!e.dataTransfer.types.includes('sidebar-brand')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverBrandId(brandId);
+  };
+
+  const handleBrandDrop = async (e: React.DragEvent, targetBrandId: BrandId) => {
+    e.preventDefault();
+    setDragOverBrandId(null);
+    const sourceBrandId = e.dataTransfer.getData('sidebar-brand');
+    if (!sourceBrandId || sourceBrandId === targetBrandId) return;
+
+    const sorted = [...brands].sort((a, b) => a.order - b.order);
+    const sourceIdx = sorted.findIndex(b => b.id === sourceBrandId);
+    const targetIdx = sorted.findIndex(b => b.id === targetBrandId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const reordered = [...sorted];
+    const [moved] = reordered.splice(sourceIdx, 1);
+    reordered.splice(targetIdx, 0, moved);
+
+    try {
+      const batch = writeBatch(db);
+      reordered.forEach((brand, idx) => {
+        batch.update(doc(db, 'brands', brand.id), { order: idx });
+      });
+      await batch.commit();
+    } catch (error) { handleFirestoreError(error, OperationType.WRITE, 'brands'); }
+  };
+
+  const handleSubMenuDrop = async (e: React.DragEvent, targetId: string, currentMenuOrder: string[]) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('sidebar-submenu');
+    if (!sourceId || sourceId === targetId || !currentUser) return;
+
+    const sourceIdx = currentMenuOrder.indexOf(sourceId);
+    const targetIdx = currentMenuOrder.indexOf(targetId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const newOrder = [...currentMenuOrder];
+    const [moved] = newOrder.splice(sourceIdx, 1);
+    newOrder.splice(targetIdx, 0, moved);
+
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), { menuOrder: newOrder });
+      setCurrentUser(prev => prev ? { ...prev, menuOrder: newOrder } : prev);
+    } catch (error) { handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`); }
   };
 
   const navigateTo = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType) => {
@@ -816,14 +872,28 @@ export default function App() {
   const currentBrand = brands.find(b => b.id === activeBrand);
   const costTabs: CostTabType[] = ['지방권', '광역권', '수도권', '전체보기', '메뉴 관리', '변동사항'];
 
-  // 브랜드별 사이드바 서브메뉴 (가맹점 관제 포함)
-  const getBrandSubMenus = (brandId: BrandId) => [
+  // 브랜드별 사이드바 서브메뉴 — 사용자 정의 순서 반영
+  const DEFAULT_SUB_MENUS = [
     { id: 'cost' as SidebarSection, label: '원가 계산기', icon: <LayoutDashboard size={14} /> },
     { id: 'sales' as SidebarSection, label: '매출 현황', icon: <BarChart2 size={14} /> },
     { id: 'review' as SidebarSection, label: '가맹점 관제', icon: <ShieldAlert size={14} /> },
     { id: 'franchise' as SidebarSection, label: '오픈 일정', icon: <CalendarDays size={14} /> },
     { id: 'marketing' as SidebarSection, label: '마케팅 봇', icon: <Bot size={14} /> },
   ];
+
+  const getBrandSubMenus = (_brandId: BrandId) => {
+    const order = currentUser?.menuOrder;
+    if (!order || order.length === 0) return DEFAULT_SUB_MENUS;
+    const sorted = [...DEFAULT_SUB_MENUS].sort((a, b) => {
+      const ai = order.indexOf(a.id);
+      const bi = order.indexOf(b.id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+    return sorted;
+  };
 
   const navigateAndCloseMobile = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType) => {
     navigateTo(brandId, section, costTab);
@@ -891,17 +961,27 @@ export default function App() {
             </div>
           )}
 
-          {brands.map(brand => {
+          {[...brands].sort((a, b) => a.order - b.order).map(brand => {
             const isExpanded = expandedBrands.has(brand.id);
             const isActiveBrand = sidebar.brandId === brand.id;
             const subMenus = getBrandSubMenus(brand.id);
             const hasReview = REVIEW_ENABLED_BRANDS.includes(brand.id);
+            const isDragOver = dragOverBrandId === brand.id;
+            const menuOrderForUser = currentUser?.menuOrder || DEFAULT_SUB_MENUS.map(m => m.id);
 
             return (
-              <div key={brand.id}>
-                <div className={`flex items-center gap-1 mx-2 rounded-md px-1 py-1.5 group ${isActiveBrand ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+              <div
+                key={brand.id}
+                draggable={currentUser.role === 'admin' && !sidebarCollapsed}
+                onDragStart={(e) => handleBrandDragStart(e, brand.id)}
+                onDragOver={(e) => handleBrandDragOver(e, brand.id)}
+                onDragLeave={() => setDragOverBrandId(null)}
+                onDrop={(e) => handleBrandDrop(e, brand.id)}
+                className={`transition-all ${isDragOver ? 'border-t-2 border-blue-400' : ''}`}
+              >
+                <div className={`flex items-center gap-1 mx-2 rounded-md px-1 py-1.5 group ${isActiveBrand ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'} ${currentUser.role === 'admin' && !sidebarCollapsed ? 'cursor-grab active:cursor-grabbing' : ''}`}>
                   {!sidebarCollapsed && (
-                    <button onClick={() => toggleBrandExpand(brand.id)} className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 shrink-0">
+                    <button onClick={() => toggleBrandExpand(brand.id)} className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 shrink-0" onMouseDown={e => e.stopPropagation()}>
                       <ChevronDown size={13} className={`transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                     </button>
                   )}
@@ -928,10 +1008,10 @@ export default function App() {
 
                   {!sidebarCollapsed && currentUser.role === 'admin' && (
                     <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                      <button onClick={() => { setEditingBrandId(brand.id); setEditingBrandName(brand.name); }} className="p-0.5 text-slate-400 hover:text-blue-600 rounded">
+                      <button onClick={() => { setEditingBrandId(brand.id); setEditingBrandName(brand.name); }} className="p-0.5 text-slate-400 hover:text-blue-600 rounded" onMouseDown={e => e.stopPropagation()}>
                         <Edit2 size={11} />
                       </button>
-                      <button onClick={() => handleDeleteBrand(brand.id)} className="p-0.5 text-slate-400 hover:text-rose-600 rounded">
+                      <button onClick={() => handleDeleteBrand(brand.id)} className="p-0.5 text-slate-400 hover:text-rose-600 rounded" onMouseDown={e => e.stopPropagation()}>
                         <Trash2 size={11} />
                       </button>
                     </div>
@@ -941,29 +1021,36 @@ export default function App() {
                 {isExpanded && (!sidebarCollapsed || isMobile) && (
                   <div className="ml-6 mr-2 mb-1">
                     {subMenus.map(item => {
-                      // 가맹점 관제는 활성화된 브랜드만 정상, 나머지는 준비중 표시
                       const isReviewMenu = item.id === 'review';
                       const isDisabled = isReviewMenu && !hasReview;
                       const isActive = sidebar.brandId === brand.id && sidebar.section === item.id;
 
                       return (
-                        <button
+                        <div
                           key={item.id}
-                          onClick={() => !isDisabled && navigateAndCloseMobile(brand.id, item.id)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-                            isActive
-                              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-l-2 border-blue-500 pl-1.5'
-                              : isDisabled
-                              ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
-                              : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`}
+                          draggable
+                          onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('sidebar-submenu', item.id); e.dataTransfer.effectAllowed = 'move'; }}
+                          onDragOver={e => { if (!e.dataTransfer.types.includes('sidebar-submenu')) return; e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={e => { e.stopPropagation(); handleSubMenuDrop(e, item.id, menuOrderForUser); }}
                         >
-                          {item.icon}
-                          {item.label}
-                          {isDisabled && (
-                            <span className="ml-auto text-[9px] text-slate-300 dark:text-slate-600">준비중</span>
-                          )}
-                        </button>
+                          <button
+                            onClick={() => !isDisabled && navigateAndCloseMobile(brand.id, item.id)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors group/sub ${
+                              isActive
+                                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-l-2 border-blue-500 pl-1.5'
+                                : isDisabled
+                                ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <span className="opacity-30 group-hover/sub:opacity-60 cursor-grab text-[9px]">⠿</span>
+                            {item.icon}
+                            {item.label}
+                            {isDisabled && (
+                              <span className="ml-auto text-[9px] text-slate-300 dark:text-slate-600">준비중</span>
+                            )}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>

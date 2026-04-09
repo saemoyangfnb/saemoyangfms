@@ -162,6 +162,33 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                 );
               })}
 
+              {/* 커스텀 공정 막대 (장기/단기) */}
+              {(schedule.customPhases || []).map((cp) => {
+                 const start = cp.startDate;
+                 const end = cp.endDate || cp.startDate;
+                 if (!start || !end) return null;
+                 if (start > viewEndDate || end < viewStartDate) return null;
+
+                 const x  = dateToX(start);
+                 const x2 = dateToX(end) + DAY_WIDTH;
+                 const w  = x2 - x;
+                 if (w <= 2) return null;
+                 
+                 const isShort = cp.type === '단기';
+                 const bg = isShort ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 border-indigo-300 dark:border-indigo-700';
+                 
+                 return (
+                   <div
+                     key={cp.id}
+                     className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 overflow-hidden shadow-sm ${bg} ${isShort ? 'z-20 border-2' : 'z-10'}`}
+                     style={{ left: x, width: w - 2, top: 8 }}
+                     title={`${cp.name}: ${start} ${isShort ? '' : '~ ' + end}\n${cp.notes ? '메모: ' + cp.notes : ''}`}
+                   >
+                     {w > 44 && <span className="truncate">📌 {cp.name}</span>}
+                   </div>
+                 );
+              })}
+
               {/* 오픈일 핀 🎉 */}
               {schedule.openDate &&
                 schedule.openDate >= viewStartDate &&

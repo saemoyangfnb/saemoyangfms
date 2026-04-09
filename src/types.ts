@@ -29,6 +29,7 @@ export interface User {
   createdAt: string;
   alertThresholdType?: 'percentage' | 'absolute';
   alertThresholdValue?: number;
+  menuOrder?: string[];
 }
 
 export type CostCalcMethod = 'purchase_divide' | 'sales_divide' | 'manual';
@@ -150,6 +151,15 @@ export interface MarketingSchedule {
 // ==========================================
 export type ScheduleStatus = '계약완료' | '공사중' | '사전교육' | '인테리어완료' | '본교육' | '가오픈' | '오픈완료' | '보류';
 
+export interface CustomPhase {
+  id: string;
+  name: string;
+  type: '단기' | '장기';
+  startDate: string;
+  endDate: string;
+  notes: string;
+}
+
 export interface FranchiseSchedule {
   id: string;
   brandId: BrandId;     // 어느 브랜드인지
@@ -182,6 +192,10 @@ export interface FranchiseSchedule {
   trainingStart: string;
   trainingEnd: string;
   openDate: string;
+  
+  customPhases?: CustomPhase[];
+
+  archived?: boolean;
 
   createdAt?: string;
   updatedAt?: string;
