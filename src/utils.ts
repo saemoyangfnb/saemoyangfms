@@ -142,3 +142,80 @@ export const isDateInRange = (targetStr: string, startStr: string, endStr: strin
   const end = new Date(endStr).getTime();
   return target >= start && target <= end;
 };
+
+// ==========================================
+// 가맹점 일정 특수 계산 로직
+// ==========================================
+
+/**
+ * 일요일을 제외하고 일수를 더함
+ */
+export const addExcludingSunday = (dateStr: string, days: number): string => {
+  if (!dateStr) return '';
+  let d = new Date(dateStr);
+  let count = 0;
+  let absDays = Math.abs(days);
+  let step = days >= 0 ? 1 : -1;
+
+  while (count < absDays) {
+    d.setDate(d.getDate() + step);
+    if (d.getDay() !== 0) { // 0 is Sunday
+      count++;
+    }
+  }
+  return d.toISOString().split('T')[0];
+};
+
+/**
+ * 주말(토, 일)을 제외하고 일수를 더함
+ */
+export const addWeekdays = (dateStr: string, days: number): string => {
+  if (!dateStr) return '';
+  let d = new Date(dateStr);
+  let count = 0;
+  let absDays = Math.abs(days);
+  let step = days >= 0 ? 1 : -1;
+
+  while (count < absDays) {
+    d.setDate(d.getDate() + step);
+    if (d.getDay() !== 0 && d.getDay() !== 6) { // 0: Sun, 6: Sat
+      count++;
+    }
+  }
+  return d.toISOString().split('T')[0];
+};
+
+/**
+ * 특정 날짜의 14일 전을 구하고, 주말이면 그 직전 금요일로 조정
+ */
+export const getOvenInDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  let d = new Date(dateStr);
+  d.setDate(d.getDate() - 14);
+  
+  const day = d.getDay();
+  if (day === 0) { // Sunday -> Friday
+    d.setDate(d.getDate() - 2);
+  } else if (day === 6) { // Saturday -> Friday
+    d.setDate(d.getDate() - 1);
+  }
+  return d.toISOString().split('T')[0];
+};
+
+/**
+ * 공사 종료일 기준 직전 주 월요일 (종료일 포함 주 제외)
+ */
+export const getPreTrainingStartDate = (endDateStr: string): string => {
+  if (!endDateStr) return '';
+  let d = new Date(endDateStr);
+  let day = d.getDay();
+  
+  // 이번 주 월요일 구하기 (0:일, 1:월, ..., 6:토)
+  let diffToMonday = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diffToMonday);
+  
+  // 지난 주 월요일로 7일 더 뒤로
+  d.setDate(d.getDate() - 7);
+  
+  return d.toISOString().split('T')[0];
+};

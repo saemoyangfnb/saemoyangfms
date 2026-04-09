@@ -6,13 +6,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { reviewDb as db } from '../firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   AlertTriangle, CheckCircle, Star, Minus, Search,
   ShieldAlert, TrendingUp, TrendingDown,
-  ChevronDown, ChevronUp, RefreshCw, Eye, History,
+  ChevronDown, ChevronUp, RefreshCw, Eye,
   Target, Trophy, AlertCircle, Clock, Store,
   ArrowUp, ArrowDown, Activity, Download, FileText
 } from 'lucide-react';
@@ -192,59 +191,6 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 }
 
 // ==========================================
-// 만족도 원형 그래프
-// ==========================================
-const PIE_COLORS = { '긍정': '#10b981', '중립': '#94a3b8', '부정': '#f43f5e' };
-
-function SatisfactionPie({ positive, neutral, negative, total }: {
-  positive: number; neutral: number; negative: number; total: number;
-}) {
-  if (total === 0) return (
-    <div className="flex items-center justify-center h-32 text-xs text-slate-400">리뷰 데이터 없음</div>
-  );
-  const data = [
-    { name: '긍정', value: positive },
-    { name: '중립', value: neutral },
-    { name: '부정', value: negative },
-  ].filter(d => d.value > 0);
-  const satisfactionScore = Math.round((positive / total) * 100);
-  return (
-    <div className="flex items-center gap-6">
-      <div className="relative flex-shrink-0">
-        <ResponsiveContainer width={160} height={160}>
-          <PieChart>
-            <Pie data={data} cx="50%" cy="50%" innerRadius={48} outerRadius={68}
-              paddingAngle={2} dataKey="value" strokeWidth={0}>
-              {data.map(entry => (
-                <Cell key={entry.name} fill={PIE_COLORS[entry.name as keyof typeof PIE_COLORS]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(v: number) => [`${v}건`, '']} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className={`text-2xl font-bold ${satisfactionScore >= 70 ? 'text-emerald-600 dark:text-emerald-400' : satisfactionScore >= 40 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {satisfactionScore}%
-          </span>
-          <span className="text-[10px] text-slate-400">만족도</span>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {data.map(d => (
-          <div key={d.name} className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[d.name as keyof typeof PIE_COLORS] }} />
-            <span className="text-xs text-slate-600 dark:text-slate-400 w-8">{d.name}</span>
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{d.value}건</span>
-            <span className="text-xs text-slate-400">({Math.round(d.value / total * 100)}%)</span>
-          </div>
-        ))}
-        <p className="text-[10px] text-slate-400 pt-1">전체 {total.toLocaleString()}건 기준</p>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
 // 탭 1: 전체 브랜드 현황
 // ==========================================
 function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
@@ -254,7 +200,6 @@ function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
   onOverride: (id: string) => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
   const yesterdayStr = getYesterday();
 
   const activeNegative = reviews
@@ -317,10 +262,10 @@ function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => onResolve(review.id)} className="flex-1 py-2 text-xs font-semibold bg-slate-900 dark:bg-blue-600 text-white rounded-lg hover:bg-slate-700 dark:hover:bg-blue-700 transition-colors">
-                        ✅ 해피콜 조치 완료
+                        해피콜 조치 완료
                       </button>
                       <button onClick={() => onOverride(review.id)} className="flex-1 py-2 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
-                        👍 긍정으로 재분류
+                        긍정 예외 처리
                       </button>
                     </div>
                   </div>
@@ -329,42 +274,8 @@ function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
             ))}
           </div>
         )}
-        
-        {/* 조치 완료 이력 토글 패널 */}
-        {(reviewState.resolved.length > 0 || reviewState.overridden.length > 0) && (
-          <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
-            <button 
-              onClick={() => setShowResolved(!showResolved)}
-              className="w-full px-5 py-3 flex items-center justify-between text-xs font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <History size={14} />
-                <span>조치 완료 및 제외된 리뷰 ({reviewState.resolved.length + reviewState.overridden.length}건)</span>
-              </div>
-              {showResolved ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-            
-            {showResolved && (
-              <div className="px-5 pb-4 divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
-                {reviews
-                  .filter(r => reviewState.resolved.includes(r.id) || reviewState.overridden.includes(r.id))
-                  .sort((a, b) => b.작성일.localeCompare(a.작성일))
-                  .map(review => (
-                    <div key={review.id} className="py-2.5 flex items-center gap-3 opacity-60">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${reviewState.resolved.includes(review.id) ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
-                        {reviewState.resolved.includes(review.id) ? '조치완료' : '긍정제외'}
-                      </span>
-                      <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 w-20 truncate">{review.매장명}</span>
-                      <span className="text-[11px] text-slate-500 flex-1 truncate">{review.리뷰내용}</span>
-                      <span className="text-[10px] text-slate-400">{review.작성일}</span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {[
           { title: '리뷰 활성화 우수 매장', icon: <TrendingUp size={15} className="text-emerald-500" />, stores: storeRanking.slice(0, 5), type: 'top' },
@@ -518,17 +429,6 @@ function StoreTab({ reviews }: { reviews: Review[] }) {
                 <KpiCard label="일평균 작성량" value={`${dailyAvg}건`} sub={`${uniqueDays}일치 데이터`} icon={<Clock size={16} />} />
                 <KpiCard label="긍정 평가" value={`${posCount}건`} icon={<Star size={16} />} color="text-emerald-600 dark:text-emerald-400" />
                 <KpiCard label="부정 평가" value={`${negCount}건`} icon={<AlertTriangle size={16} />} color={negCount > 0 ? 'text-rose-600 dark:text-rose-400' : undefined} />
-              </div>
-
-              {/* 만족도 원형 그래프 */}
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
-                <h3 className="font-semibold text-sm text-slate-900 dark:text-white mb-4">전체 리뷰 만족도</h3>
-                <SatisfactionPie
-                  positive={posCount}
-                  neutral={storeReviews.filter(r => r.감정분석 === '중립').length}
-                  negative={negCount}
-                  total={storeReviews.length}
-                />
               </div>
 
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
@@ -1193,12 +1093,7 @@ export function ReviewDashboard() {
   const handleOverride = async (id: string) => {
     const newIds = [...reviewState.overridden, id];
     setReviewState(prev => ({ ...prev, overridden: newIds }));
-    try {
-      // 조치 목록 기록
-      await setDoc(doc(db, 'review_states', 'overridden'), { ids: newIds, updated_at: new Date().toISOString() });
-      // 핵심: 원본 리뷰 문서의 감정분석 필드를 영구적으로 '긍정'으로 변경
-      await updateDoc(doc(db, 'reviews', id), { 감정분석: '긍정' });
-    } catch (e) { console.error('긍정 재분류 실패:', e); }
+    try { await setDoc(doc(db, 'review_states', 'overridden'), { ids: newIds, updated_at: new Date().toISOString() }); } catch { }
   };
 
   const activeNegCount = reviews.filter(r =>

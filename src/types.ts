@@ -169,14 +169,25 @@ export interface FranchiseSchedule {
   supervisor: string;   // 슈퍼바이저
 
   // 세부 사항
-  constructionType: string; // 신규, 업종변경 등
-  kitchenVendor: string;    // 주방업체
+  constructionType: string; // 더원, 감리, 직접입력
+  signageType: string;      // 동영, 직접
+  kitchenSupplier: string;  // 형제, 신광, 주원
   gasType: string;          // 도시가스, LPG 등
   notes: string;            // 특이사항
 
-  // 상태 관리
-  status: ScheduleStatus;
-  showInCalendar: boolean;  // 달력 표시 여부
+  // 자동 계산 및 관리 필드
+  colorCode?: string;       // 매장 고유 색상 코드
+  showInCalendar?: boolean; // 달력 노출 여부
+  gasType?: string;         // 가스 구분
+  ownerGuideStart: string;  // 점주 안내 시작
+  equipmentIn: string;      // 화구류 입고일
+  progressCheck: {
+    ovenOrder: boolean;
+    ownerGuide: boolean;
+    equipmentOrder: boolean;
+    internetOrder: boolean;
+    initialEntry: boolean;
+  };
 
   // 일정 관련 (YYYY-MM-DD 형식 권장)
   constructionStart: string;
@@ -188,12 +199,17 @@ export interface FranchiseSchedule {
   initialStockEnd: string;
   preTrainingStart: string;
   preTrainingEnd: string;
+  preTrainingLocation?: string; // 사전교육 장소 (남원, 예당마을, 청주율량, 직접입력)
+  preTrainingDays?: number;     // 사전교육 일수
+  preTrainingParticipants?: number; // 참여 인원
   preTrainingMemo: string; // 사전교육 내용
   trainingStart: string;
   trainingEnd: string;
   openDate: string;
   
   customPhases?: CustomPhase[];
+
+  teamMembersSnapshot?: TeamMember[]; // 등록/수정 당시의 팀원 목록 스냅샷
 
   archived?: boolean;
 
