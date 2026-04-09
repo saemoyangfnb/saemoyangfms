@@ -242,11 +242,77 @@ def inject_naver_cookies(driver):
 
 
 # ==========================================
-# 🚀 8. 크롤링 엔진 (실제 사용자 동작 순서 반영)
+# 📊 7. 공식 키워드 통계 수집
 # ==========================================
-def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
-    target_count = 500 if mode == "intensive" else 30
-    print(f"\n[{store_name}] 크롤링 시작... ({'3개월 집중' if mode == 'intensive' else '최신 30건'})")
+def crawl_keyword_stats(driver, store_name):
+    """네이버 플레이스 상단의 '이런 점이 좋아요' 통계 수집"""
+    print(f"  - [{store_name}] 공식 키워드 통계 수집 중...")
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    stats = {"매장명": store_name, "수집일자": today_str}
+    try:
+        # 키워드 아이템 탐색 (확인된 클래스 pui__T9Bff)
+        items = driver.find_elements(By.CSS_SELECTOR, ".place_section_content li.pui__T9Bff")
+        if not items:
+            # 대체 셀렉터
+            items = driver.find_elements(By.CSS_SELECTOR, ".pui__T9Bff")
+        
+        for item in items:
+            try:
+                keyword = item.find_element(By.CSS_SELECTOR, ".pui__HGR6W").text.strip()
+                count_str = item.find_element(By.CSS_SELECTOR, ".pui__n1GFH").text.strip()
+                # "123" 또는 "1,234" 형태에서 숫자만 추출
+                count = int(re.sub(r'[^0-9]', '', count_str))
+                stats[keyword] = count
+            except:
+                continue
+    except Exception as e:
+        print(f"    [경고] 키워드 통계 추출 중 오류: {e}")
+    
+    return stats if len(stats) > 2 else None
+
+def save_keyword_stats_to_firestore(stats):
+    if not stats: return
+    try:
+        from firestore_client import get_db
+        db = get_db()
+        doc_id = f"{stats['매장명']}_{stats['수집일자']}"
+        db.collection('keyword_stats').document(doc_id).set(stats)
+    except:
+        pass
+
+# ==========================================
+# 🖱️ 8. 인간 행동 모사 (Anti-Bot)
+# ==========================================
+def simulate_human_behavior(driver):
+    """마우스 이동 및 부드러운 스크롤 모사"""
+    try:
+        # 1. 랜덤 마우스 이동
+        action = ActionChains(driver)
+        viewport_width = driver.execute_script("return window.innerWidth;")
+        viewport_height = driver.execute_script("return window.innerHeight;")
+        for _ in range(random.randint(2, 4)):
+            x = random.randint(10, viewport_width - 10)
+            y = random.randint(10, viewport_height - 10)
+            action.move_by_offset(x // 10, y // 10).perform()
+            time.sleep(random.uniform(0.1, 0.3))
+        
+        # 2. 부드러운 스크롤
+        total_scroll = random.randint(200, 500)
+        current_scroll = 0
+        while current_scroll < total_scroll:
+            step = random.randint(30, 70)
+            driver.execute_script(f"window.scrollBy(0, {step});")
+            current_scroll += step
+            time.sleep(random.uniform(0.1, 0.2))
+    except:
+        pass
+
+# ==========================================
+# 🚀 9. 크롤링 엔진 (실제 사용자 동작 순서 반영)
+# ==========================================
+def crawl_naver_reviews(url, store_name, existing_keys, mode="normal", last_date=None):
+    target_count = 500 if mode == "intensive" else 20
+    print(f"\n[{store_name}] 크롤링 시작... ({'3개월 집중' if mode == 'intensive' else f'최신 20건 (기준일: {last_date or "전체"})'})") 
 
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
@@ -263,8 +329,14 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
 
     try:
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',
-            {'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'})
+        # AI 탐지 우회: navigator 속성 보정 (webdriver false, languages, platform 등)
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': '''
+                Object.defineProperty(navigator, "webdriver", {get: () => undefined});
+                Object.defineProperty(navigator, "plugins", {get: () => [1, 2, 3, 4, 5]});
+                Object.defineProperty(navigator, "languages", {get: () => ["ko-KR", "ko"]});
+            '''
+        })
     except:
         return "NETWORK_ERROR"
 
@@ -278,6 +350,9 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
 
         driver.get(url)
         time.sleep(random.uniform(3.0, 4.5))
+        
+        # 인간 행동 모사 시작
+        simulate_human_behavior(driver)
 
         try:
             driver.switch_to.frame("entryIframe")
@@ -317,6 +392,12 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
 
         if not visit_clicked:
             print("  - [경고] 방문자리뷰 버튼 클릭 실패")
+        else:
+            # 🆕 STEP 2.5 공식 키워드 통계 수집
+            k_stats = crawl_keyword_stats(driver, store_name)
+            if k_stats:
+                save_keyword_stats_to_firestore(k_stats)
+                print(f"    -> 공식 키워드 {len(k_stats)-2}개 수집 완료")
 
         # =============================================
         # STEP 3. 아래로 스크롤하며 "최신순" 버튼 탐색 후 클릭
@@ -350,12 +431,17 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
         # =============================================
         # STEP 4. 천천히 스크롤하며 리뷰 수집
         # =============================================
+        print(f"  - 리뷰 본문 및 태그 수집 시작 (목표: {target_count}건)")
+        
+        # 수집 전 한번 더 행동 모사
+        simulate_human_behavior(driver)
+        
         processed_ids = set()
         stop_crawling = False
         stagnant_count = 0
         prev_count = 0
         scroll_attempts = 0
-        max_scrolls = 200 if mode == "intensive" else 50
+        max_scrolls = 200 if mode == "intensive" else 25  # 경량화: 일반 모드는 25회로 제한
 
         while scroll_attempts < max_scrolls:
             if stop_crawling or len(reviews_data) >= target_count:
@@ -396,6 +482,16 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
                         else:
                             parsed_date = datetime.now().strftime('%Y-%m-%d')
 
+                    # 🆕 증분 수집: 이미 수집된 최신 날짜보다 오래된 리뷰 만나면 즉시 종료
+                    if mode == "normal" and last_date and parsed_date:
+                        try:
+                            if parsed_date < last_date:
+                                print(f"  - [증분] '{parsed_date}' ≤ 기준일 '{last_date}' → 수집 중단")
+                                stop_crawling = True
+                                break
+                        except:
+                            pass
+
                     # 집중 모드: 3개월 이전 리뷰는 스킵
                     if mode == "intensive":
                         try:
@@ -405,36 +501,58 @@ def crawl_naver_reviews(url, store_name, existing_keys, mode="normal"):
                         except:
                             pass
 
-                    # ✅ 본문 추출 - 확인된 클래스 pui__jhpEyP
-                    content = ""
+                    # ✅ 1. 더보기 버튼 클릭 (상세 텍스트 노출을 위해 먼저 수행)
                     try:
-                        body = el.find_element(By.CSS_SELECTOR, ".pui__jhpEyP")
-                        content = body.text.strip()
-                    except:
-                        pass
+                        # pui__jhpEyP 또는 .rvS6Y 내부의 더보기 버튼 탐색
+                        more_btns = el.find_elements(By.CSS_SELECTOR, 'a[role="button"], .rvS6Y, .zPfVt .rvS6Y')
+                        for m_btn in more_btns:
+                            m_txt = m_btn.text.strip()
+                            if m_btn.is_displayed() and ("더보기" in m_txt or "펼치기" in m_txt):
+                                driver.execute_script("arguments[0].click();", m_btn)
+                                time.sleep(0.4)
+                                break
+                    except: pass
 
-                    # 본문 없으면 pui__xvAbDR 시도
-                    if not content:
+                    # ✅ 2. 본문 추출 (상세 문장 위주)
+                    content = ""
+                    # 1순위: 현대적인 PUI 클래스 중 본문 영역
+                    for selector in [".pui__jhpEyP", ".pui__V8F9nN", ".pui__xvAbDR"]: 
                         try:
-                            body = el.find_element(By.CSS_SELECTOR, ".pui__xvAbDR")
-                            content = body.text.strip()
-                        except:
-                            pass
-
-                    # 그래도 없으면 기존 CSS 선택자
-                    if not content:
+                            # 해당 요소 내의 모든 텍스트를 가져오되, 너무 짧거나 키워드 패턴인 경우 제외 시도
+                            e_list = el.find_elements(By.CSS_SELECTOR, selector)
+                            for e in e_list:
+                                txt = e.text.strip()
+                                # 단순 키워드 태그("+1", "+2" 포함)는 제외
+                                if re.search(r'\+\d+$', txt) or len(txt) < 5:
+                                    continue
+                                if len(txt) > len(content):
+                                    content = txt
+                        except: pass
+                    
+                    # 2순위: 전통적인 클래스 및 폴백
+                    if len(content) < 10:
                         for selector in [".zPfVt", ".vgS6Y", "span.zPfVt"]:
                             try:
                                 e = el.find_element(By.CSS_SELECTOR, selector)
-                                if e.text.strip():
-                                    content = e.text.strip()
-                                    break
-                            except:
-                                pass
+                                txt = e.text.strip()
+                                if txt and len(txt) > len(content):
+                                    content = txt
+                            except: pass
 
-                    if not content or len(content) < 5:
+                    # ✅ 3. 노이즈 제거 (키워드 태그 등)
+                    if content:
+                        # '+숫자' 패턴 (예: '+3', '+15') 제거
+                        content = re.sub(r'\+\d+', '', content).strip()
+                        # 이모지로 시작하는 태그 패턴 제거 (필요시)
+                        content = re.sub(r'^[\u2700-\u27BF]|[\u2600-\u26FF]\s*', '', content).strip()
+                        # 중복 공백 제거
+                        content = re.sub(r'\s+', ' ', content)
+
+                    if not content or len(content) < 4:
                         continue
-                    if '인증' in content or content.strip() in ['영수증', '예약', '사진']:
+                        
+                    # 단순 만족 키워드 덩어리이거나 너무 짧은 경우 최종 필터링
+                    if content.strip() in ['영수증', '예약', '사진'] or (len(content) < 12 and any(kw in content for kw in ['맛있어요', '친절해요', '좋아요'])):
                         continue
 
                     # ✅ 태그 추출 - 확인된 클래스 pui__V8F9nN
@@ -556,17 +674,30 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--auto":
         choice = "1"
     else:
-        print("\n1. 전체 매장 일일 수집 (최신 30건)")
-        print("2. 특정 매장 수집 (30건)")
+        print("\n1. 전체 매장 일일 수집 (최신 20건 · 증분)")
+        print("2. 특정 매장 수집 (20건)")
         print("3. 특정 매장 3개월 집중 (500건)")
         print("4. 전체 매장 3개월 집중 (500건)")
         print("==========================================")
         choice = input("▶ 번호 입력: ").strip()
 
-    try:
-        store_df = pd.read_excel("가맹점_리뷰링크.xlsx")
-    except Exception as e:
-        print(f"[에러] 가맹점_리뷰링크.xlsx 열기 실패: {e}")
+    # 엑셀 파일 로드 (Downloads 폴더 우선, 없으면 같은 폴더 폴백)
+    STORE_EXCEL_CANDIDATES = [
+        os.getenv("STORE_EXCEL_PATH", ""),
+        r"C:\Users\yjjo\Downloads\6_리뷰 크롤러 이동_260327\가맹점_리뷰링크.xlsx",
+        os.path.join(BASE_DIR, "가맹점_리뷰링크.xlsx"),
+    ]
+    store_df = None
+    for xlsx_path in STORE_EXCEL_CANDIDATES:
+        if xlsx_path and os.path.exists(xlsx_path):
+            try:
+                store_df = pd.read_excel(xlsx_path)
+                print(f"  엑셀 로드: {xlsx_path}")
+                break
+            except Exception as e:
+                print(f"  [엑셀 실패] {xlsx_path}: {e}")
+    if store_df is None:
+        print("[엑셀 없음] 가맹점_리뷰링크.xlsx를 다음 위치 중 하나에 놓아주세요:\n  1. " + r"C:\Users\yjjo\Downloads\6_리뷰 크롤러 이동_260327" + "\n  2. " + BASE_DIR)
         exit()
 
     url_col = '리뷰링크'
@@ -645,8 +776,15 @@ if __name__ == "__main__":
 
         retry_count = 0
         store_reviews = []
+        # 증분 수집을 위한 해당 매장의 기존 최신 날짜 계산
+        last_date = None
+        if crawl_mode == "normal" and old_df is not None and not old_df.empty:
+            store_existing = old_df[old_df['매장명'] == store_name]
+            if not store_existing.empty:
+                last_date = store_existing['작성일'].max()
+                print(f"  - 기존 최신 날짜: {last_date}")
         while retry_count < 3:
-            store_reviews = crawl_naver_reviews(url, store_name, existing_keys, mode=crawl_mode)
+            store_reviews = crawl_naver_reviews(url, store_name, existing_keys, mode=crawl_mode, last_date=last_date)
             if store_reviews == "NETWORK_ERROR":
                 retry_count += 1
                 print(f"  30초 대기 후 재시도 ({retry_count}/3)")

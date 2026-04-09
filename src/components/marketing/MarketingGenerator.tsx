@@ -45,18 +45,34 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
+          // [Cost-Down] Resize to thumbnail (800x800) before sending
+          const MAX_DIM = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height *= MAX_DIM / width;
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width *= MAX_DIM / height;
+              height = MAX_DIM;
+            }
+          }
+
           const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
+          canvas.width = width;
+          canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) return resolve(event.target?.result as string);
 
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, width, height);
 
-          // Apply blur to top 15% — 소스는 img(원본)로 다시 그려야 함
-          const blurHeight = Math.floor(img.height * 0.15);
+          // Apply blur to top 15% (scaled to new dimensions)
+          const blurHeight = Math.floor(height * 0.15);
           ctx.filter = 'blur(15px)';
-          ctx.drawImage(img, 0, 0, img.width, blurHeight, 0, 0, img.width, blurHeight);
+          ctx.drawImage(canvas, 0, 0, width, blurHeight, 0, 0, width, blurHeight);
           ctx.filter = 'none'; // reset
 
           resolve(canvas.toDataURL('image/jpeg', 0.8));
@@ -113,16 +129,15 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
     try {
       const ai = new GoogleGenAI({ apiKey });
 
-      const promptStr = `당신은 '달빛에 구운 고등어'의 전문 마케터입니다. 매장명: ${storeName}.
-      아래 3가지 채널별 원고를 작성하세요.
-      1. [NAVER]: 상세 설명과 위치 팩트 포함. 마지막에 [매장 정보 안내] 박스 포함.
-      2. [INSTA]: 감성 문구와 해시태그.
-      3. [DAANGN]: 지역 주민 타겟 친근한 말투.
-      팩트: 영업 ${openTime}~${closeTime}, 주차 ${parkingType}, 이벤트: ${promoDetails}
-      매장 유형: ${storeType}, 톤앤매너: ${tone}
-      각 구분자는 반드시 [NAVER], [INSTA], [DAANGN] 키워드를 사용하세요.`;
+      // [Cost-Down] Lean System Prompt
+      const promptStr = `[JOB]전문마케터 [STORE]${storeName} [TYPE]${storeType} [TONE]${tone}
+[FACTS]영업:${openTime}-${closeTime}, 주차:${parkingType}, 이벤트:${promoDetails}
+[OUTPUT]3가지 구분자로 원고 작성.
+1. [NAVER]: 블로그용 상세 설명 + [매장 정보 안내] 박스
+2. [INSTA]: 감성 문구 + 해시태그
+3. [DAANGN]: 지역 주민 타겟 친근한 본문
+구분자 [NAVER], [INSTA], [DAANGN] 필수.`;
 
-      // SDK 규격: parts 배열 안에 text/inlineData를 묶어야 함
       const parts: Array<any> = [{ text: promptStr }];
 
       // Process Review Images (apply mosaic)
@@ -131,14 +146,31 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
         parts.push(convertDataUrlToInlineData(processedUrl));
       }
 
-      // Add Photo files unmodified
+      // [Cost-Down] Add Photo files with 800px resize
       for (const file of photoFiles) {
-        const inlineData = await fileToInlineData(file);
-        parts.push(inlineData);
+        const imgUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let w = img.width; let h = img.height;
+              const max = 800;
+              if (w > h) { if (w > max) { h *= max / w; w = max; } }
+              else { if (h > max) { w *= max / h; h = max; } }
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
+              resolve(canvas.toDataURL('image/jpeg', 0.7));
+            };
+            img.src = e.target?.result as string;
+          };
+          reader.readAsDataURL(file);
+        });
+        parts.push(convertDataUrlToInlineData(imgUrl));
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: [{ role: 'user', parts }],
       });
 
