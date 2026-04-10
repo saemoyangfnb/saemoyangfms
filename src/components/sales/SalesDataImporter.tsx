@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import { collection, writeBatch, doc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useToast } from '../Toast';
-import { Upload, FileSpreadsheet, Loader2, CheckCircle2, Trash2, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
 
 const CHUNK_SIZE = 499;
 
@@ -24,7 +24,46 @@ function isValidDate(raw: any): boolean {
 
 interface UploadResult {
   count: number;
+  skipped: number;
   type: 'monthly' | 'daily';
+}
+
+// 기존 데이터 불러와서 중복 제거 후 배치 저장
+async function commitWithDedup(
+  records: any[],
+  collName: string,
+  activeBrand: string | null,
+  onProgress: (msg: string) => void
+): Promise<{ written: number; skipped: number }> {
+  if (records.length === 0) return { written: 0, skipped: 0 };
+
+  onProgress('기존 데이터 비교 중...');
+  const snap = await getDocs(
+    query(collection(db, collName), where('brandId', '==', activeBrand))
+  );
+  const existingMap = new Map<string, number>();
+  snap.docs.forEach(d => existingMap.set(d.id, Number(d.data().totalSales) || 0));
+
+  const toWrite = records.filter(r => {
+    const existing = existingMap.get(r.docId);
+    if (existing === undefined) return true;       // 신규
+    return existing !== r.totalSales;              // 금액이 다르면 업데이트
+  });
+  const skipped = records.length - toWrite.length;
+
+  const totalChunks = Math.ceil(toWrite.length / CHUNK_SIZE) || 1;
+  for (let i = 0; i < toWrite.length; i += CHUNK_SIZE) {
+    const chunkNum = Math.floor(i / CHUNK_SIZE) + 1;
+    onProgress(`저장 중... (${chunkNum}/${totalChunks} 배치)`);
+    const batch = writeBatch(db);
+    toWrite.slice(i, i + CHUNK_SIZE).forEach(r => {
+      const { docId, ...data } = r;
+      batch.set(doc(db, collName, docId), { ...data, id: docId });
+    });
+    await batch.commit();
+  }
+
+  return { written: toWrite.length, skipped };
 }
 
 export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: string | null; onUploaded?: () => void }) {
@@ -44,6 +83,7 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
   // ── 월별 처리 ──────────────────────────────────────────────
   const handleMonthlyFile = (file: File) => {
     setIsUploading(true);
+    setUploadProgress('파일 분석 중...');
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -69,9 +109,9 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
               createdAt: new Date().toISOString(),
             });
           }
-          await commitInChunks(records, 'monthly_sales');
-          setUploadResult({ count: records.length, type: 'monthly' });
-          onUploaded?.();
+          const { written, skipped } = await commitWithDedup(records, 'monthly_sales', activeBrand, setUploadProgress);
+          // 모달 표시 — onUploaded는 모달 닫을 때 호출
+          setUploadResult({ count: written, skipped, type: 'monthly' });
         } catch (err: any) {
           console.error(err);
           toast.error(`저장 오류: ${err?.message ?? '알 수 없는 오류'}`);
@@ -90,13 +130,14 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
   // ── 일별 처리 ──────────────────────────────────────────────
   const handleDailyFile = (file: File) => {
     setIsUploading(true);
+    setUploadProgress('파일 분석 중...');
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
         const rawText = e.target?.result as string;
         const lines = rawText.split(/\r?\n/);
         const headerIndex = lines.findIndex(
-          (l) => l.includes('일자') && l.includes('영업매장') && l.includes('총매출')
+          l => l.includes('일자') && l.includes('영업매장') && l.includes('총매출')
         );
         if (headerIndex < 0) {
           toast.error('헤더 행(일자, 영업매장, 총매출)을 찾을 수 없습니다.');
@@ -128,9 +169,8 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
                   createdAt: new Date().toISOString(),
                 });
               }
-              await commitInChunks(records, 'daily_sales');
-              setUploadResult({ count: records.length, type: 'daily' });
-              onUploaded?.();
+              const { written, skipped } = await commitWithDedup(records, 'daily_sales', activeBrand, setUploadProgress);
+              setUploadResult({ count: written, skipped, type: 'daily' });
             } catch (err: any) {
               console.error(err);
               toast.error(`저장 오류: ${err?.message ?? '알 수 없는 오류'}`);
@@ -153,21 +193,6 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
     reader.readAsText(file, 'UTF-8');
   };
 
-  // ── Firestore 청크 쓰기 ──────
-  const commitInChunks = async (records: any[], collName: string) => {
-    const totalChunks = Math.ceil(records.length / CHUNK_SIZE);
-    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-      const chunkNum = Math.floor(i / CHUNK_SIZE) + 1;
-      setUploadProgress(`저장 중... (${chunkNum}/${totalChunks} 배치)`);
-      const batch = writeBatch(db);
-      records.slice(i, i + CHUNK_SIZE).forEach((r) => {
-        const { docId, ...data } = r;
-        batch.set(doc(db, collName, docId), { ...data, id: docId });
-      });
-      await batch.commit();
-    }
-  };
-
   // ── 삭제 처리 ──────
   const handleDelete = async () => {
     if (!activeBrand) return;
@@ -177,20 +202,16 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
       const collName = deleteType === 'monthly' ? 'monthly_sales' : 'daily_sales';
       const field = deleteType === 'monthly' ? 'yearMonth' : 'date';
 
-      let q = query(collection(db, collName), where('brandId', '==', activeBrand));
-      const snapshot = await getDocs(q);
-
+      const snapshot = await getDocs(query(collection(db, collName), where('brandId', '==', activeBrand)));
       const toDelete = snapshot.docs.filter(d => {
         const val = d.data()[field] as string;
         if (!val) return false;
-        // 월별: yearMonth (YYYY-MM), 일별: date (YYYY-MM-DD)
-        const cmp = deleteType === 'monthly' ? val : val.slice(0, 7); // YYYY-MM
+        const cmp = deleteType === 'monthly' ? val : val.slice(0, 7);
         if (deleteFrom && cmp < deleteFrom) return false;
         if (deleteTo && cmp > deleteTo) return false;
         return true;
       });
 
-      // 배치 삭제
       for (let i = 0; i < toDelete.length; i += CHUNK_SIZE) {
         const batch = writeBatch(db);
         toDelete.slice(i, i + CHUNK_SIZE).forEach(d => batch.delete(d.ref));
@@ -214,6 +235,11 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
     else handleMonthlyFile(file);
   };
 
+  const handleResultClose = () => {
+    setUploadResult(null);
+    onUploaded?.(); // 모달 닫힌 뒤 탭 전환 + 새로고침
+  };
+
   return (
     <div className="space-y-6">
       {/* ── 업로드 완료 모달 ── */}
@@ -222,18 +248,23 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-800 text-center">
             <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-4" />
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">업로드 완료!</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-1">
+            <p className="text-slate-500 dark:text-slate-400 mb-3">
               {uploadResult.type === 'monthly' ? '월별' : '일별'} 매출 데이터
             </p>
-            <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-6">
-              {uploadResult.count.toLocaleString()}건
+            <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+              {uploadResult.count.toLocaleString()}건 저장
             </p>
+            {uploadResult.skipped > 0 && (
+              <p className="text-sm text-slate-400 mb-4">
+                동일 금액 {uploadResult.skipped.toLocaleString()}건 건너뜀
+              </p>
+            )}
             <p className="text-sm text-slate-400 mb-6">정상적으로 저장되었습니다.</p>
             <button
-              onClick={() => setUploadResult(null)}
+              onClick={handleResultClose}
               className="w-full bg-slate-900 dark:bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-slate-800 transition-colors"
             >
-              확인
+              확인 (월별 분석으로 이동)
             </button>
           </div>
         </div>
@@ -266,7 +297,9 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
         <div className="max-w-md mx-auto space-y-6">
           <Upload className="h-12 w-12 mx-auto text-blue-500" />
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">매출 데이터 업로드</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">CSV 파일을 업로드하면 DB에 저장되어 실시간 공유됩니다.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            CSV 파일 선택 즉시 자동 저장됩니다. 동일 금액 데이터는 건너뜁니다.
+          </p>
 
           <div className="flex gap-4 justify-center">
             <label className={`flex-1 cursor-pointer flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${uploadType === 'monthly' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
@@ -287,7 +320,7 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
             <input type="file" accept=".csv" onChange={handleFileChange} disabled={isUploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
             <button disabled={isUploading} className="w-full bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
               {isUploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
-              {isUploading ? (uploadProgress || '파일 분석 중...') : 'CSV 파일 선택 및 업로드'}
+              {isUploading ? (uploadProgress || '파일 분석 중...') : 'CSV 파일 선택 → 자동 저장'}
             </button>
           </div>
 
@@ -296,6 +329,7 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
             <p>• <strong>월별:</strong> 헤더 — 년-월, 총매출, 매장_요약, 도시, 시군</p>
             <p>• <strong>일별:</strong> 헤더 — 일자, 영업매장, 총매출 (멀티 헤더 행 자동 감지)</p>
             <p>• 소계/합계 행은 자동으로 제외됩니다.</p>
+            <p>• 동일 매장·날짜에 같은 금액이면 쓰기를 건너뛰어 할당량을 절약합니다.</p>
             <p>• 인코딩: UTF-8 (한글 깨짐 시 Excel에서 UTF-8로 저장 후 재시도)</p>
           </div>
         </div>
@@ -315,11 +349,11 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 block mb-1">시작 년-월 (예: 2025-01)</label>
+            <label className="text-xs text-slate-500 block mb-1">시작 년-월</label>
             <input type="month" value={deleteFrom} onChange={e => setDeleteFrom(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 block mb-1">종료 년-월 (예: 2026-12)</label>
+            <label className="text-xs text-slate-500 block mb-1">종료 년-월</label>
             <input type="month" value={deleteTo} onChange={e => setDeleteTo(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
           </div>
           <button

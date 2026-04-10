@@ -85,19 +85,35 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
     return { monthlySumMap, recent3, growthRate };
   }, [finalData]);
 
-  // Chart Data preparation
+  // Chart Data preparation — 빈 월도 0으로 채워 연속 표시
   const chartData = useMemo(() => {
-    // We need data structured as: { yearMonth: '2023-01', "store1": 1000, "store2": 2000 }
     if (finalData.length === 0) return [];
-    
+
+    const existingMonths = Array.from(new Set(finalData.map(d => d.yearMonth))).sort();
+    const minYM = existingMonths[0];
+    const maxYM = existingMonths[existingMonths.length - 1];
+
+    // minYM ~ maxYM 사이 모든 월 생성
+    const allMonths: string[] = [];
+    let [cy, cm] = minYM.split('-').map(Number);
+    const [ey, em] = maxYM.split('-').map(Number);
+    while (cy < ey || (cy === ey && cm <= em)) {
+      allMonths.push(`${cy}-${String(cm).padStart(2, '0')}`);
+      cm++;
+      if (cm > 12) { cm = 1; cy++; }
+    }
+
+    // 월별 집계 맵 초기화 (모든 월 포함)
     const map = new Map<string, any>();
+    allMonths.forEach(ym => map.set(ym, { yearMonth: ym, _hasData: false }));
+
     finalData.forEach(d => {
-      if (!map.has(d.yearMonth)) map.set(d.yearMonth, { yearMonth: d.yearMonth });
-      const obj = map.get(d.yearMonth);
+      const obj = map.get(d.yearMonth)!;
       obj[d.storeName] = (obj[d.storeName] || 0) + d.totalSales;
+      obj._hasData = true;
     });
 
-    return Array.from(map.values()).sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+    return allMonths.map(ym => map.get(ym)!);
   }, [finalData]);
 
   if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-blue-500" /></div>;
@@ -233,7 +249,7 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
                   <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
                   <ReferenceLine y={100000000} label={{ position: 'insideTopLeft', value: '1억원 (기준 매출)', fill: '#ef4444', fontSize: 12 }} stroke="#ef4444" strokeDasharray="3 3" />
                   {allStores.filter(s => (stores.length === 0 || stores.includes(s))).map((store, idx) => (
-                     <Line key={store} type="monotone" dataKey={store} stroke={`hsl(${(idx * 137.5) % 360}, 70%, 50%)`} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                     <Line key={store} type="monotone" dataKey={store} stroke={`hsl(${(idx * 137.5) % 360}, 70%, 50%)`} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} connectNulls={false} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
