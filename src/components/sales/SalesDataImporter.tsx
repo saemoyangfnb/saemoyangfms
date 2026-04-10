@@ -1,9 +1,35 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import { collection, writeBatch, doc, query, where, getDocs } from 'firebase/firestore';
+import { collection, writeBatch, doc, query, where, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { auth } from '../../firebase';
 import { useToast } from '../Toast';
 import { Upload, FileSpreadsheet, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
+
+/** 진단용: 단건 쓰기로 auth + DB 접근 확인 */
+async function runDiagnostic(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) return '❌ 로그인 상태 아님 (auth.currentUser = null)';
+
+  console.log('[진단] UID:', user.uid, '| DB:', (db as any)._databaseId?.database ?? 'unknown');
+  try {
+    const token = await user.getIdToken(true);
+    console.log('[진단] 토큰 갱신 성공, 길이:', token.length);
+  } catch (e) {
+    return `❌ 토큰 갱신 실패: ${e}`;
+  }
+
+  try {
+    const testRef = doc(db, '_debug_test', 'probe');
+    await Promise.race([
+      setDoc(testRef, { ts: Date.now(), uid: user.uid }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('5초 타임아웃')), 5000)),
+    ]);
+    return '✅ 단건 쓰기 성공';
+  } catch (e: any) {
+    return `❌ 단건 쓰기 실패: ${e?.code ?? ''} ${e?.message ?? e}`;
+  }
+}
 
 const CHUNK_SIZE = 50;          // 소규모 배치 (Firestore named DB 부하 최소화)
 const BATCH_DELAY_MS = 500;     // 배치 간 딜레이 (rate limit 방지)
@@ -352,6 +378,17 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
               {isUploading ? (uploadProgress || '파일 분석 중...') : 'CSV 파일 선택 → 자동 저장'}
             </button>
           </div>
+
+          {/* 진단 버튼 */}
+          <button
+            onClick={async () => {
+              const result = await runDiagnostic();
+              alert(`[Firestore 진단]\n${result}\n\n콘솔(F12)에서 상세 로그를 확인하세요.`);
+            }}
+            className="w-full text-xs py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            🔍 Firestore 연결 진단 (문제 발생 시 클릭)
+          </button>
 
           <div className="text-left bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 space-y-1">
             <p className="font-semibold text-slate-700 dark:text-slate-300 mb-2">파일 형식 안내</p>
