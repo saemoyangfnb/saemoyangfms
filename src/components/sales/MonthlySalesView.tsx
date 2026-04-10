@@ -3,7 +3,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { salesDb as db } from '../../firebase';
 import { MonthlySalesRecord } from '../../types';
 import { formatShortMoney } from '../../utils';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, LabelList } from 'recharts';
 import { Loader2, TrendingUp, TrendingDown, Minus, Filter, List } from 'lucide-react';
 
 export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }) {
@@ -160,11 +160,10 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
             <span className="text-sm font-bold flex items-center gap-1"><Filter size={14}/> 도시</span>
             <button onClick={() => setCities([])} className="text-xs text-slate-500 hover:text-blue-500">초기화</button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {allCities.slice(0, 10).map(c => (
+          <div className="flex flex-wrap gap-2 max-h-32 md:max-h-60 overflow-y-auto pb-1">
+            {allCities.map(c => (
               <button key={c} onClick={() => toggleFilter(setCities, c)} className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${cities.includes(c) ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600'}`}>{c}</button>
             ))}
-            {allCities.length > 10 && <span className="text-xs text-slate-400 py-1">+{allCities.length - 10}</span>}
           </div>
         </div>
 
@@ -174,7 +173,7 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
             <span className="text-sm font-bold flex items-center gap-1"><Filter size={14}/> 시군</span>
             <button onClick={() => setDistricts([])} className="text-xs text-slate-500 hover:text-blue-500">초기화</button>
           </div>
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+          <div className="flex flex-wrap gap-2 max-h-32 md:max-h-60 overflow-y-auto pb-1">
             {allDistricts.map(d => (
               <button key={d} onClick={() => toggleFilter(setDistricts, d)} className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${districts.includes(d) ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600'}`}>{d}</button>
             ))}
@@ -193,7 +192,7 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
               <button onClick={() => setStores([])} className="text-xs text-slate-500 hover:text-blue-500">초기화</button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 flex-1 items-start content-start overflow-y-auto max-h-24 pb-1">
+          <div className="flex flex-wrap gap-2 flex-1 items-start content-start overflow-y-auto max-h-40 md:max-h-60 pb-1">
             {allStores.map(s => (
               <button key={s} onClick={() => toggleFilter(setStores, s, storesMultiMode)} className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${stores.includes(s) ? 'bg-amber-500 text-white' : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600'}`}>{s}</button>
             ))}
@@ -205,7 +204,7 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
         <>
           {/* KPIs */}
           {trendAnalysis && trendAnalysis.recent3.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               {trendAnalysis.recent3.map((m, i) => {
                 const prev = i > 0 ? trendAnalysis.monthlySumMap[trendAnalysis.recent3[i-1]] : null;
                 const curr = trendAnalysis.monthlySumMap[m];
@@ -224,7 +223,7 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
                 );
               })}
               
-              <div className={`p-4 rounded-xl border shadow-sm flex flex-col justify-center ${trendAnalysis.growthRate > 2 ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : trendAnalysis.growthRate < -2 ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
+              <div className={`col-span-2 md:col-span-1 p-4 rounded-xl border shadow-sm flex flex-col justify-center ${trendAnalysis.growthRate > 2 ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : trendAnalysis.growthRate < -2 ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}>
                 <div className="text-xs font-bold mb-1 flex items-center gap-1 opacity-80">
                   {trendAnalysis.growthRate > 2 ? <TrendingUp size={14}/> : trendAnalysis.growthRate < -2 ? <TrendingDown size={14}/> : <Minus size={14}/>} AI 분석
                 </div>
@@ -248,9 +247,16 @@ export function MonthlySalesView({ activeBrand }: { activeBrand: string | null }
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
                   <ReferenceLine y={100000000} label={{ position: 'insideTopLeft', value: '1억원 (기준 매출)', fill: '#ef4444', fontSize: 12 }} stroke="#ef4444" strokeDasharray="3 3" />
-                  {allStores.filter(s => (stores.length === 0 || stores.includes(s))).map((store, idx) => (
-                     <Line key={store} type="monotone" dataKey={store} stroke={`hsl(${(idx * 137.5) % 360}, 70%, 50%)`} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} connectNulls={false} />
-                  ))}
+                  {allStores.filter(s => (stores.length === 0 || stores.includes(s))).map((store, idx) => {
+                    const strokeColor = `hsl(${(idx * 137.5) % 360}, 70%, 50%)`;
+                    return (
+                      <Line key={store} type="monotone" dataKey={store} stroke={strokeColor} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} connectNulls={false}>
+                        {stores.length === 1 && (
+                          <LabelList dataKey={store} position="top" offset={10} formatter={(val: any) => val ? formatShortMoney(val) : ''} style={{ fontSize: '11px', fill: strokeColor, fontWeight: 500 }} />
+                        )}
+                      </Line>
+                    );
+                  })}
                 </LineChart>
               </ResponsiveContainer>
             </div>

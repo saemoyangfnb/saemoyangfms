@@ -1253,23 +1253,23 @@ export default function App() {
               {/* 원가 계산기 */}
               {sidebar.section === 'cost' && (
                 <>
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div>
                       <h1 className="text-xl font-bold text-slate-900 dark:text-white">{currentBrand.name}</h1>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">원가 계산기</p>
                     </div>
-                    <button onClick={handleExportCsv} className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-1.5 text-sm shadow-sm">
+                    <button onClick={handleExportCsv} className="w-full sm:w-auto px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 text-sm shadow-sm">
                       <Download size={16} /> 내보내기
                     </button>
                   </div>
 
                   <div className="bg-white dark:bg-slate-900 rounded-t-xl shadow-sm border-b border-slate-200 dark:border-slate-800">
-                    <nav className="flex -mb-px overflow-x-auto">
+                    <nav className="flex -mb-px overflow-x-auto hide-scrollbar snap-x">
                       {costTabs.filter(tab => tab !== '변동사항' || currentUser.role === 'admin').map(tab => (
                         <button
                           key={tab}
                           onClick={() => setSidebar(prev => ({ ...prev, costTab: tab }))}
-                          className={`whitespace-nowrap py-4 px-5 border-b-2 font-medium text-sm transition-colors ${sidebar.costTab === tab ? 'border-slate-900 dark:border-blue-500 text-slate-900 dark:text-white' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                          className={`snap-start whitespace-nowrap py-3 px-4 sm:py-4 sm:px-5 border-b-2 font-medium text-sm transition-colors ${sidebar.costTab === tab ? 'border-slate-900 dark:border-blue-500 text-slate-900 dark:text-white' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                         >
                           {tab}
                         </button>
@@ -1281,16 +1281,16 @@ export default function App() {
                     {sidebar.costTab === '전체보기' ? (
                       <OverviewTable menus={activeMenus} menuCategories={brandCategories} ingredients={brandIngredients} isAdmin={currentUser.role === 'admin'} visibleColumns={visibleColumns} onAcknowledgeAlert={handleAcknowledgeAlert} onNavigateToTab={(tab) => setSidebar(prev => ({ ...prev, costTab: tab as CostTabType }))} onToggleColumn={(column) => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }))} />
                     ) : sidebar.costTab === '메뉴 관리' ? (
-                      <div className="p-6">
-                        <div className="flex justify-between items-center mb-6">
+                      <div className="p-4 sm:p-6">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
                           <div>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-white">메뉴 관리</h2>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">새로운 메뉴를 추가하거나 보관된 메뉴를 관리합니다.</p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setIsCategoryModalOpen(true)} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-lg flex items-center gap-2 text-sm border border-slate-200 dark:border-slate-700">카테고리 관리</button>
-                            <button onClick={() => setShowDeleteAllMenusConfirm(true)} className="px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 rounded-lg flex items-center gap-2 text-sm border border-rose-200 dark:border-rose-800"><Trash2 size={16} /> 전체 삭제</button>
-                            <button onClick={() => { setEditingMenu(undefined); setIsMenuModalOpen(true); }} className="px-4 py-2 bg-slate-900 dark:bg-blue-600 text-white rounded-lg hover:bg-slate-800 flex items-center gap-2 text-sm"><Plus size={16} /> 메뉴 추가</button>
+                          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                            <button onClick={() => setIsCategoryModalOpen(true)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-lg flex items-center gap-2 text-sm border border-slate-200 dark:border-slate-700">카테고리 관리</button>
+                            <button onClick={() => setShowDeleteAllMenusConfirm(true)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 rounded-lg flex items-center gap-2 text-sm border border-rose-200 dark:border-rose-800"><Trash2 size={16} /> 전체 삭제</button>
+                            <button onClick={() => { setEditingMenu(undefined); setIsMenuModalOpen(true); }} className="w-full sm:w-auto justify-center px-4 py-2 bg-slate-900 dark:bg-blue-600 text-white rounded-lg hover:bg-slate-800 flex items-center gap-2 text-sm"><Plus size={16} /> 메뉴 추가</button>
                           </div>
                         </div>
                         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden mb-4">

@@ -16,7 +16,8 @@
       "Bash(gh api:*)",
       "WebFetch(domain:api.github.com)",
       "Bash(npm install:*)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(vercel ls:*)"
     ]
   }
 }
