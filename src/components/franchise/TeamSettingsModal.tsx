@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
+import { salesDb as db } from '../../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { TeamSetting, BrandId } from '../../types';
 import { Plus, X, Trash2, Edit2, Users } from 'lucide-react';

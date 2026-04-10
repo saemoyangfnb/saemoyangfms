@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../../firebase';
-import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { salesDb as db } from '../../firebase';
+import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc } from 'firebase/firestore';
 import { FranchiseSchedule, TeamSetting, BrandId } from '../../types';
-import { Plus, Search, FileDown, Settings, CheckCircle2, Circle, Eye, EyeOff, X } from 'lucide-react';
+import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
-import Papa from 'papaparse';
 
 // Subcomponents
 import { ScheduleTimeline } from './ScheduleTimeline';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { TeamSettingsModal } from './TeamSettingsModal';
+import {
+  ProcessMasterModal,
+  ProcessSettings,
+  DEFAULT_PROCESS_SETTINGS,
+  BUILTIN_PROGRESS,
+} from './ProcessMasterModal';
 
 interface Props {
   brandId: BrandId;
@@ -36,6 +41,8 @@ export function FranchiseScheduleView({ brandId }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [editingData, setEditingData] = useState<Partial<FranchiseSchedule> | null>(null);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showProcessMaster, setShowProcessMaster] = useState(false);
+  const [processSettings, setProcessSettings] = useState<ProcessSettings>(DEFAULT_PROCESS_SETTINGS);
   
   const [hoveredTeam, setHoveredTeam] = useState<{ name: string, members: any[], x: number, y: number } | null>(null);
 
@@ -46,10 +53,15 @@ export function FranchiseScheduleView({ brandId }: Props) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [schSnap, teamSnap] = await Promise.all([
+      const [schSnap, teamSnap, psSnap] = await Promise.all([
         getDocs(collection(db, 'franchise_schedules')),
-        getDocs(collection(db, 'team_settings'))
+        getDocs(collection(db, 'team_settings')),
+        getDoc(doc(db, 'process_settings', brandId)),
       ]);
+      if (psSnap.exists()) {
+        const ps = psSnap.data() as ProcessSettings;
+        setProcessSettings({ ...DEFAULT_PROCESS_SETTINGS, ...ps });
+      }
 
       const schData: FranchiseSchedule[] = [];
       schSnap.forEach(d => {
@@ -165,6 +177,9 @@ export function FranchiseScheduleView({ brandId }: Props) {
          </div>
 
          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setShowProcessMaster(true)} className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-200 transition-colors">
+               <Layers size={15} /> 공정 마스터
+            </button>
             <button onClick={() => setShowTeamSettings(true)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-sm font-semibold rounded-lg hover:bg-slate-200 transition-colors">
                <Settings size={15} /> 팀/권역 설정
             </button>
@@ -206,18 +221,20 @@ export function FranchiseScheduleView({ brandId }: Props) {
        ) : (
           <div className="flex flex-col gap-10">
               <div className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
-                <ScheduleCalendar 
+                <ScheduleCalendar
                    schedules={filteredSchedules}
                    currentMonth={currentMonth}
                    teams={teams}
+                   phaseVisibility={processSettings.phaseVisibility}
                    onEditStore={(id) => { const s = schedules.find(item => item.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
                    onScheduleUpdate={async (id, data) => { await updateDoc(doc(db, 'franchise_schedules', id), data); fetchData(); }}
                 />
                 {monthsView === 2 && (
-                  <ScheduleCalendar 
+                  <ScheduleCalendar
                      schedules={filteredSchedules}
                      currentMonth={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)}
                      teams={teams}
+                     phaseVisibility={processSettings.phaseVisibility}
                      onEditStore={(id) => { const s = schedules.find(item => item.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
                      onScheduleUpdate={async (id, data) => { await updateDoc(doc(db, 'franchise_schedules', id), data); fetchData(); }}
                   />
@@ -271,24 +288,41 @@ export function FranchiseScheduleView({ brandId }: Props) {
                                </button>
                             </td>
                              <td className="p-3">
-                                <div className="flex justify-center gap-1.5">
-                                   {[
-                                     { key: 'ovenOrder', label: '화덕' },
-                                     { key: 'ownerGuide', label: '점주' },
-                                     { key: 'equipmentOrder', label: '대소' },
-                                     { key: 'internetOrder', label: '넷' },
-                                     { key: 'initialEntry', label: '초도' }
-                                   ].map(p => (
-                                     <button
-                                       key={p.key}
-                                       onClick={() => handleToggleProgress(sch.id, p.key as any, sch.progressCheck?.[p.key as keyof FranchiseSchedule['progressCheck']] || false)}
-                                       className={`flex flex-col items-center gap-0.5 p-1 rounded-md transition-colors ${sch.progressCheck?.[p.key as keyof typeof sch.progressCheck] ? 'text-blue-600 bg-blue-50' : 'text-slate-300'}`}
-                                       title={p.label}
-                                     >
-                                        <CheckCircle2 size={12} className={sch.progressCheck?.[p.key as keyof typeof sch.progressCheck] ? '' : 'opacity-20'} />
-                                        <span className="text-[8px] font-bold">{p.label}</span>
-                                     </button>
-                                   ))}
+                                <div className="flex justify-center gap-1.5 flex-wrap">
+                                   {BUILTIN_PROGRESS.map(p => {
+                                     const label = processSettings.progressLabels[p.id] ?? p.defaultLabel;
+                                     const checked = sch.progressCheck?.[p.id as keyof FranchiseSchedule['progressCheck']] || false;
+                                     return (
+                                       <button
+                                         key={p.id}
+                                         onClick={() => handleToggleProgress(sch.id, p.id as any, checked)}
+                                         className={`flex flex-col items-center gap-0.5 p-1 rounded-md transition-colors ${checked ? 'text-blue-600 bg-blue-50' : 'text-slate-300'}`}
+                                         title={label}
+                                       >
+                                         <CheckCircle2 size={12} className={checked ? '' : 'opacity-20'} />
+                                         <span className="text-[8px] font-bold">{label}</span>
+                                       </button>
+                                     );
+                                   })}
+                                   {processSettings.customItems.map(ci => {
+                                     const checked = (sch as any).customProgressCheck?.[ci.id] || false;
+                                     return (
+                                       <button
+                                         key={ci.id}
+                                         onClick={async () => {
+                                           await updateDoc(doc(db, 'franchise_schedules', sch.id), {
+                                             [`customProgressCheck.${ci.id}`]: !checked,
+                                           });
+                                           fetchData();
+                                         }}
+                                         className={`flex flex-col items-center gap-0.5 p-1 rounded-md transition-colors ${checked ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300'}`}
+                                         title={ci.label}
+                                       >
+                                         <CheckCircle2 size={12} className={checked ? '' : 'opacity-20'} />
+                                         <span className="text-[8px] font-bold">{ci.label}</span>
+                                       </button>
+                                     );
+                                   })}
                                 </div>
                              </td>
                              <td className="p-3 font-semibold text-slate-600 dark:text-slate-400">{sch.gasType || '미등록'}</td>
@@ -327,6 +361,14 @@ export function FranchiseScheduleView({ brandId }: Props) {
 
         {showTeamSettings && (
           <TeamSettingsModal brandId={brandId} onClose={() => setShowTeamSettings(false)} />
+        )}
+
+        {showProcessMaster && (
+          <ProcessMasterModal
+            brandId={brandId}
+            onClose={() => setShowProcessMaster(false)}
+            onSaved={(settings) => setProcessSettings(settings)}
+          />
         )}
     </div>
   );

@@ -8,9 +8,11 @@ interface Props {
   teams: TeamSetting[];
   onScheduleUpdate: (id: string, updates: Partial<FranchiseSchedule>) => Promise<void>;
   onEditStore?: (id: string) => void;
+  phaseVisibility?: Record<string, boolean>; // 공정 마스터 캘린더 표기 설정
 }
 
-export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpdate, onEditStore }: Props) {
+export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpdate, onEditStore, phaseVisibility = {} }: Props) {
+  const isPhaseVisible = (id: string) => phaseVisibility[id] !== false; // 기본: 표시
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   
@@ -63,7 +65,11 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
       const teamBg = `bg-${colorCode}-500`;
 
       const addEv = (id: string, name: string, start: string, end: string) => {
-        if (!start || !end || !isDateInRange(dateStr, start, end)) return;
+        if (!start) return;
+        const effectiveEnd = end || start; // end 미입력 시 start와 동일한 1일짜리 이벤트
+        if (!isDateInRange(dateStr, start, effectiveEnd)) return;
+        // eslint-disable-next-line no-param-reassign
+        end = effectiveEnd;
 
         const yesterday = addDays(dateStr, -1);
         const tomorrow = addDays(dateStr, 1);
@@ -83,19 +89,19 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
         });
       };
 
-      if (s.constructionStart === dateStr) addEv('constructionStart', '시작', s.constructionStart, s.constructionStart);
-      if (s.constructionEnd === dateStr) addEv('constructionEnd', '종료', s.constructionEnd, s.constructionEnd);
-      
-      addEv('oven', '화덕', s.ovenIn, s.ovenEnd);
-      if (s.burnerIn === dateStr) addEv('burner', '화구', s.burnerIn, s.burnerIn);
-      if (s.equipmentIn === dateStr) addEv('equipment', '화구', s.equipmentIn, s.equipmentIn);
-      if (s.ownerGuideStart === dateStr) addEv('guide', '안내', s.ownerGuideStart, s.ownerGuideStart);
-      
-      addEv('preTraining', '사전', s.preTrainingStart, s.preTrainingEnd);
-      addEv('training', '교육', s.trainingStart, s.trainingEnd);
-      addEv('initialStock', '초도', s.initialStockIn, s.initialStockEnd);
-      
-      if (s.openDate === dateStr) {
+      if (isPhaseVisible('constructionStart') && s.constructionStart === dateStr) addEv('constructionStart', '시작', s.constructionStart, s.constructionStart);
+      if (isPhaseVisible('constructionEnd') && s.constructionEnd === dateStr) addEv('constructionEnd', '종료', s.constructionEnd, s.constructionEnd);
+
+      if (isPhaseVisible('oven')) addEv('oven', '화덕', s.ovenIn, s.ovenEnd);
+      if (isPhaseVisible('burner') && s.burnerIn === dateStr) addEv('burner', '화구', s.burnerIn, s.burnerIn);
+      if (isPhaseVisible('equipment') && s.equipmentIn === dateStr) addEv('equipment', '장비', s.equipmentIn, s.equipmentIn);
+      if (isPhaseVisible('guide') && s.ownerGuideStart === dateStr) addEv('guide', '안내', s.ownerGuideStart, s.ownerGuideStart);
+
+      if (isPhaseVisible('preTraining')) addEv('preTraining', '사전', s.preTrainingStart, s.preTrainingEnd);
+      if (isPhaseVisible('training')) addEv('training', '교육', s.trainingStart, s.trainingEnd);
+      if (isPhaseVisible('initialStock')) addEv('initialStock', '초도', s.initialStockIn, s.initialStockEnd);
+
+      if (isPhaseVisible('open') && s.openDate === dateStr) {
         addEv('open', '오픈', s.openDate, s.openDate);
       }
 
