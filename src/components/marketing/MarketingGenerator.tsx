@@ -129,14 +129,37 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
     try {
       const ai = new GoogleGenAI({ apiKey });
 
-      // [Cost-Down] Lean System Prompt
-      const promptStr = `[JOB]전문마케터 [STORE]${storeName} [TYPE]${storeType} [TONE]${tone}
-[FACTS]영업:${openTime}-${closeTime}, 주차:${parkingType}, 이벤트:${promoDetails}
-[OUTPUT]3가지 구분자로 원고 작성.
-1. [NAVER]: 블로그용 상세 설명 + [매장 정보 안내] 박스
-2. [INSTA]: 감성 문구 + 해시태그
-3. [DAANGN]: 지역 주민 타겟 친근한 본문
-구분자 [NAVER], [INSTA], [DAANGN] 필수.`;
+      const promptStr = `당신은 F&B 프랜차이즈 전문 마케터입니다.
+
+[매장 정보]
+매장명: ${storeName} / 유형: ${storeType} / 톤: ${tone}
+영업시간: ${openTime}~${closeTime} / 주차: ${parkingType} / 이벤트: ${promoDetails}
+
+[이미지 분석 — 원고 작성 전 반드시 수행]
+첨부 이미지를 먼저 분석하라:
+1. 고객 리뷰 이미지: 반복 등장하는 긍정 키워드, 고객이 강조한 메뉴·경험 요소 추출
+2. 매장/음식 이미지: 색감·플레이팅·인테리어 스타일·시그니처 비주얼 요소 파악
+분석 결과를 원고에 구체적 묘사로 직접 반영하라. 이미지에서 확인되지 않은 내용은 추측 금지.
+
+[출력 형식]
+
+[NAVER]
+최소 1,200자 이상. 구성: ①방문 도입부 → ②메뉴/분위기 상세(이미지 묘사 포함) → ③고객 반응 인용 → ④아래 정보 박스.
+---
+[매장 정보 안내]
+매장명: ${storeName}
+영업시간: ${openTime}~${closeTime}
+주차: ${parkingType}
+이벤트: ${promoDetails}
+---
+
+[INSTA]
+본문 150~300자 + 해시태그 20개 이상. 감성 도입 → 핵심 매력 → 방문 유도 → 해시태그(브랜드/지역/메뉴/감성 혼합).
+
+[DAANGN]
+200~400자. 지역 주민 공감대 → 매장 핵심 매력 1~2가지 → 방문 유도. 지역명 반드시 포함. 친근한 구어체.
+
+[주의] 과장 표현 금지. 구분자 [NAVER], [INSTA], [DAANGN] 필수.`;
 
       const parts: Array<any> = [{ text: promptStr }];
 
@@ -290,8 +313,10 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
               <input type="file" multiple accept="image/*" onChange={handleReviewFilesChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
               <div className="text-center">
                 <LayoutTemplate className="mx-auto h-8 w-8 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">리뷰 캡처 (모자이크 대상)</p>
-                <p className="text-xs text-slate-500 mt-1">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '클릭하여 업로드'}</p>
+                <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">고객 리뷰 캡처</p>
+                <p className="text-xs text-slate-400 mt-1">네이버·구글·배달앱 리뷰 화면 캡처</p>
+                <p className="text-xs text-slate-400">AI가 긍정 키워드 추출 · 닉네임 자동 모자이크</p>
+                <p className="text-xs text-blue-500 font-medium mt-1.5">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '클릭하여 업로드'}</p>
               </div>
             </div>
             
@@ -299,8 +324,10 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
               <input type="file" multiple accept="image/*" onChange={handlePhotoFilesChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
               <div className="text-center">
                 <ImageIcon className="mx-auto h-8 w-8 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">매장/음식 사진 (메인 배치)</p>
-                <p className="text-xs text-slate-500 mt-1">{photoFiles.length > 0 ? `${photoFiles.length}장 선택됨` : '클릭하여 업로드'}</p>
+                <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">대표 메뉴 · 매장 분위기 사진</p>
+                <p className="text-xs text-slate-400 mt-1">시그니처 메뉴, 매장 내·외부 사진 권장</p>
+                <p className="text-xs text-slate-400">AI가 색감·플레이팅·인테리어를 묘사에 반영</p>
+                <p className="text-xs text-blue-500 font-medium mt-1.5">{photoFiles.length > 0 ? `${photoFiles.length}장 선택됨` : '클릭하여 업로드'}</p>
               </div>
             </div>
           </div>
