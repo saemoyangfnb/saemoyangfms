@@ -5,9 +5,23 @@ import { db } from '../../firebase';
 import { useToast } from '../Toast';
 import { Upload, FileSpreadsheet, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
 
-const CHUNK_SIZE = 100; // named DB 타임아웃 방지 — 소규모 배치
-const BATCH_DELAY_MS = 300; // 배치 간 딜레이 (rate limit 방지)
-const MAX_RETRY = 3; // 배치 실패 시 최대 재시도 횟수
+const CHUNK_SIZE = 50;          // 소규모 배치 (Firestore named DB 부하 최소화)
+const BATCH_DELAY_MS = 500;     // 배치 간 딜레이 (rate limit 방지)
+const MAX_RETRY = 3;            // 배치 실패 시 최대 재시도 횟수
+const COMMIT_TIMEOUT_MS = 20000; // batch.commit() 1회 최대 대기 시간
+
+/** batch.commit()에 타임아웃 적용 — WebSocket hang 방지 */
+function commitWithTimeout(batch: ReturnType<typeof writeBatch>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('TIMEOUT: 배치 저장 응답 없음 (20초 초과)')),
+      COMMIT_TIMEOUT_MS
+    );
+    batch.commit()
+      .then(() => { clearTimeout(timer); resolve(); })
+      .catch((err) => { clearTimeout(timer); reject(err); });
+  });
+}
 
 function normalizeDailyStoreName(raw: string): string {
   let s = String(raw).trim();
@@ -62,7 +76,7 @@ async function commitBatch(
           const { docId, ...data } = r;
           batch.set(doc(db, collName, docId), { ...data, id: docId });
         });
-        await batch.commit();
+        await commitWithTimeout(batch);
         break; // 성공
       } catch (err) {
         attempt++;
