@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(npx tsc:*)",
+      "Bash(firebase deploy:*)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_projects",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(\\\\.ts\")",
+      "Bash(python purge_data.py)",
+      "Bash(python -c ':*)",
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(npm install:*)",
+      "Bash(netstat -ano)"
     ]
   }
 }
