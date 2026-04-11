@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { FranchiseSchedule, TeamSetting } from '../../types';
 import { isDateInRange, addDays } from '../../utils';
 
+// 💡 [Tailwind 완벽 해결] Tailwind 스캐너가 인식할 수 있도록 완성된 클래스명을 직접 매핑
+const BG_CLASSES: Record<string, string> = {
+  blue: 'bg-blue-500', rose: 'bg-rose-500', emerald: 'bg-emerald-500', amber: 'bg-amber-500',
+  purple: 'bg-purple-500', cyan: 'bg-cyan-500', pink: 'bg-pink-500', indigo: 'bg-indigo-500',
+  violet: 'bg-violet-500', fuchsia: 'bg-fuchsia-500', orange: 'bg-orange-500', teal: 'bg-teal-500',
+  sky: 'bg-sky-500', lime: 'bg-lime-500', yellow: 'bg-yellow-500', red: 'bg-red-500',
+  stone: 'bg-stone-500', zinc: 'bg-zinc-500', slate: 'bg-slate-500', neutral: 'bg-neutral-500'
+};
+
 interface Props {
   schedules: FranchiseSchedule[];
   currentMonth: Date;
@@ -60,9 +69,8 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
     visibleSchedules.forEach(s => {
       const teamLabel = s.team || '미지정';
       const storeLabel = s.storeName;
-      // 매장별 고유 색상 또는 팀 색상 (Tailwind 클래스 생성)
       const colorCode = s.colorCode || 'slate';
-      const teamBg = `bg-${colorCode}-500`;
+      const bgClass = BG_CLASSES[colorCode] || 'bg-slate-500';
 
       const addEv = (id: string, name: string, start: string, end: string) => {
         if (!start) return;
@@ -81,7 +89,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
           phaseName: name,
           storeName: storeLabel,
           team: teamLabel,
-          color: teamBg,
+          bgClass: bgClass,
           isActuallyStart: !isDateInRange(yesterday, start, end),
           isActuallyEnd: !isDateInRange(tomorrow, start, end),
           duration,
@@ -229,21 +237,21 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
                              <div 
                                key={tIdx} 
                                onClick={(e) => openEditPopup(e, ev)}
-                               className={`relative text-[12px] h-[28px] flex items-center shadow-none cursor-pointer hover:brightness-95 ${ev.color} ${roundedCls} ${borderCls} ${leftBorder} ${rightBorder} transition-all leading-tight`} 
+                              className={`relative text-[12px] h-[28px] flex items-center shadow-none cursor-pointer hover:brightness-95 ${ev.bgClass} ${roundedCls} ${borderCls} ${leftBorder} ${rightBorder} transition-all leading-tight`} 
                                title={`[${ev.team}][${ev.storeName}][${ev.phaseName}]`}
                                draggable
                                onDragStart={(e) => handleDragStart(e, ev.scheduleId, ev.phaseId, cell.fullDate, false)}
                              >
                                 {showStartText && (
                                   <div className="absolute left-0 top-0 bottom-0 flex items-center pl-2 whitespace-nowrap z-10 pointer-events-none overflow-visible">
-                                    <span className="text-white font-bold drop-shadow-md text-[11px] tracking-tight">
+                                    <span className="text-slate-900 dark:text-white font-bold dark:drop-shadow-md text-[11px] tracking-tight">
                                       [{ev.team}][{ev.storeName}][{ev.phaseName}]
                                     </span>
                                   </div>
                                 )}
                                 {showEndText && !showStartText && (
                                   <div className="absolute right-0 top-0 bottom-0 flex items-center pr-2 whitespace-nowrap z-10 pointer-events-none overflow-visible">
-                                    <span className="text-white font-bold drop-shadow-md text-[11px] tracking-tight">
+                                    <span className="text-slate-900 dark:text-white font-bold dark:drop-shadow-md text-[11px] tracking-tight">
                                       [{ev.phaseName}]
                                     </span>
                                   </div>

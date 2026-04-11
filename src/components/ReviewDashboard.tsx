@@ -228,11 +228,11 @@ function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
     const reactions: Record<string, number> = {};
 
     reviews.forEach(r => {
-      if (r.동반자) r.동반자.split(',').forEach(c => { const t = c.trim(); if(t) companions[t] = (companions[t] || 0) + 1; });
-      if (r.방문시간) r.방문시간.split(',').forEach(t => { const v = t.trim(); if(v) times[v] = (times[v] || 0) + 1; });
+      if (r.동반자) r.동반자.split(',').forEach(c => { const t = c.trim(); if(t && t.toLowerCase() !== 'nan') companions[t] = (companions[t] || 0) + 1; });
+      if (r.방문시간) r.방문시간.split(',').forEach(t => { const v = t.trim(); if(v && v.toLowerCase() !== 'nan') times[v] = (times[v] || 0) + 1; });
       if (r.고객반응_포인트) r.고객반응_포인트.split(',').forEach(p => { 
         const t = p.trim(); 
-        if (t && t.toLowerCase() !== 'num' && isNaN(Number(t))) reactions[t] = (reactions[t] || 0) + 1; 
+        if (t && t.toLowerCase() !== 'num' && t.toLowerCase() !== 'nan' && isNaN(Number(t))) reactions[t] = (reactions[t] || 0) + 1; 
       });
     });
 
@@ -323,13 +323,13 @@ function OverviewTab({ reviews, reviewState, onResolve, onOverride }: {
                     <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-lg p-3">
                       <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{review.리뷰내용}</p>
                     </div>
-                    {(review.방문시간 || review.동반자 || review.고객반응_포인트) && (
+                    {(review.방문시간 && review.방문시간.toLowerCase() !== 'nan' || review.동반자 && review.동반자.toLowerCase() !== 'nan' || review.고객반응_포인트) && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {review.방문시간 && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-[10px] font-medium rounded">{review.방문시간}</span>}
-                        {review.동반자 && <span className="px-2 py-0.5 bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] font-medium rounded">{review.동반자}</span>}
+                        {review.방문시간 && review.방문시간.toLowerCase() !== 'nan' && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-[10px] font-medium rounded">{review.방문시간}</span>}
+                        {review.동반자 && review.동반자.toLowerCase() !== 'nan' && <span className="px-2 py-0.5 bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] font-medium rounded">{review.동반자}</span>}
                         {review.고객반응_포인트 && review.고객반응_포인트.split(',').map((pt, i) => {
                           const t = pt.trim();
-                          return t && t.toLowerCase() !== 'num' && isNaN(Number(t)) ? (
+                          return t && t.toLowerCase() !== 'num' && t.toLowerCase() !== 'nan' && isNaN(Number(t)) ? (
                             <span key={i} className="px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-medium rounded border border-slate-200 dark:border-slate-700">#{t}</span>
                           ) : null;
                         })}
@@ -474,13 +474,13 @@ function StoreTab({ reviews }: { reviews: Review[] }) {
 
   const timeOptions = useMemo(() => {
     const times = new Set<string>();
-    storeReviews.forEach(r => { if (r.방문시간) r.방문시간.split(',').forEach(t => times.add(t.trim())); });
+    storeReviews.forEach(r => { if (r.방문시간) r.방문시간.split(',').forEach(t => { const v = t.trim(); if(v && v.toLowerCase() !== 'nan') times.add(v); }); });
     return ['all', ...Array.from(times).filter(Boolean)];
   }, [storeReviews]);
 
   const companionOptions = useMemo(() => {
     const companions = new Set<string>();
-    storeReviews.forEach(r => { if (r.동반자) r.동반자.split(',').forEach(c => companions.add(c.trim())); });
+    storeReviews.forEach(r => { if (r.동반자) r.동반자.split(',').forEach(c => { const v = c.trim(); if(v && v.toLowerCase() !== 'nan') companions.add(v); }); });
     return ['all', ...Array.from(companions).filter(Boolean)];
   }, [storeReviews]);
 
@@ -488,7 +488,7 @@ function StoreTab({ reviews }: { reviews: Review[] }) {
   const companionCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     storeReviews.forEach(r => {
-      if (r.동반자) r.동반자.split(',').forEach(c => { const t = c.trim(); if(t) counts[t] = (counts[t] || 0) + 1; });
+      if (r.동반자) r.동반자.split(',').forEach(c => { const t = c.trim(); if(t && t.toLowerCase() !== 'nan') counts[t] = (counts[t] || 0) + 1; });
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
   }, [storeReviews]);
@@ -499,7 +499,7 @@ function StoreTab({ reviews }: { reviews: Review[] }) {
     storeReviews.forEach(r => {
       if (r.고객반응_포인트) r.고객반응_포인트.split(',').forEach(p => { 
         const t = p.trim(); 
-        if (t && t.toLowerCase() !== 'num' && isNaN(Number(t))) counts[t] = (counts[t] || 0) + 1; 
+        if (t && t.toLowerCase() !== 'num' && t.toLowerCase() !== 'nan' && isNaN(Number(t))) counts[t] = (counts[t] || 0) + 1; 
       });
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -647,8 +647,8 @@ function StoreTab({ reviews }: { reviews: Review[] }) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <p className="text-xs text-slate-400">{review.작성일}</p>
-                          {review.방문시간 && <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-[10px] font-medium rounded">{review.방문시간}</span>}
-                          {review.동반자 && <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] font-medium rounded">{review.동반자}</span>}
+                          {review.방문시간 && review.방문시간.toLowerCase() !== 'nan' && <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-[10px] font-medium rounded">{review.방문시간}</span>}
+                          {review.동반자 && review.동반자.toLowerCase() !== 'nan' && <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 text-[10px] font-medium rounded">{review.동반자}</span>}
                         </div>
                         <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{review.리뷰내용}</p>
                         {review.고객반응_포인트 && (

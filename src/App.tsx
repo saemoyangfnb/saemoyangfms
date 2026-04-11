@@ -28,7 +28,7 @@ import {
   Archive, AlertTriangle, Trash2, X, ChevronLeft, ChevronRight,
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
-  ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, Bot, CalendarDays
+  ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, Bot, CalendarDays, ArrowUpRight, Sparkles, LayoutList
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient } from './utils';
@@ -93,27 +93,27 @@ function HomePage({
       label: '등록 메뉴',
       value: totalMenus,
       unit: '개',
-      icon: <LayoutDashboard size={16} />,
+      icon: <LayoutDashboard size={22} />,
       color: 'text-blue-600 dark:text-blue-400',
-      bg: 'bg-blue-50 dark:bg-blue-900/20',
+      iconBg: 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400',
       onClick: () => onNavigate('dalbitgo', 'cost'),
     },
     {
       label: '식재료',
       value: totalIngredients,
       unit: '종',
-      icon: <Database size={16} />,
+      icon: <Database size={22} />,
       color: 'text-emerald-600 dark:text-emerald-400',
-      bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
       onClick: () => onNavigate(null, 'database'),
     },
     {
       label: '원가 알림',
       value: alertMenus,
       unit: '건',
-      icon: <TriangleAlert size={16} />,
+      icon: <TriangleAlert size={22} />,
       color: alertMenus > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500',
-      bg: alertMenus > 0 ? 'bg-rose-50 dark:bg-rose-900/20' : 'bg-slate-50 dark:bg-slate-800',
+      iconBg: alertMenus > 0 ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400',
       onClick: () => onNavigate('dalbitgo', 'cost'),
       highlight: alertMenus > 0,
     },
@@ -121,9 +121,9 @@ function HomePage({
       label: '최근 7일 변동',
       value: recentChanges,
       unit: '건',
-      icon: <TrendingUp size={16} />,
+      icon: <TrendingUp size={22} />,
       color: recentChanges > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500',
-      bg: recentChanges > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-slate-50 dark:bg-slate-800',
+      iconBg: recentChanges > 0 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400',
       onClick: () => onNavigate(null, 'database'),
     },
   ];
@@ -131,150 +131,143 @@ function HomePage({
   const quickMenus = [
     {
       label: '원가 계산기',
-      desc: '달빛에구운고등어 메뉴별 원가 및 마진 관리',
-      icon: <LayoutDashboard size={22} className="text-blue-500" />,
-      color: 'border-blue-100 dark:border-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700',
-      bg: 'bg-blue-50 dark:bg-blue-900/20',
+      icon: <LayoutDashboard size={20} className="text-emerald-600 dark:text-emerald-400" />,
       onClick: () => onNavigate('dalbitgo', 'cost'),
     },
     {
       label: '가맹점 관제',
-      desc: '리뷰 수집 · 네이버 순위 · 경쟁사 모니터링',
-      icon: <ShieldAlert size={22} className="text-rose-500" />,
-      color: 'border-rose-100 dark:border-rose-900/40 hover:border-rose-300 dark:hover:border-rose-700',
-      bg: 'bg-rose-50 dark:bg-rose-900/20',
+      icon: <ShieldAlert size={20} className="text-emerald-600 dark:text-emerald-400" />,
       onClick: () => onNavigate('dalbitgo', 'review'),
     },
     {
       label: '식재료 데이터베이스',
-      desc: '전 브랜드 공유 식재료 원가 및 변동 관리',
-      icon: <Database size={22} className="text-emerald-500" />,
-      color: 'border-emerald-100 dark:border-emerald-900/40 hover:border-emerald-300 dark:hover:border-emerald-700',
-      bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+      icon: <Database size={20} className="text-emerald-600 dark:text-emerald-400" />,
       onClick: () => onNavigate(null, 'database'),
     },
     {
       label: '매출 현황',
-      desc: '브랜드별 매출 현황 분석 (준비 중)',
-      icon: <TrendingUp size={22} className="text-amber-500" />,
-      color: 'border-amber-100 dark:border-amber-900/40 hover:border-amber-300 dark:hover:border-amber-700',
-      bg: 'bg-amber-50 dark:bg-amber-900/20',
+      icon: <BarChart2 size={20} className="text-emerald-600 dark:text-emerald-400" />,
       onClick: () => onNavigate('dalbitgo', 'sales'),
     },
   ];
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-
-      {/* 인사말 */}
-      <div className="pt-4">
-        <p className="text-sm text-slate-400 dark:text-slate-500">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-          {greeting()}, <span className="text-slate-600 dark:text-slate-300">{currentUser.name}</span>님
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">새모양 F&B 가맹관리시스템에 오신 것을 환영합니다.</p>
-      </div>
-
-      {/* KPI 카드 */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">현황</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {kpiCards.map(card => (
-            <button
-              key={card.label}
-              onClick={card.onClick}
-              className={`flex flex-col items-start p-4 bg-white dark:bg-slate-900 rounded-xl border transition-all text-left shadow-sm hover:shadow-md ${
-                card.highlight
-                  ? 'border-rose-200 dark:border-rose-800'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className={`w-8 h-8 flex items-center justify-center rounded-lg mb-3 ${card.bg}`}>
-                <span className={card.color}>{card.icon}</span>
-              </div>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">{card.label}</p>
-              <p className={`text-xl font-bold ${card.color}`}>
-                {card.value}<span className="text-sm font-medium ml-0.5">{card.unit}</span>
-              </p>
-            </button>
-          ))}
+    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300 pb-8">
+      {/* 1. Welcome Section (Simple & Clean) */}
+      <section className="flex flex-col gap-1 pt-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            {greeting()}, {currentUser.name}님
+          </h2>
         </div>
-      </div>
+        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-sm font-medium">
+          <CalendarDays size={15} />
+          <span>{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</span>
+        </div>
+      </section>
 
-      {/* 빠른 메뉴 */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">빠른 메뉴</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* 2. KPI Cards Grid (2x2 on mobile, 4x1 on PC) */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kpiCards.map(card => (
+          <button
+            key={card.label}
+            onClick={card.onClick}
+            className={`flex flex-col gap-3 p-4 bg-white dark:bg-slate-900 rounded-2xl border transition-all text-left shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-md ${
+              card.highlight
+                ? 'border-rose-200 dark:border-rose-800/50 bg-rose-50/30 dark:bg-rose-900/10'
+                : 'border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${card.iconBg}`}>
+              {card.icon}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-0.5">{card.label}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                {card.value}<span className="text-sm font-normal text-slate-500 ml-0.5">{card.unit}</span>
+              </p>
+            </div>
+          </button>
+        ))}
+      </section>
+
+      {/* 3. Quick Actions Grid */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 px-1">빠른 실행</h3>
+        <div className="grid grid-cols-2 gap-3">
           {quickMenus.map(item => (
             <button
               key={item.label}
               onClick={item.onClick}
-              className={`flex items-center gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border ${item.color} transition-all text-left shadow-sm hover:shadow-md group`}
+              className="flex items-center gap-3 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-[0_2px_10px_rgba(0,0,0,0.02)] active:bg-slate-50 dark:active:bg-slate-800 transition-colors text-left"
             >
-              <div className={`w-11 h-11 flex items-center justify-center rounded-xl ${item.bg} shrink-0`}>
-                {item.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.label}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{item.desc}</p>
-              </div>
-              <ArrowRight size={15} className="text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors shrink-0" />
+              {item.icon}
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{item.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* 브랜드 현황 */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">브랜드 현황</h2>
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {brands.map(brand => {
-              const hasReview = REVIEW_ENABLED_BRANDS.includes(brand.id);
-              return (
-                <div key={brand.id} className="flex items-center gap-4 px-5 py-3.5">
-                  <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0">
-                    <Store size={15} className="text-slate-500 dark:text-slate-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{brand.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {hasReview ? '원가 계산기 · 가맹점 관제' : '원가 계산기 · 가맹점 관제 준비 중'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {hasReview ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">운영중</span>
-                    ) : (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">준비중</span>
-                    )}
-                    <button
-                      onClick={() => onNavigate(brand.id, 'cost')}
-                      className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                    >
-                      바로가기 →
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+      {/* 4. Brand Status (Dark Material Style) */}
+      <section className="bg-slate-900 dark:bg-slate-950 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden border border-slate-800">
+        <div className="absolute -top-4 -right-4 p-4 opacity-5">
+          <Store size={120} />
+        </div>
+        <div className="relative z-10">
+          <h3 className="text-xs font-bold text-emerald-400 mb-5 tracking-widest uppercase">운영 브랜드 현황</h3>
+          <div className="space-y-4">
+                {brands.map((brand, idx) => {
+                  const hasReview = REVIEW_ENABLED_BRANDS.includes(brand.id);
+                  return (
+                    <React.Fragment key={brand.id}>
+                      <button onClick={() => onNavigate(brand.id, 'cost')} className="w-full flex items-center justify-between group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                            <Store size={18} className="text-emerald-400" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-sm text-white">{brand.name}</p>
+                            <p className="text-[10px] text-white/50 uppercase tracking-wider">{hasReview ? 'Premium Seafood' : 'F&B Brand'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          {hasReview ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> 관제ON
+                            </div>
+                          ) : (
+                            <div className="px-2.5 py-1 rounded-full bg-white/5 text-white/50 text-[10px] font-bold border border-white/10">
+                              준비중
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                      {idx < brands.length - 1 && <div className="h-px bg-white/10" />}
+                    </React.Fragment>
+                  );
+                })}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 시스템 안내 */}
-      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-        <div className="flex items-start gap-3">
-          <Bell size={15} className="text-slate-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">시스템 안내</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              가맹점 리뷰 수집은 매일 오전 6시 자동 실행됩니다. 주간 리포트는 매주 월요일 오전 7시에 생성됩니다. 문의사항은 관리자에게 연락해 주세요.
-            </p>
-          </div>
+      {/* 5. System Notice (Simple List) */}
+      <section className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Bell size={16} className="text-slate-400" /> 시스템 안내
+          </h3>
         </div>
-      </div>
-
+        <ul className="space-y-3">
+          <li className="flex items-start gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+            <span className="text-emerald-500 mt-0.5 font-bold">•</span>
+            <span className="leading-relaxed">가맹점 리뷰 및 경쟁사 동향 수집은 매일 <strong>오전 6시</strong> 자동 실행</span>
+          </li>
+          <li className="flex items-start gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+            <span className="text-emerald-500 mt-0.5 font-bold">•</span>
+            <span className="leading-relaxed">주간 마케팅 리포트는 매주 <strong>월요일 오전 7시</strong> 자동 발행</span>
+          </li>
+        </ul>
+      </section>
     </div>
   );
 }
@@ -900,6 +893,16 @@ export default function App() {
     if (isMobile) setMobileSidebarOpen(false);
   };
 
+  // 💡 사이드바 닫힘 모드용 브랜드명 변환 함수
+  const getShortBrandName = (name: string) => {
+    if (name.includes('달빛')) return '달빛';
+    if (name.includes('만수')) return '만수';
+    if (name.includes('얌스')) return '얌스';
+    if (name.includes('봄')) return '봄';
+    if (name.includes('노을')) return '노을';
+    return name.substring(0, 2); // 그 외의 경우 기본적으로 두 글자 반환
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100">
       {renderGlobalError()}
@@ -913,19 +916,24 @@ export default function App() {
       )}
 
       {/* 모바일 햄버거 버튼 */}
-      {isMobile && !mobileSidebarOpen && (
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          className="fixed top-3 left-3 z-40 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-md text-slate-600 dark:text-slate-300"
-        >
-          <MenuIcon size={18} />
-        </button>
+      {isMobile && (
+        <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md fixed top-0 w-full z-40 border-b border-slate-200 dark:border-slate-800 h-14 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setMobileSidebarOpen(true)} className="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 p-1.5 rounded-full transition-colors active:scale-95">
+              <MenuIcon size={20} />
+            </button>
+            <h1 className="text-lg font-bold tracking-tight text-emerald-600 dark:text-emerald-400 select-none">Culinary Logic</h1>
+          </div>
+          <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center border border-slate-200 dark:border-slate-700 shadow-sm active:scale-95 transition-transform overflow-hidden">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{currentUser.name[0]}</span>
+          </div>
+        </header>
       )}
 
       {/* 사이드바 */}
       <aside className={`${
         isMobile
-          ? `fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          ? `fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
           : `${sidebarCollapsed ? 'w-14' : 'w-60'} transition-all duration-300 sticky top-0 h-screen shrink-0`
       } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col`}>
 
@@ -999,10 +1007,10 @@ export default function App() {
                   ) : (
                     <button
                       onClick={() => navigateTo(brand.id, 'cost')}
-                      className={`flex-1 text-left text-xs font-medium truncate ${isActiveBrand ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}
+                      className={`flex-1 text-xs truncate ${sidebarCollapsed ? 'text-center font-bold' : 'text-left font-medium'} ${isActiveBrand ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}
                       title={sidebarCollapsed ? brand.name : undefined}
                     >
-                      {sidebarCollapsed ? brand.name[0] : brand.name}
+                      {sidebarCollapsed ? getShortBrandName(brand.name) : brand.name}
                     </button>
                   )}
 
@@ -1157,8 +1165,8 @@ export default function App() {
       </aside>
 
       {/* 메인 콘텐츠 */}
-      <main className="flex-1 overflow-auto">
-        <div className={`max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 ${isMobile ? 'pt-14' : ''}`}>
+      <main className={`flex-1 overflow-auto ${isMobile ? 'pt-14 pb-20' : ''}`}>
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
 
           {/* 홈 (랜딩) */}
           {sidebar.section === 'home' && (
@@ -1343,6 +1351,30 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* 모바일용 Bottom Navigation Bar */}
+      {isMobile && (
+        <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md fixed bottom-0 left-0 right-0 flex justify-around items-center h-16 pb-safe px-2 z-40 border-t border-slate-200 dark:border-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] rounded-t-xl text-[10px] font-medium">
+          <button onClick={() => navigateTo(null, 'home')} className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-colors ${sidebar.section === 'home' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-500'}`}>
+            <LayoutList size={20} className="mb-0.5" />
+            <span>Home</span>
+          </button>
+          <button onClick={() => setMobileSidebarOpen(true)} className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-colors ${sidebar.brandId !== null ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-500'}`}>
+            <Store size={20} className="mb-0.5" />
+            <span>Brands</span>
+          </button>
+          <button onClick={() => navigateTo(null, 'database')} className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-colors ${sidebar.section === 'database' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-500'}`}>
+            <Database size={20} className="mb-0.5" />
+            <span>DB</span>
+          </button>
+          {currentUser.role === 'admin' && (
+            <button onClick={() => navigateTo(null, 'admin')} className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-colors ${sidebar.section === 'admin' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'text-slate-500 hover:text-emerald-500'}`}>
+              <Settings size={20} className="mb-0.5" />
+              <span>Admin</span>
+            </button>
+          )}
+        </nav>
+      )}
 
       {/* 모달 */}
       {isCategoryModalOpen && <CategoryManagementModal categories={brandCategories} onSave={handleSaveCategories} onClose={() => setIsCategoryModalOpen(false)} />}

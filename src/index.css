@@ -2,6 +2,25 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 1. 조선일보명조체 불러오기 (눈누 웹폰트) */
+@font-face {
+    font-family: 'Chosunilbo_myungjo';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Chosunilbo_myungjo.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* 2. Tailwind v4 기본 폰트로 조선일보명조체 완벽 지정 */
+@theme {
+  --font-sans: 'Chosunilbo_myungjo', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* 3. 🚨 초강력 덮어쓰기: 어떤 숨은 설정이든 무시하고 모든 글씨에 조선일보명조체 강제 적용 */
+* {
+  font-family: 'Chosunilbo_myungjo', serif !important;
+  font-weight: 700 !important;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
