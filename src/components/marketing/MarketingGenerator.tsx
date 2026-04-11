@@ -75,67 +75,63 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       ctx.fillStyle = '#f8fafc'; // 깔끔한 배경
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // ✅ [핵심 개선] 베스트 리뷰(첫번째)를 중앙에 크게, 나머지는 배경으로 배치
-      const processedImages = await Promise.all(imgs.map(async (img) => {
+      const N = imgs.length;
+      // 사진 개수에 따라 유동적으로 그리드(행/열) 수 계산
+      const cols = Math.ceil(Math.sqrt(N));
+      const rows = Math.ceil(N / cols);
+
+      const cellW = CANVAS_SIZE / cols;
+      const cellH = CANVAS_SIZE / rows;
+
+      // 러프한 겹침(스크랩북) 스타일로 렌더링
+      for (let i = 0; i < N; i++) {
+        const img = imgs[i];
+
+        // 1. 임시 캔버스에 이미지 + 닉네임 모자이크 처리
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = img.width;
         tempCanvas.height = img.height;
         const tCtx = tempCanvas.getContext('2d');
-        if (!tCtx) return null;
+        if (!tCtx) continue;
+
         tCtx.drawImage(img, 0, 0);
         const blurHeight = Math.floor(img.height * 0.15);
         tCtx.filter = 'blur(15px)';
         tCtx.drawImage(tempCanvas, 0, 0, img.width, blurHeight, 0, 0, img.width, blurHeight);
         tCtx.filter = 'none';
-        return tempCanvas;
-      }));
 
-      const validImages = processedImages.filter(Boolean) as HTMLCanvasElement[];
-      if (validImages.length === 0) return;
+        // 2. 그리드 위치 계산 및 러프한 변형(오프셋, 회전)
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const isSingle = N === 1;
 
-      // 1. 배경 이미지들(두번째부터)을 먼저 흩뿌려 그리기
-      const bgImages = validImages.slice(1, 5); // 최대 4개의 배경 이미지
-      const positions = [
-        { x: CANVAS_SIZE * 0.25, y: CANVAS_SIZE * 0.25 }, // 좌상단
-        { x: CANVAS_SIZE * 0.75, y: CANVAS_SIZE * 0.25 }, // 우상단
-        { x: CANVAS_SIZE * 0.25, y: CANVAS_SIZE * 0.75 }, // 좌하단
-        { x: CANVAS_SIZE * 0.75, y: CANVAS_SIZE * 0.75 }, // 우하단
-      ];
+        // 약간의 랜덤 오프셋 적용
+        const offsetX = isSingle ? 0 : (Math.random() - 0.5) * (cellW * 0.3);
+        const offsetY = isSingle ? 0 : (Math.random() - 0.5) * (cellH * 0.3);
+        const centerX = col * cellW + cellW / 2 + offsetX;
+        const centerY = row * cellH + cellH / 2 + offsetY;
 
-      for (let i = 0; i < bgImages.length; i++) {
-        const img = bgImages[i];
-        const pos = positions[i];
-        
-        const targetW = CANVAS_SIZE * 0.55; // 배경 이미지는 작게
-        const scale = targetW / img.width;
-        const targetH = img.height * scale;
-        const angle = (Math.random() - 0.5) * 30 * Math.PI / 180; // -15도 ~ 15도 랜덤 회전
+        // 그리드 셀보다 40% 크게 만들어 겹치게 설정
+        const targetW = isSingle ? CANVAS_SIZE * 0.8 : cellW * 1.4;
+        const scale = targetW / tempCanvas.width;
+        const targetH = tempCanvas.height * scale;
+
+        // 랜덤 회전 (-8도 ~ 8도)
+        const angle = isSingle ? 0 : (Math.random() - 0.5) * 16 * Math.PI / 180;
 
         ctx.save();
-        ctx.translate(pos.x, pos.y);
+        ctx.translate(centerX, centerY);
         ctx.rotate(angle);
-        ctx.shadowColor = 'rgba(0,0,0,0.1)';
-        ctx.shadowBlur = 20;
-        ctx.shadowOffsetY = 10;
-        ctx.drawImage(img, -targetW / 2, -targetH / 2, targetW, targetH);
+
+        // 폴라로이드 사진처럼 입체적인 그림자
+        ctx.shadowColor = 'rgba(0,0,0,0.25)';
+        ctx.shadowBlur = 25;
+        ctx.shadowOffsetY = 15;
+
+        // 캔버스에 그리기
+        ctx.drawImage(tempCanvas, -targetW / 2, -targetH / 2, targetW, targetH);
         ctx.restore();
       }
-
-      // 2. 베스트 리뷰(첫번째)를 가장 위에, 중앙에, 크게 그리기
-      const heroImg = validImages[0];
-      const heroTargetW = CANVAS_SIZE * 0.75; // 중앙 이미지는 크게
-      const heroScale = heroTargetW / heroImg.width;
-      const heroTargetH = heroImg.height * heroScale;
-      const heroAngle = (Math.random() - 0.5) * 6 * Math.PI / 180; // -3도 ~ 3도 약한 회전
-
-      ctx.save();
-      ctx.translate(CANVAS_SIZE / 2, CANVAS_SIZE / 2);
-      ctx.rotate(heroAngle);
-      ctx.shadowColor = 'rgba(0,0,0,0.25)';
-      ctx.shadowBlur = 40;
-      ctx.shadowOffsetY = 20;
-      ctx.drawImage(heroImg, -heroTargetW / 2, -heroTargetH / 2, heroTargetW, heroTargetH);
-      ctx.restore();
 
       setCollageUrl(canvas.toDataURL('image/jpeg', 0.8)); // DB 용량 최적화를 위해 압축률 0.8 적용
     };
@@ -494,8 +490,8 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
                 <div className="text-center">
                   <LayoutTemplate className="mx-auto h-8 w-8 text-blue-400 group-hover:text-blue-600 transition-colors" />
                   <p className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-200">1️⃣ 고객 리뷰 캡처 (필수)</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">가장 잘 나온 베스트 리뷰를 <span className="font-bold text-blue-600">가장 먼저 선택</span>하세요. 중앙에 크게 배치된 콜라주를 자동 생성합니다.</p>
-                  <p className="text-xs text-blue-600 font-bold mt-2 bg-blue-100 dark:bg-blue-900/40 inline-block px-3 py-1 rounded-full">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '클릭하여 여러 장 업로드'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">리뷰 2장 이상 첨부 시, 닉네임이 모자이크된 <span className="font-bold text-blue-600">인스타용 겹침 콜라주(스크랩북 감성)</span>를 자동 생성합니다.</p>
+                  <p className="text-xs text-blue-600 font-bold mt-2 bg-blue-100 dark:bg-blue-900/40 inline-block px-3 py-1 rounded-full">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '여기를 클릭하여 리뷰 사진 업로드'}</p>
                 </div>
               </div>
               
