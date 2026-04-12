@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, where, updateDoc, doc } from 'firebase/firestore';
-import { reviewDb } from '../../firebase';
+import { collection, onSnapshot, query, orderBy, where, updateDoc, doc, addDoc } from 'firebase/firestore';
+import { reviewDb, db as mainDb, auth } from '../../firebase';
 import { MarketingSchedule } from '../../types';
 import { useToast } from '../Toast';
 import { Copy, Clock, CheckCircle, Download, Image as ImageIcon } from 'lucide-react';
@@ -16,6 +16,20 @@ export function MarketingScheduleView({ activeBrand }: { activeBrand: string | n
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const toast = useToast();
+
+  // 💡 시스템 활동 로그 기록 센서
+  const logActivity = async (action: string, details: string) => {
+    if (!auth.currentUser) return;
+    try {
+      await addDoc(collection(mainDb, 'activity_logs'), {
+        userId: auth.currentUser.uid,
+        userName: auth.currentUser.displayName || auth.currentUser.email || '관리자',
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) { console.error('Failed to log activity', e); }
+  };
 
   useEffect(() => {
     let q = query(collection(reviewDb, 'marketing_schedules'), orderBy('createdAt', 'desc'));
@@ -47,6 +61,8 @@ export function MarketingScheduleView({ activeBrand }: { activeBrand: string | n
   const handleStatusChange = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(reviewDb, 'marketing_schedules', id), { status: newStatus });
+      const s = schedules.find(x => x.id === id);
+      await logActivity('마케팅 상태 변경', `[${s?.storeName || '매장'}] 원고 상태 변경: ${newStatus === 'completed' ? '발행완료' : '대기중'}`);
       toast.success('상태가 변경되었습니다.');
     } catch (error) {
       toast.error('상태 변경에 실패했습니다.');

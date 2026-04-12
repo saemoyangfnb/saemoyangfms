@@ -6,6 +6,8 @@ import Papa from 'papaparse';
 import { PriceHistoryGraph } from './PriceHistoryGraph';
 import { IngredientChangeView } from './IngredientChangeView';
 import { useToast } from './Toast';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface Props {
   ingredients: Ingredient[];
@@ -59,6 +61,19 @@ export const DatabaseView: React.FC<Props> = ({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const logActivity = async (action: string, details: string) => {
+    if (!currentUser) return;
+    try {
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: currentUser.uid,
+        userName: currentUser.name,
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) { console.error('Failed to log activity', e); }
+  };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setHoverPosition({ x: e.clientX + 15, y: e.clientY + 15 });
@@ -206,6 +221,7 @@ export const DatabaseView: React.FC<Props> = ({
           onSave(currentIngredients);
           const errMsg = errorCount > 0 ? ` (${errorCount}행 제외)` : '';
           toast.success(`CSV 업로드 완료: 신규 ${newCount}건, 업데이트 ${updateCount}건${errMsg}`);
+          logActivity('엑셀 업로드', `식자재 CSV 일괄 업로드 (신규 ${newCount}건, 업데이트 ${updateCount}건)`);
         } else {
           toast.error('유효한 데이터가 없습니다. CSV 파일 형식을 확인해주세요.');
         }
@@ -228,6 +244,7 @@ export const DatabaseView: React.FC<Props> = ({
     link.href = URL.createObjectURL(blob);
     link.download = '식자재_업로드_템플릿.csv';
     link.click();
+    logActivity('엑셀 다운로드', '식자재 업로드용 CSV 템플릿 다운로드');
   };
 
   const computeUnitCost = (bc: number, sp: number, bq: number, method: CostCalcMethod, manual: number): number => {

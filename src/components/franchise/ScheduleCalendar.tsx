@@ -16,7 +16,7 @@ interface Props {
   schedules: FranchiseSchedule[];
   currentMonth: Date;
   teams: TeamSetting[];
-  onScheduleUpdate: (id: string, updates: Partial<FranchiseSchedule>) => Promise<void>;
+  onScheduleUpdate: (id: string, updates: Partial<FranchiseSchedule>, logDetails?: string) => Promise<void>;
   onEditStore?: (id: string) => void;
   phaseVisibility?: Record<string, boolean>; // 공정 마스터 캘린더 표기 설정
 }
@@ -77,7 +77,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
       const colorCode = s.colorCode || 'slate';
       const bgClass = BG_CLASSES[colorCode] || 'bg-slate-500';
 
-      const addEv = (id: string, name: string, start: string, end: string) => {
+      const addEv = (id: string, name: string, start: string, end: string, isCustom: boolean = false) => {
         if (!start) return;
         const effectiveEnd = end || start; // end 미입력 시 start와 동일한 1일짜리 이벤트
         if (!isDateInRange(dateStr, start, effectiveEnd)) return;
@@ -98,7 +98,8 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
           isActuallyStart: !isDateInRange(yesterday, start, end),
           isActuallyEnd: !isDateInRange(tomorrow, start, end),
           duration,
-          fullDate: dateStr
+          fullDate: dateStr,
+          isCustom
         });
       };
 
@@ -120,7 +121,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
 
       if (s.customPhases) {
         s.customPhases.forEach(cp => {
-          addEv(cp.id, cp.name, cp.startDate, cp.endDate || cp.startDate);
+          addEv(cp.id, cp.name, cp.startDate, cp.endDate || cp.startDate, true);
         });
       }
     });
@@ -128,8 +129,8 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
     return events;
   };
 
-  const handleDragStart = (e: React.DragEvent, scheduleId: string, phaseId: string, draggedDate: string, isCustom: boolean) => {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ scheduleId, phaseId, draggedDate, isCustom }));
+  const handleDragStart = (e: React.DragEvent, scheduleId: string, phaseId: string, phaseName: string, draggedDate: string, isCustom: boolean) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ scheduleId, phaseId, phaseName, draggedDate, isCustom }));
   };
 
   const handleDrop = async (e: React.DragEvent, droppedDate: string) => {
@@ -142,7 +143,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
     let parsed: any;
     try { parsed = JSON.parse(dragData); } catch(err) { return; }
 
-    const { scheduleId, phaseId, draggedDate, isCustom } = parsed;
+    const { scheduleId, phaseId, phaseName, draggedDate, isCustom } = parsed;
     if (draggedDate === droppedDate) return;
 
     const diffTime = new Date(droppedDate).getTime() - new Date(draggedDate).getTime();
@@ -177,8 +178,9 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
       else if (phaseId === 'open') updates.openDate = addDays(schedule.openDate, diffDays);
     }
 
+    const logDetails = `[${schedule.storeName}] ${phaseName} 일정 변경 (${draggedDate} → ${droppedDate} / ${diffDays > 0 ? `+${diffDays}일 연기` : `${Math.abs(diffDays)}일 앞당김`})`;
     if (Object.keys(updates).length > 0) {
-      await onScheduleUpdate(scheduleId, updates);
+      await onScheduleUpdate(scheduleId, updates, logDetails);
     }
   };
 
@@ -317,7 +319,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
                                   className={`relative text-[12px] h-[28px] flex items-center shadow-none cursor-pointer hover:brightness-95 ${ev.bgClass} ${roundedCls} ${borderCls} ${leftBorder} ${rightBorder} transition-all leading-tight`} 
                                   title={`[${ev.team}][${ev.storeName}][${ev.phaseName}]`}
                                   draggable
-                                  onDragStart={(e) => handleDragStart(e, ev.scheduleId, ev.phaseId, cell.fullDate, false)}
+                              onDragStart={(e) => handleDragStart(e, ev.scheduleId, ev.phaseId, ev.phaseName, cell.fullDate, ev.isCustom)}
                                 >
                                     {showStartText && (
                                       <div className={`absolute top-0 bottom-0 flex items-center whitespace-nowrap z-20 pointer-events-none overflow-visible ${cIdx === 6 ? 'right-0 pr-1 sm:pr-2' : 'left-0 pl-1 sm:pl-2'}`}>

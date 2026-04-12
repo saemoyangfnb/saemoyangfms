@@ -13,7 +13,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, addDoc } from 'firebase/firestore';
 import { User } from '../types';
 
 export const Auth: React.FC = () => {
@@ -66,7 +66,14 @@ export const Auth: React.FC = () => {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      await createUserDocument(result.user);
+      const userDoc = await createUserDocument(result.user);
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: result.user.uid,
+        userName: userDoc.name || result.user.displayName || '사용자',
+        action: '로그인',
+        details: 'Google 계정 시스템 접속',
+        timestamp: new Date().toISOString()
+      });
     } catch (err: any) {
       setError(err.message || '구글 로그인 실패');
     } finally {
@@ -100,7 +107,14 @@ export const Auth: React.FC = () => {
           setError('이메일 인증이 필요합니다. 메일함을 확인해주세요.');
           await auth.signOut();
         } else {
-          await createUserDocument(userCredential.user);
+          const userDoc = await createUserDocument(userCredential.user);
+          await addDoc(collection(db, 'activity_logs'), {
+            userId: userCredential.user.uid,
+            userName: userDoc.name || '사용자',
+            action: '로그인',
+            details: '이메일 계정 시스템 접속',
+            timestamp: new Date().toISOString()
+          });
         }
       } else {
         // Signup

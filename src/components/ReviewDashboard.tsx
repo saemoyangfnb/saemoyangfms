@@ -5,8 +5,8 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { reviewDb as db } from '../firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
+import { reviewDb as db, db as mainDb, auth } from '../firebase';
+import { collection, onSnapshot, doc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import {
   AlertTriangle, CheckCircle, Star, Minus, Search,
@@ -1099,6 +1099,19 @@ function WeeklyReportTab() {
   const [selectedReport, setSelectedReport] = useState<WeeklyReport | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const logActivity = async (action: string, details: string) => {
+    if (!auth.currentUser) return;
+    try {
+      await addDoc(collection(mainDb, 'activity_logs'), {
+        userId: auth.currentUser.uid,
+        userName: auth.currentUser.displayName || auth.currentUser.email || '관리자',
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) { console.error('Failed to log activity', e); }
+  };
+
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'weekly_reports'), snap => {
       const data: WeeklyReport[] = [];
@@ -1157,6 +1170,7 @@ function WeeklyReportTab() {
     }
 
     XLSX.writeFile(wb, `주간리포트_${r.기간_시작}_${r.기간_종료}.xlsx`);
+    logActivity('엑셀 다운로드', `[주간리포트] ${r.기간_시작} ~ ${r.기간_종료} 데이터 다운로드`);
   };
 
   if (loading) return (

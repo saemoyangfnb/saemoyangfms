@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { User, Ingredient } from '../types';
-import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle } from 'lucide-react';
+import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 
@@ -44,6 +44,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
   const [users, setUsers] = useState<User[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [recalcStatus, setRecalcStatus] = useState<string | null>(null);
+  const [logs, setLogs] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -57,6 +58,16 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
     });
     return () => unsubscribe();
   }, [onFirestoreError]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(150));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const logsData: any[] = [];
+      snapshot.forEach(doc => logsData.push({ id: doc.id, ...doc.data() }));
+      setLogs(logsData);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleApprove = async (uid: string, isApproved: boolean) => {
     try {
@@ -242,6 +253,37 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
                 </td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* System Activity Logs Section */}
+    <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+      <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+        <History className="text-stone-800 dark:text-stone-300" size={20} />
+        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">시스템 활동 기록 (Audit Log)</h2>
+      </div>
+      <div className="overflow-x-auto max-h-96 overflow-y-auto">
+        <table className="w-full text-sm text-left text-stone-700 dark:text-stone-400">
+          <thead className="text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-widest bg-stone-100 dark:bg-stone-800/50 border-b border-stone-300 dark:border-stone-700 sticky top-0">
+            <tr>
+              <th className="px-4 py-3 w-40">일시</th>
+              <th className="px-4 py-3 w-32">사용자</th>
+              <th className="px-4 py-3 w-32">작업 분류</th>
+              <th className="px-4 py-3">상세 내용</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stone-200 dark:divide-stone-800 bg-white dark:bg-stone-900">
+            {logs.map(log => (
+              <tr key={log.id} className="hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                <td className="px-4 py-3 text-xs text-stone-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                <td className="px-4 py-3 font-bold text-stone-900 dark:text-stone-100 whitespace-nowrap">{log.userName}</td>
+                <td className="px-4 py-3 whitespace-nowrap"><span className="px-2 py-1 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[10px] font-bold rounded border border-stone-300 dark:border-stone-700">{log.action}</span></td>
+                <td className="px-4 py-3 text-xs text-stone-600 dark:text-stone-400 break-all">{log.details}</td>
+              </tr>
+            ))}
+            {logs.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-stone-500">기록된 활동 로그가 없습니다.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -35,7 +35,7 @@ import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenu
 import { auth, db, reviewDb, salesDb } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
-  doc, getDoc, collection, onSnapshot, setDoc, updateDoc,
+  doc, getDoc, collection, onSnapshot, setDoc, updateDoc, addDoc,
   deleteDoc, writeBatch, query, where, deleteField
 } from 'firebase/firestore';
 
@@ -571,6 +571,20 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // 💡 [핵심 기능] 시스템 활동 자동 기록 (Audit Log)
+  const logActivity = async (action: string, details: string) => {
+    if (!currentUser) return;
+    try {
+      await addDoc(collection(db, 'activity_logs'), {
+        userId: currentUser.uid,
+        userName: currentUser.name,
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) { console.error('Failed to log activity', e); }
+  };
+
   const toggleTheme = async () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -600,6 +614,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    await logActivity('로그아웃', '시스템 접속 종료');
     await signOut(auth);
     setCurrentUser(null);
   };
@@ -729,13 +744,18 @@ export default function App() {
       await setDoc(doc(db, 'menus', menu.id), { ...menu, brandId: activeBrand });
       setIsMenuModalOpen(false);
       setEditingMenu(undefined);
+      logActivity('메뉴 저장', `[${currentBrand?.name || '공통'}] ${menu.name} 정보 업데이트`);
     } catch (error) { handleFirestoreError(error, OperationType.WRITE, `menus/${menu.id}`); }
   };
 
   const handleArchiveMenu = async (id: string) => {
     const ok = await confirm({ title: '메뉴 보관', message: '메뉴를 보관함으로 이동하시겠습니까?', confirmLabel: '보관', variant: 'warning' });
     if (!ok) return;
-    try { await updateDoc(doc(db, 'menus', id), { isArchived: true }); }
+    try { 
+      await updateDoc(doc(db, 'menus', id), { isArchived: true }); 
+      const m = brandMenus.find(x => x.id === id);
+      if(m) logActivity('메뉴 보관', `[${currentBrand?.name || '공통'}] ${m.name} 보관함 이동`);
+    }
     catch (error) { handleFirestoreError(error, OperationType.UPDATE, `menus/${id}`); }
   };
 
@@ -749,6 +769,8 @@ export default function App() {
       await deleteDoc(doc(db, 'menus', id));
       setIsMenuModalOpen(false);
       setEditingMenu(undefined);
+      const m = brandMenus.find(x => x.id === id);
+      if(m) logActivity('메뉴 삭제', `[${currentBrand?.name || '공통'}] ${m.name} 영구 삭제`);
     } catch (error) { handleFirestoreError(error, OperationType.DELETE, `menus/${id}`); }
   };
 
@@ -770,6 +792,8 @@ export default function App() {
       await updateDoc(doc(db, 'menus', menuId), { recipe, notes });
       setIsRecipeModalOpen(false);
       setRecipeMenu(null);
+      const m = brandMenus.find(x => x.id === menuId);
+      if(m) logActivity('레시피 수정', `[${currentBrand?.name || '공통'}] ${m.name} 레시피/원가 갱신`);
     } catch (error) { handleFirestoreError(error, OperationType.UPDATE, `menus/${menuId}`); }
   };
 
@@ -925,6 +949,7 @@ export default function App() {
         });
         await batch.commit();
       }
+      logActivity('식자재 업데이트', `데이터베이스 갱신 (신규/단가 변경 등 ${changeCount}건 처리)`);
     } catch (error) { handleFirestoreError(error, OperationType.UPDATE, 'ingredients'); }
   };
 
@@ -957,6 +982,7 @@ export default function App() {
     link.href = URL.createObjectURL(blob);
     link.download = `${activeBrand}_menu_data.csv`;
     link.click();
+    logActivity('엑셀 다운로드', `[${currentBrand?.name || '공통'}] 메뉴 원가 및 마진 데이터 CSV 다운로드`);
   };
 
   if (!isAuthReady) return (

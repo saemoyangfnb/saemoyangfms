@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useToast } from '../Toast';
 import { GoogleGenAI } from '@google/genai';
 import { Clock, Image as ImageIcon, Send, Store, Info, LayoutTemplate, Sparkles, Edit2, Download } from 'lucide-react';
-import { reviewDb } from '../../firebase';
+import { reviewDb, db as mainDb, auth } from '../../firebase';
 import { collection, addDoc, onSnapshot } from 'firebase/firestore';
 
 export function MarketingGenerator({ activeBrand }: { activeBrand: string | null }) {
@@ -27,6 +27,20 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
   // ✅ 크롤링 데이터 연동용 상태
   const [roiData, setRoiData] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+
+  // 💡 시스템 활동 로그 기록 센서
+  const logActivity = async (action: string, details: string) => {
+    if (!auth.currentUser) return;
+    try {
+      await addDoc(collection(mainDb, 'activity_logs'), {
+        userId: auth.currentUser.uid,
+        userName: auth.currentUser.displayName || auth.currentUser.email || '관리자',
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) { console.error('Failed to log activity', e); }
+  };
 
   useEffect(() => {
     const unsubRoi = onSnapshot(collection(reviewDb, 'roi_analysis'), snap => {
@@ -380,6 +394,7 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
         status: '대기중',
         createdAt: new Date().toISOString()
       });
+      await logActivity('마케팅 원고 생성', `[${storeName}] AI 마케팅 원고 스케줄러 등록`);
       toast.success('스케줄러에 저장되었습니다!');
     } catch (err) {
       console.error(err);

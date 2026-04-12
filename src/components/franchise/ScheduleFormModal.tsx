@@ -58,6 +58,9 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
   
   const [isGasCustom, setIsGasCustom] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // 💡 신규: 일정 자동 계산 토글 (AI가 자동계산을 요청했거나 기존 일정이 없으면 ON)
+  const [autoCalc, setAutoCalc] = useState((initial as any).isAiAutoCalc ?? (!initial.id && !initial.openDate));
   const toast = useToast();
 
   const set = (field: keyof FranchiseSchedule, value: any) =>
@@ -112,7 +115,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
 
   // 자동 계산 로직
   useEffect(() => {
-    if (form.constructionStart && form.constructionEnd) {
+    if (autoCalc && form.constructionStart && form.constructionEnd) {
       const start = form.constructionStart;
       const end = form.constructionEnd;
 
@@ -144,7 +147,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
         ownerGuideStart,
       }));
     }
-  }, [form.constructionStart, form.constructionEnd]);
+  }, [form.constructionStart, form.constructionEnd, autoCalc]);
 
   useEffect(() => {
     if (form.preTrainingStart && form.preTrainingEnd) {
@@ -178,6 +181,14 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-4">
              <h2 className="text-lg font-bold text-slate-900 dark:text-white">가맹점 일정 상세 정보</h2>
+             
+             <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-full ml-2">
+               <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                 <input type="checkbox" checked={autoCalc} onChange={e => setAutoCalc(e.target.checked)} className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-600" />
+                 일정 자동 계산
+               </label>
+             </div>
+
              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">캘린더 노출</span>
                 <button 
