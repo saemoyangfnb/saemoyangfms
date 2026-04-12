@@ -940,7 +940,7 @@ function CompetitorTab({ competitorData }: { competitorData: CompetitorData[] })
   const latestData = competitorData.filter(c => c.수집일자 === latestDate);
   const prevData = competitorData.filter(c => c.수집일자 === prevDate);
 
-  function getMackerelPrice(menuStr: string): number {
+ㅣ   function getMackerelPrice(menuStr: string): number {
     if (!menuStr || menuStr === '수집 실패') return 0;
     for (const item of menuStr.split('|')) {
       if (item.includes('고등어')) {
@@ -1265,8 +1265,8 @@ function WeeklyReportTab() {
 // ==========================================
 // 메인 컴포넌트
 // ==========================================
-export function ReviewDashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+export function ReviewDashboard({ initialTab }: { initialTab?: string }) {
+  const [activeTab, setActiveTab] = useState<TabType>((initialTab as TabType) || 'overview');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [rankData, setRankData] = useState<RankData[]>([]);
   const [roiData, setRoiData] = useState<RoiData[]>([]);
@@ -1274,6 +1274,12 @@ export function ReviewDashboard() {
   const [reviewState, setReviewState] = useState<ReviewState>({ resolved: [], overridden: [] });
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState('');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab as TabType);
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];

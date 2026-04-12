@@ -51,6 +51,7 @@ interface SidebarState {
   brandId: BrandId | null;
   section: SidebarSection;
   costTab: CostTabType;
+  reviewTab?: string;
 }
 
 // 가맹점 관제 데이터가 있는 브랜드 (크롤러 연동 완료)
@@ -72,7 +73,7 @@ function HomePage({
   menus: Menu[];
   ingredients: Ingredient[];
   ingredientChanges: IngredientChange[];
-  onNavigate: (brandId: BrandId | null, section: SidebarSection) => void;
+  onNavigate: (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType, reviewTab?: string) => void;
 }) {
   const greeting = () => {
     const hour = new Date().getHours();
@@ -216,7 +217,7 @@ function HomePage({
       icon: <Eye size={20} strokeWidth={1.5} />,
       color: competitorChangesCount > 0 ? 'text-amber-800 dark:text-amber-500' : 'text-stone-800 dark:text-stone-300',
       iconBg: competitorChangesCount > 0 ? 'text-amber-800 dark:text-amber-500' : 'text-stone-700 dark:text-stone-400',
-      onClick: () => onNavigate('dalbitgo', 'review'),
+      onClick: () => onNavigate('dalbitgo', 'review', undefined, 'competitor'),
       highlight: competitorChangesCount > 0,
     },
   ];
@@ -700,8 +701,8 @@ export default function App() {
     } catch (error) { handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`); }
   };
 
-  const navigateTo = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType) => {
-    setSidebar({ brandId, section, costTab: costTab || '수도권' });
+  const navigateTo = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType, reviewTab?: string) => {
+    setSidebar({ brandId, section, costTab: costTab || '수도권', reviewTab });
     if (brandId && !expandedBrands.has(brandId)) {
       setExpandedBrands(prev => new Set([...prev, brandId]));
     }
@@ -1016,8 +1017,8 @@ export default function App() {
     return sorted;
   };
 
-  const navigateAndCloseMobile = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType) => {
-    navigateTo(brandId, section, costTab);
+  const navigateAndCloseMobile = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType, reviewTab?: string) => {
+    navigateTo(brandId, section, costTab, reviewTab);
     if (isMobile) setMobileSidebarOpen(false);
   };
 
@@ -1357,7 +1358,7 @@ export default function App() {
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">리뷰 수집 · 네이버 순위 추적 · 키워드 ROI · 경쟁사 모니터링</p>
                   </div>
                   {REVIEW_ENABLED_BRANDS.includes(currentBrand.id) ? (
-                    <ReviewDashboard />
+                    <ReviewDashboard initialTab={sidebar.reviewTab} />
                   ) : (
                     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-16 text-center">
                       <ShieldAlert size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
