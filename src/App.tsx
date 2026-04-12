@@ -83,6 +83,7 @@ function HomePage({
 
   const [activeSchedulesCount, setActiveSchedulesCount] = useState<number | string>('-');
   const [unresolvedReviewsCount, setUnresolvedReviewsCount] = useState<number | string>('-');
+  const [competitorChangesCount, setCompetitorChangesCount] = useState<number>(0);
 
   useEffect(() => {
     const unsubSch = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
@@ -110,9 +111,69 @@ function HomePage({
       });
     }).catch(() => setUnresolvedReviewsCount(0));
 
+    // 경쟁사 가격 변동 감지
+    const unsubComp = onSnapshot(collection(reviewDb, 'competitor_menu'), snap => {
+      const data: any[] = [];
+      snap.forEach(d => data.push(d.data()));
+      
+      const dates = [...new Set(data.map(c => c.수집일자 as string))].filter(Boolean).sort();
+      if (dates.length >= 2) {
+        const latestDate = dates[dates.length - 1];
+        
+        // 💡 [핵심 픽스] 하루 전이 아닌 '최근 7일' 기준으로 변동 감지
+        const d = new Date(latestDate);
+        d.setDate(d.getDate() - 7);
+        const weekAgoStr = d.toISOString().split('T')[0];
+        const validPrevDates = dates.filter(date => date >= weekAgoStr && date < latestDate);
+        const prevDate = validPrevDates.length > 0 ? validPrevDates[0] : dates[dates.length - 2];
+        
+        const latestData = data.filter(c => c.수집일자 === latestDate);
+        const prevData = data.filter(c => c.수집일자 === prevDate);
+        
+        const getPrice = (menuStr: string) => {
+          if (!menuStr || menuStr === '수집 실패') return 0;
+          const items = menuStr.replace(/\n/g, '|').split('|').map(s => s.trim()).filter(Boolean);
+          for (let i = 0; i < items.length; i++) {
+            let name = items[i];
+            let priceStr = '';
+            if (items[i].includes(':')) {
+              const parts = items[i].split(':');
+              name = parts[0];
+              priceStr = parts.slice(1).join(':');
+            } else if (i + 1 < items.length && /[0-9,]+\s*원/.test(items[i + 1])) {
+              priceStr = items[i + 1];
+              i++; 
+            } else {
+              const match = items[i].match(/([0-9]{1,2}(?:,[0-9]{3})+|[0-9]{4,5})\s*원?/);
+              if (match) priceStr = match[0];
+            }
+            if (name.includes('고등어')) {
+              const v = parseInt(priceStr.replace(/[^0-9]/g, ''), 10);
+              if (!isNaN(v) && v >= 3000 && v <= 25000) return v;
+            }
+          }
+          return 0;
+        };
+
+        let changes = 0;
+        const targetBrands = ['산으로간고등어', '화덕으로간고등어', '부산에뜬고등어', '북극해고등어'];
+        targetBrands.forEach(brand => {
+          const lPrices = latestData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
+          const pPrices = prevData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
+          const lMin = lPrices.length ? Math.min(...lPrices) : 0;
+          const pMin = pPrices.length ? Math.min(...pPrices) : 0;
+          if (lMin > 0 && pMin > 0 && lMin !== pMin) changes++;
+        });
+        setCompetitorChangesCount(changes);
+      } else {
+        setCompetitorChangesCount(0);
+      }
+    });
+
     return () => {
       unsubSch();
       if (unsubRev) unsubRev();
+      unsubComp();
     };
   }, []);
 
@@ -150,12 +211,13 @@ function HomePage({
     },
     {
       label: '경쟁사 모니터링',
-      value: '4',
-      unit: '개사',
+      value: competitorChangesCount > 0 ? competitorChangesCount : '4',
+      unit: competitorChangesCount > 0 ? '건 변동' : '개사',
       icon: <Eye size={20} strokeWidth={1.5} />,
-      color: 'text-stone-800 dark:text-stone-300',
-      iconBg: 'text-stone-700 dark:text-stone-400',
+      color: competitorChangesCount > 0 ? 'text-amber-800 dark:text-amber-500' : 'text-stone-800 dark:text-stone-300',
+      iconBg: competitorChangesCount > 0 ? 'text-amber-800 dark:text-amber-500' : 'text-stone-700 dark:text-stone-400',
       onClick: () => onNavigate('dalbitgo', 'review'),
+      highlight: competitorChangesCount > 0,
     },
   ];
 

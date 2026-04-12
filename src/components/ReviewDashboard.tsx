@@ -944,8 +944,11 @@ function CompetitorTab({ competitorData }: { competitorData: CompetitorData[] })
     if (!menuStr || menuStr === '수집 실패') return 0;
     for (const item of menuStr.split('|')) {
       if (item.includes('고등어')) {
-        const m = item.match(/(\d{4,6})원/);
-        if (m) { const v = parseInt(m[1]); if (v <= 20000) return v; }
+        const parts = item.split(':');
+        const priceText = parts.length > 1 ? parts[1] : item;
+        const numStr = priceText.replace(/[^0-9]/g, '');
+        const v = parseInt(numStr, 10);
+        if (!isNaN(v) && v > 0 && v <= 20000) return v;
       }
     }
     return 0;
