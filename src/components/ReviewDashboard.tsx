@@ -133,13 +133,13 @@ function KpiCard({ label, value, sub, color, icon }: {
   color?: string; icon?: React.ReactNode;
 }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-2">
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-        {icon && <span className="text-slate-300 dark:text-slate-600">{icon}</span>}
+    <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-700 p-6 shadow-none hover:bg-white dark:hover:bg-stone-800 transition-colors">
+      <div className="flex items-start justify-between mb-3">
+        <p className="text-xs font-bold text-stone-500 dark:text-stone-400 tracking-widest">{label}</p>
+        {icon && <span className="text-stone-400 dark:text-stone-500">{icon}</span>}
       </div>
-      <p className={`text-2xl font-bold tracking-tight ${color || 'text-slate-900 dark:text-white'}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      <p className={`text-3xl font-black tracking-tighter ${color || 'text-stone-900 dark:text-white'}`}>{value}</p>
+      {sub && <p className="text-[11px] font-bold text-stone-400 mt-2 tracking-wide">{sub}</p>}
     </div>
   );
 }
@@ -1357,11 +1357,11 @@ export function ReviewDashboard() {
         )}
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <nav className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
+      <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-700 shadow-none overflow-hidden">
+        <nav className="flex border-b-[3px] border-double border-stone-300 dark:border-stone-700 overflow-x-auto">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 whitespace-nowrap px-5 py-3.5 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-slate-900 dark:border-blue-500 text-slate-900 dark:text-white' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+              className={`flex items-center gap-2 whitespace-nowrap px-6 py-4 text-sm font-bold border-b-[3px] -mb-[3px] transition-colors ${activeTab === tab.id ? 'border-stone-900 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-300'}`}>
               {tab.icon}
               {tab.label}
               {tab.id === 'overview' && activeNegCount > 0 && (

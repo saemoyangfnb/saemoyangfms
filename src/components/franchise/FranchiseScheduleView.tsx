@@ -169,55 +169,55 @@ export function FranchiseScheduleView({ brandId }: Props) {
     <div className="space-y-6">
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div>
-           <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+           <h1 className="text-xl font-black text-stone-900 dark:text-white flex items-center gap-2 tracking-tight">
              오픈 일정 관리
-             <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 text-xs px-2 py-0.5 rounded-full font-bold">Auto</span>
+             <span className="bg-stone-800 text-white dark:bg-stone-200 dark:text-stone-900 text-[10px] px-2 py-0.5 rounded-sm font-bold tracking-widest">자동 계산</span>
            </h1>
-           <p className="text-sm text-slate-500 mt-1">공사 기간 입력 시 프로세스가 자동 계산됩니다.</p>
+           <p className="text-sm font-medium text-stone-500 mt-1.5">공사 기간 입력 시 프로세스가 자동 계산됩니다.</p>
          </div>
 
          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => setShowProcessMaster(true)} className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-sm font-semibold rounded-lg hover:bg-amber-200 transition-colors">
+            <button onClick={() => setShowProcessMaster(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white text-stone-700 border border-stone-300 dark:bg-stone-800 dark:border-stone-700 dark:text-stone-300 text-sm font-bold rounded-sm hover:bg-stone-100 transition-colors shadow-sm">
                <Layers size={15} /> 공정 마스터
             </button>
-            <button onClick={() => setShowTeamSettings(true)} className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-sm font-semibold rounded-lg hover:bg-slate-200 transition-colors">
+            <button onClick={() => setShowTeamSettings(true)} className="flex items-center gap-1.5 px-3 py-2 bg-white text-stone-700 border border-stone-300 dark:bg-stone-800 dark:border-stone-700 dark:text-stone-300 text-sm font-bold rounded-sm hover:bg-stone-100 transition-colors shadow-sm">
                <Settings size={15} /> 팀/권역 설정
             </button>
-            <button onClick={() => { setEditingData({}); setShowForm(true); }} className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-bold">
+            <button onClick={() => { setEditingData({}); setShowForm(true); }} className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 text-white text-sm font-bold rounded-sm hover:bg-stone-800 transition-colors shadow-sm">
                <Plus size={15} /> 신규 일정 등록
             </button>
          </div>
        </div>
 
-       <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+       <div className="bg-[#FDFBF7] dark:bg-stone-900 p-4 rounded-sm border border-stone-300 dark:border-stone-800 flex flex-col md:flex-row items-center justify-between gap-4">
          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-               <button onClick={() => setMonthsView(1)} className={`px-2 py-1 text-xs font-bold rounded ${monthsView === 1 ? 'bg-white shadow-sm' : ''}`}>1개월</button>
-               <button onClick={() => setMonthsView(2)} className={`px-2 py-1 text-xs font-bold rounded ${monthsView === 2 ? 'bg-white shadow-sm' : ''}`}>2개월</button>
+            <div className="flex bg-stone-200 dark:bg-stone-800 p-1 rounded-sm border border-stone-300 dark:border-stone-700">
+               <button onClick={() => setMonthsView(1)} className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${monthsView === 1 ? 'bg-stone-50 border border-stone-300 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>1개월</button>
+               <button onClick={() => setMonthsView(2)} className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${monthsView === 2 ? 'bg-stone-50 border border-stone-300 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}>2개월</button>
             </div>
             
             <div className="flex items-center gap-1 font-bold ml-4">
-               <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>&lt;</button>
-               <span className="text-sm px-1">{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</span>
-               <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>&gt;</button>
-               <button className="ml-1 text-[10px] text-red-500 font-bold" onClick={() => setCurrentMonth(new Date())}>오늘</button>
+               <button className="text-stone-400 hover:text-stone-800" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>&lt;</button>
+               <span className="text-sm px-2 text-stone-900">{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</span>
+               <button className="text-stone-400 hover:text-stone-800" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>&gt;</button>
+               <button className="ml-2 text-[10px] bg-stone-800 text-white px-2 py-0.5 rounded-sm font-bold tracking-widest" onClick={() => setCurrentMonth(new Date())}>오늘</button>
             </div>
          </div>
 
          <div className="flex items-center gap-2">
-            <select className="px-3 py-1.5 text-sm bg-slate-50 dark:bg-slate-800 border rounded-lg" value={filterTeam} onChange={e => setFilterTeam(e.target.value)}>
+            <select className="px-3 py-1.5 text-sm font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm focus:outline-none focus:border-stone-800" value={filterTeam} onChange={e => setFilterTeam(e.target.value)}>
               <option value="">전체 팀</option>
               {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
             </select>
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="매장명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 pr-3 py-1.5 text-sm rounded-lg bg-slate-50 dark:bg-slate-800 border" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input type="text" placeholder="매장명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 pr-3 py-1.5 text-sm font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm focus:outline-none focus:border-stone-800" />
             </div>
          </div>
        </div>
 
        {loading ? (
-          <div className="py-20 text-center text-slate-400 font-bold">불러오는 중...</div>
+          <div className="py-20 text-center text-stone-400 font-bold">불러오는 중...</div>
        ) : (
           <div className="flex flex-col gap-10">
               <div className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
@@ -242,35 +242,35 @@ export function FranchiseScheduleView({ brandId }: Props) {
               </div>
             
               <div>
-                 <div className="flex items-center justify-between mb-3">
-                   <h3 className="font-bold text-slate-800 dark:text-slate-200">
+                 <div className="flex items-center justify-between mb-4 border-b-2 border-stone-800 dark:border-stone-400 pb-2">
+                   <h3 className="font-black text-lg text-stone-900 dark:text-stone-200 tracking-tight">
                      {showArchived ? '보관된 오픈 완료 매장' : '진행중인 매장 목록'} ({filteredSchedules.length}건)
                    </h3>
-                   <button onClick={() => setShowArchived(!showArchived)} className="text-xs px-3 py-1.5 rounded-lg border font-bold">
+                   <button onClick={() => setShowArchived(!showArchived)} className="text-xs px-3 py-1.5 rounded-sm border border-stone-400 font-bold hover:bg-stone-200 transition-colors">
                      {showArchived ? '진행중인 매장 보기' : '오픈완료 보관함'}
                    </button>
                  </div>
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {filteredSchedules.length === 0 ? (
-                      <div className="col-span-full py-10 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">해당하는 매장이 없습니다.</div>
+                      <div className="col-span-full py-10 text-center font-bold text-stone-400 bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800">해당하는 매장이 없습니다.</div>
                     ) : (
                       filteredSchedules.map(sch => (
-                        <div key={sch.id} className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col ${sch.archived ? 'opacity-60' : ''}`}>
+                        <div key={sch.id} className={`bg-[#FDFBF7] dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-sm p-6 shadow-none hover:border-stone-800 transition-all flex flex-col ${sch.archived ? 'opacity-60' : ''}`}>
                           {/* Header: Actions & Visibility */}
-                          <div className="flex justify-between items-start mb-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                          <div className="flex justify-between items-start mb-4 border-b border-stone-300 dark:border-stone-700 pb-3">
                             <button onClick={() => { setEditingData(sch); setShowForm(true); }} className="text-left group flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <div className={`w-3 h-3 rounded-full flex-shrink-0 bg-${sch.colorCode || 'slate'}-500 shadow-sm`} />
-                                <span className="font-bold text-base text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors truncate">{sch.storeName}</span>
-                                <span className="text-[10px] text-slate-500 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded shrink-0">{sch.storeNumber || '호수 미정'}</span>
+                                <span className="font-black text-xl tracking-tight text-stone-900 dark:text-white group-hover:text-stone-600 transition-colors truncate">{sch.storeName}</span>
+                                <span className="text-[10px] font-bold text-stone-500 border border-stone-300 dark:border-stone-700 px-1.5 py-0.5 rounded-sm shrink-0">{sch.storeNumber || '호수 미정'}</span>
                               </div>
-                              <div className="text-xs text-slate-500 font-medium ml-5">{sch.team || '팀 미정'}</div>
+                              <div className="text-xs text-stone-500 font-bold ml-5 tracking-widest">{sch.team || '팀 미정'}</div>
                             </button>
                             <div className="flex items-center gap-1 shrink-0 ml-2">
                                <button 
                                  onClick={() => { updateDoc(doc(db, 'franchise_schedules', sch.id), { showInCalendar: sch.showInCalendar === false }); fetchData(); }}
-                                 className={`p-1.5 rounded transition-colors ${sch.showInCalendar !== false ? 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20' : 'text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                 className={`p-1.5 rounded-sm transition-colors border ${sch.showInCalendar !== false ? 'text-blue-800 border-blue-200 bg-blue-50 hover:bg-blue-100' : 'text-stone-400 border-stone-200 hover:bg-stone-100'}`}
                                  title={sch.showInCalendar !== false ? '달력 노출 중' : '달력 숨김'}
                                >
                                   {sch.showInCalendar !== false ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -278,13 +278,13 @@ export function FranchiseScheduleView({ brandId }: Props) {
                                {!sch.archived && (
                                  <button
                                    onClick={() => handleArchive(sch.id)}
-                                   className="p-1.5 text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors"
+                                   className="p-1.5 text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-sm transition-colors"
                                    title="오픈 완료 보관"
                                  >
                                    <CheckCheck size={15} />
                                  </button>
                                )}
-                               <button onClick={() => handleDeleteSchedule(sch.id)} className="p-1.5 text-rose-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors" title="삭제">
+                               <button onClick={() => handleDeleteSchedule(sch.id)} className="p-1.5 text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-sm transition-colors" title="삭제">
                                  <X size={15} />
                                </button>
                             </div>
@@ -292,7 +292,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
                           
                           {/* Progress Badges */}
                           <div className="mb-4">
-                            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1.5">진행 관리</p>
+                            <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 mb-1.5 tracking-widest">진행 상황</p>
                             <div className="flex gap-1.5 flex-wrap">
                                {BUILTIN_PROGRESS.map(p => {
                                  const label = processSettings.progressLabels[p.id] ?? p.defaultLabel;
@@ -301,7 +301,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
                                    <button
                                      key={p.id}
                                      onClick={() => handleToggleProgress(sch.id, p.id as any, checked)}
-                                     className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors border ${checked ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/50'}`}
+                                     className={`flex items-center gap-1 px-2 py-1 rounded-sm transition-colors border ${checked ? 'border-stone-800 bg-stone-800 text-white dark:border-stone-400 dark:bg-stone-300 dark:text-stone-900' : 'border-stone-300 bg-white text-stone-400 hover:border-stone-400'}`}
                                      title={label}
                                    >
                                      <CheckCircle2 size={12} className={checked ? '' : 'opacity-30'} />
@@ -320,7 +320,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
                                        });
                                        fetchData();
                                      }}
-                                     className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors border ${checked ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/50'}`}
+                                     className={`flex items-center gap-1 px-2 py-1 rounded-sm transition-colors border ${checked ? 'border-stone-800 bg-stone-800 text-white dark:border-stone-400 dark:bg-stone-300 dark:text-stone-900' : 'border-stone-300 bg-white text-stone-400 hover:border-stone-400'}`}
                                      title={ci.label}
                                    >
                                      <CheckCircle2 size={12} className={checked ? '' : 'opacity-30'} />
@@ -332,29 +332,29 @@ export function FranchiseScheduleView({ brandId }: Props) {
                           </div>
 
                           {/* Info Grid */}
-                          <div className="mt-auto bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 space-y-2 text-xs">
+                          <div className="mt-auto bg-white dark:bg-stone-800/50 rounded-sm border border-stone-300 p-4 space-y-3 text-xs">
                              <div className="flex justify-between items-center">
-                               <span className="text-slate-500 dark:text-slate-400">가스 구분</span>
-                               <span className="font-semibold text-slate-700 dark:text-slate-300">{sch.gasType || '-'}</span>
+                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 tracking-widest">가스 구분</span>
+                               <span className="font-bold text-stone-800 dark:text-stone-300">{sch.gasType || '-'}</span>
                              </div>
                              <div className="flex justify-between items-start">
-                               <span className="text-slate-500 dark:text-slate-400 mt-0.5">공사/입고</span>
-                               <div className="text-right font-medium text-slate-600 dark:text-slate-400">
+                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-0.5 tracking-widest">공사/입고</span>
+                               <div className="text-right font-bold text-stone-700 dark:text-stone-400">
                                  <div>S: {sch.constructionStart || '-'} / E: {sch.constructionEnd || '-'}</div>
                                  <div className="mt-0.5">🔥: {sch.ovenIn || '-'} / 📦: {sch.initialStockIn || '-'}</div>
                                </div>
                              </div>
                              <div className="flex justify-between items-start">
-                               <span className="text-slate-500 dark:text-slate-400 mt-0.5">사전/본 교육</span>
+                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-0.5 tracking-widest">사전/본 교육</span>
                                <div className="text-right">
-                                 <div className="font-bold text-slate-700 dark:text-slate-300">{sch.preTrainingStart || '-'} ({sch.preTrainingDays || 0}일)</div>
-                                 <div className="text-[10px] text-slate-400 mb-0.5">📍 {sch.preTrainingLocation || '-'}</div>
-                                 <div className="font-medium text-slate-600 dark:text-slate-400">본: {sch.trainingStart || '-'} ~ {sch.trainingEnd || '-'}</div>
+                                 <div className="font-bold text-stone-800 dark:text-stone-300">{sch.preTrainingStart || '-'} ({sch.preTrainingDays || 0}일)</div>
+                                 <div className="text-[10px] text-stone-400 mb-0.5">📍 {sch.preTrainingLocation || '-'}</div>
+                                 <div className="font-bold text-stone-700 dark:text-stone-400">본: {sch.trainingStart || '-'} ~ {sch.trainingEnd || '-'}</div>
                                </div>
                              </div>
-                             <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-700 pt-2 mt-2">
-                               <span className="text-slate-500 dark:text-slate-400 font-bold">오픈일</span>
-                               <span className="text-sm font-black text-rose-500 font-mono">{sch.openDate || '-'}</span>
+                             <div className="flex justify-between items-center border-t border-stone-300 dark:border-stone-700 pt-3 mt-3">
+                               <span className="text-[11px] text-stone-500 dark:text-stone-400 font-bold tracking-widest">오픈일</span>
+                               <span className="text-base font-black text-rose-700 tracking-tighter">{sch.openDate || '-'}</span>
                              </div>
                           </div>
                         </div>

@@ -156,7 +156,7 @@ export const MenuTable: React.FC<Props> = ({
 
       <DragDropContext onDragEnd={handleDragEnd}>
         {viewMode === 'card' ? (
-          <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-950 space-y-10">
+          <div className="p-4 sm:p-6 bg-stone-100 dark:bg-stone-950 space-y-10">
             {groupedMenus.map(group => {
               if (!group.category.isVisible && !isAdmin) return null;
               // 💡 [에러 픽스 1] 이빨 빠진 인덱스가 안 생기도록 먼저 필터링 진행
@@ -168,10 +168,10 @@ export const MenuTable: React.FC<Props> = ({
                 <Droppable key={droppableId} droppableId={droppableId}>
                   {(provided) => (
                     <section>
-                      <div className="flex items-center gap-3 mb-6 border-b border-slate-200 dark:border-slate-800 pb-3">
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><ChefHat className="text-emerald-500" size={24} /> {group.category.name}</h3>
-                        {!group.category.isVisible && <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">숨김 카테고리</span>}
-                        <span className="text-sm font-medium text-slate-400 ml-auto">{displayMenus.length}개 메뉴</span>
+                      <div className="flex items-center gap-3 mb-6 border-b-2 border-stone-800 dark:border-stone-400 pb-3">
+                        <h3 className="text-xl font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">{group.category.name}</h3>
+                        {!group.category.isVisible && <span className="text-[10px] font-bold bg-stone-200 dark:bg-stone-800 text-stone-500 px-2 py-1 rounded-sm">숨김 카테고리</span>}
+                        <span className="text-sm font-medium text-stone-500 ml-auto">{displayMenus.length}개 메뉴</span>
                       </div>
 
                       <div ref={provided.innerRef} {...provided.droppableProps} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -200,74 +200,69 @@ export const MenuTable: React.FC<Props> = ({
                             <Draggable key={menu.id || `card-${index}`} draggableId={String(menu.id || `card-${index}`)} index={index} isDragDisabled={!isAdmin}>
                               {(provided, snapshot) => (
                                 <div 
-                                  ref={provided.innerRef} {...provided.draggableProps} 
-                                  className={`group relative flex flex-col bg-white dark:bg-slate-900 rounded-2xl p-5 border-2 transition-all hover:-translate-y-1 hover:shadow-xl ${snapshot.isDragging ? 'shadow-2xl scale-105 z-50 ring-4 ring-blue-400/50' : ''} ${hasAlert ? 'border-rose-400 dark:border-rose-600 shadow-[0_0_15px_rgba(244,63,94,0.15)]' : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800'}`}
+                                  ref={provided.innerRef} {...provided.draggableProps}
+                                  className={`group relative flex flex-col bg-[#FDFBF7] dark:bg-stone-900 rounded-sm p-6 border transition-all hover:-translate-y-1 hover:shadow-md ${snapshot.isDragging ? 'shadow-xl scale-105 z-50 ring-2 ring-stone-800' : ''} ${hasAlert ? 'border-rose-800 dark:border-rose-600' : 'border-stone-300 dark:border-stone-700 hover:border-stone-800 dark:hover:border-stone-400'}`}
                                   style={provided.draggableProps.style}
                                 >
                                   {hasAlert && (
                                     <div className="absolute -top-3 -right-3">
-                                      <button onClick={() => onNavigateToTab('변동사항')} className="flex items-center gap-1 bg-rose-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce hover:bg-rose-600 transition-colors">
-                                        <AlertCircle size={14} />{missing ? '식재료 누락!' : '원가 변동!'}
+                                      <button onClick={() => onNavigateToTab('변동사항')} className="flex items-center gap-1 bg-rose-800 dark:bg-rose-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-sm shadow-md animate-bounce hover:bg-rose-900 transition-colors">
+                                        <AlertCircle size={14} /> {missing ? '식재료 누락!' : '원가 변동!'}
                                       </button>
                                     </div>
                                   )}
-                                  {menu.isVisible === false && <div className="absolute -top-3 -left-3 bg-slate-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow">숨김</div>}
+                                  {menu.isVisible === false && <div className="absolute -top-3 -left-3 bg-stone-700 text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow">숨김</div>}
 
                                   {/* 드래그 핸들 및 상단 버튼 */}
                                   <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-lg font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-2">
-                                      {isAdmin && <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-blue-500"><GripVertical size={18}/></div>}
+                                    <h4 className="text-xl font-black text-stone-900 dark:text-white leading-tight flex items-center gap-2 tracking-tight">
+                                      {isAdmin && <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-stone-400 hover:text-stone-800"><GripVertical size={18}/></div>}
                                       {menu.name}
                                     </h4>
                                     <div className="flex gap-1">
-                                      {isAdmin && <button onClick={() => onToggleMenuVisibility(menu.id)} className="p-1 text-slate-400 hover:text-blue-600 rounded-md transition-colors">{menu.isVisible === false ? <Eye size={14} /> : <EyeOff size={14} />}</button>}
-                                      {isAdmin && <button onClick={() => onEditMenu(menu)} className="p-1 text-slate-400 hover:text-blue-600 rounded-md transition-colors"><Edit2 size={14}/></button>}
-                                      {isAdmin && hasAlert && <button onClick={() => onAcknowledgeAlert(menu.id)} className="p-1 text-rose-500 hover:text-emerald-600 rounded-md transition-colors"><CheckCircle2 size={14}/></button>}
+                                      {isAdmin && <button onClick={() => onToggleMenuVisibility(menu.id)} className="p-1 text-stone-400 hover:text-stone-800 rounded-sm transition-colors">{menu.isVisible === false ? <Eye size={14} /> : <EyeOff size={14} />}</button>}
+                                      {isAdmin && <button onClick={() => onEditMenu(menu)} className="p-1 text-stone-400 hover:text-stone-800 rounded-sm transition-colors"><Edit2 size={14}/></button>}
+                                      {isAdmin && hasAlert && <button onClick={() => onAcknowledgeAlert(menu.id)} className="p-1 text-rose-700 hover:text-emerald-700 rounded-sm transition-colors"><CheckCircle2 size={14}/></button>}
                                     </div>
                                   </div>
 
                                   {/* 판매가 */}
-                                  <div className="flex justify-between items-end mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex justify-between items-end mb-4 pb-4 border-b border-stone-300 dark:border-stone-700">
                                     <div>
-                                      <p className="text-[11px] font-semibold text-slate-400 mb-1">판매가 ({region})</p>
-                                      <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{formatCurrency(price)}</p>
+                                      <p className="text-xs font-bold text-stone-500 dark:text-stone-400 mb-1 tracking-widest">판매가 ({region})</p>
+                                      <p className="text-3xl font-black text-stone-900 dark:text-stone-100 tracking-tighter">{formatCurrency(price)}</p>
                                     </div>
                                   </div>
 
                                   {/* 세부 마진/원가 박스 */}
-                                  <div className="grid grid-cols-2 gap-3 mb-5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                                  <div className="grid grid-cols-2 gap-3 mb-5 p-4 bg-white dark:bg-stone-800/50 rounded-sm border border-stone-300 dark:border-stone-700">
                                     <div>
-                                      <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">식재료 원가</p>
-                                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{visibleColumns.cost ? formatCurrency(cost) : '***원'}</p>
+                                      <p className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1">식재료 원가</p>
+                                      <p className="text-base font-bold text-stone-700 dark:text-stone-300 tracking-tight">{visibleColumns.cost ? formatCurrency(cost) : '***원'}</p>
                                     </div>
-                                    <div className="text-right border-l border-slate-200 dark:border-slate-700 pl-3">
-                                      <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5">순수익 (마진)</p>
-                                      <p className="text-sm font-bold text-blue-600 dark:text-blue-400">{visibleColumns.margin ? formatCurrency(margin) : '***원'}</p>
+                                    <div className="text-right border-l border-stone-300 dark:border-stone-700 pl-3">
+                                      <p className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1">순수익 (마진)</p>
+                                      <p className="text-base font-bold text-blue-800 dark:text-blue-400 tracking-tight">{visibleColumns.margin ? formatCurrency(margin) : '***원'}</p>
                                     </div>
                                   </div>
 
                                   {/* 원가율 게이지 */}
                                   <div className="mt-auto">
-                                    <div className="flex justify-between items-end mb-2">
-                                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">원가율</span>
+                                    <div className="flex justify-between items-end mb-3">
+                                      <span className="text-xs font-bold text-stone-500 dark:text-stone-400 tracking-widest">원가율</span>
                                       <div className="flex items-center gap-1">
-                                        {isGood ? <TrendingDown size={16} className={textClass} /> : <TrendingUp size={16} className={textClass} />}
-                                        <span className={`text-xl font-black ${textClass}`}>{visibleColumns.costRate ? formatPercent(costRate) : '**.*%'}</span>
+                                        {isGood ? <TrendingDown size={20} className={textClass} /> : <TrendingUp size={20} className={textClass} />}
+                                        <span className={`text-3xl font-black tracking-tighter ${textClass}`}>{visibleColumns.costRate ? formatPercent(costRate) : '**.*%'}</span>
                                       </div>
                                     </div>
-                                    {visibleColumns.costRate && (
-                                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                        <div className={`h-full rounded-full ${bgClass} transition-all duration-1000 ease-out`} style={{ width: `${Math.min(Math.max(costRate * 100, 0), 100)}%` }} />
-                                      </div>
-                                    )}
                                   </div>
 
                                   {/* 인라인 레시피 아코디언 */}
                                   {onSaveRecipe && (
                                     <>
-                                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                      <div className="mt-6 pt-4 border-t border-stone-300 dark:border-stone-700">
                                         <button onClick={() => setExpandedRecipeId(expandedRecipeId === menu.id ? null : menu.id)} className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-1.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg">
-                                          레시피 상세 및 수정 {expandedRecipeId === menu.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                                          RECIPE DETAILS {expandedRecipeId === menu.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                                         </button>
                                       </div>
                                       {expandedRecipeId === menu.id && (

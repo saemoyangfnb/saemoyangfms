@@ -166,20 +166,20 @@ export const OverviewTable: React.FC<Props> = ({
   }
 
   return (
-    <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-950 space-y-6">
+    <div className="p-4 sm:p-6 bg-stone-100 dark:bg-stone-950 space-y-8">
       
       {/* 상단 컨트롤 패널 (뷰 토글 및 지역 선택) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+        <div className="flex bg-stone-200 dark:bg-stone-800 p-1 rounded-sm border border-stone-300 dark:border-stone-700">
           <button 
             onClick={() => setViewMode('card')} 
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${viewMode === 'card' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'card' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
           >
             <LayoutGrid size={16} /> 카드형 메뉴판
           </button>
           <button 
             onClick={() => setViewMode('table')} 
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'table' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
           >
             <TableIcon size={16} /> 전체 표 보기
           </button>
@@ -195,15 +195,10 @@ export const OverviewTable: React.FC<Props> = ({
 
             return (
               <section key={group.category.id || 'uncategorized'}>
-                <div className="flex items-center gap-3 mb-6 border-b border-slate-200 dark:border-slate-800 pb-3">
-                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <ChefHat className="text-emerald-500" size={24} />
-                    {group.category.name}
-                  </h3>
-                  {!group.category.isVisible && (
-                    <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-full">숨김 카테고리</span>
-                  )}
-                  <span className="text-sm font-medium text-slate-400 ml-auto">{group.menus.length}개 메뉴</span>
+                <div className="flex items-center gap-3 mb-6 border-b-2 border-stone-800 dark:border-stone-400 pb-3">
+                  <h3 className="text-xl font-black text-stone-900 dark:text-stone-100 flex items-center gap-2">{group.category.name}</h3>
+                  {!group.category.isVisible && <span className="text-[10px] font-bold bg-stone-200 dark:bg-stone-800 text-stone-500 px-2 py-1 rounded-sm">숨김 카테고리</span>}
+                  <span className="text-sm font-medium text-stone-500 ml-auto">{group.menus.length}개 메뉴</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -217,10 +212,10 @@ export const OverviewTable: React.FC<Props> = ({
                     return (
                       <div 
                         key={menu.id} 
-                        className={`group relative flex flex-col bg-white dark:bg-slate-900 rounded-2xl p-5 border-2 transition-all hover:-translate-y-1 hover:shadow-xl ${
+                        className={`group relative flex flex-col bg-[#FDFBF7] dark:bg-stone-900 rounded-sm p-6 border transition-all hover:-translate-y-1 hover:shadow-md ${
                           hasAlert 
-                            ? 'border-rose-400 dark:border-rose-600 shadow-[0_0_15px_rgba(244,63,94,0.15)]' 
-                            : 'border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-800'
+                            ? 'border-rose-800 dark:border-rose-600' 
+                            : 'border-stone-300 dark:border-stone-700 hover:border-stone-800 dark:hover:border-stone-400'
                         }`}
                       >
                         {/* 상단 알림 뱃지 */}
@@ -228,7 +223,7 @@ export const OverviewTable: React.FC<Props> = ({
                           <div className="absolute -top-3 -right-3">
                             <button 
                               onClick={() => onNavigateToTab('변동사항')}
-                              className="flex items-center gap-1 bg-rose-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg animate-bounce hover:bg-rose-600 transition-colors"
+                              className="flex items-center gap-1 bg-rose-800 dark:bg-rose-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-sm shadow-md animate-bounce hover:bg-rose-900 transition-colors"
                             >
                               <AlertCircle size={14} />
                               {missing ? '식재료 누락!' : '원가 변동!'}
@@ -236,19 +231,19 @@ export const OverviewTable: React.FC<Props> = ({
                           </div>
                         )}
                         {menu.isVisible === false && (
-                          <div className="absolute -top-3 -left-3 bg-slate-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow">숨김</div>
+                          <div className="absolute -top-3 -left-3 bg-stone-700 text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow">숨김</div>
                         )}
 
                         {/* 메뉴명 영역 */}
                         <div className="mb-5 flex-1">
-                          <h4 className="text-lg font-bold text-slate-900 dark:text-white leading-tight pr-4">{menu.name}</h4>
+                          <h4 className="text-xl font-black text-stone-900 dark:text-white leading-tight pr-4 tracking-tight">{menu.name}</h4>
                         </div>
 
                         
                         {/* 식재료 원가 (공통) */}
-                        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 px-4 py-3 rounded-xl border border-slate-100 dark:border-slate-700 mb-5">
-                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">식재료 원가</span>
-                          <span className="text-base font-bold text-slate-700 dark:text-slate-200">
+                        <div className="flex justify-between items-center bg-white dark:bg-stone-800/50 px-4 py-3 rounded-sm border border-stone-200 dark:border-stone-700 mb-6">
+                          <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400">식재료 원가</span>
+                          <span className="text-base font-bold text-stone-700 dark:text-stone-200 tracking-tight">
                             {visibleColumns.cost ? formatCurrency(cost) : '***원'}
                           </span>
                         </div>
@@ -262,19 +257,19 @@ export const OverviewTable: React.FC<Props> = ({
                             const isGood = rate > 0 && rate < 0.40;
                             const isWarning = rate >= 0.40 && rate <= 0.42;
                             
-                            const bgClass = isGood ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50' : isWarning ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/50' : 'bg-rose-50/50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800/50';
-                            const textClass = isGood ? 'text-emerald-600 dark:text-emerald-400' : isWarning ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400';
+                            const bgClass = isGood ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-800 dark:border-emerald-800/50' : isWarning ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-800 dark:border-amber-800/50' : 'bg-rose-50/50 dark:bg-rose-900/10 border-rose-800 dark:border-rose-800/50';
+                            const textClass = isGood ? 'text-emerald-800 dark:text-emerald-400' : isWarning ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400';
                             const Icon = isGood ? TrendingDown : TrendingUp;
                             
                             return (
-                              <div key={r} className={`flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-xl border shadow-sm ${bgClass}`}>
-                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">{r}</span>
-                                <span className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight mb-1.5">
+                              <div key={r} className={`flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-sm border ${bgClass}`}>
+                                <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-1">{r}</span>
+                                <span className="text-[13px] font-black text-stone-900 dark:text-stone-100 tracking-tighter mb-1">
                                   {formatCurrency(price)}
                                 </span>
                                 <div className="flex items-center gap-0.5">
                                   <Icon size={12} className={textClass} />
-                                  <span className={`text-[11px] font-bold ${textClass}`}>
+                                  <span className={`text-[11px] font-black tracking-tight ${textClass}`}>
                                     {visibleColumns.costRate ? formatPercent(rate) : '**.*%'}
                                   </span>
                                 </div>
@@ -286,10 +281,10 @@ export const OverviewTable: React.FC<Props> = ({
                         {/* 💡 추가: 레시피 인라인 편집 아코디언 */}
                         {onSaveRecipe && (
                           <>
-                            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <div className="mt-6 pt-4 border-t border-stone-300 dark:border-stone-800">
                               <button 
                                 onClick={() => setExpandedRecipeId(expandedRecipeId === menu.id ? null : menu.id)}
-                                className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors py-1"
+                                className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 transition-colors py-1 tracking-widest"
                               >
                                 레시피 상세 및 수정 {expandedRecipeId === menu.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                               </button>

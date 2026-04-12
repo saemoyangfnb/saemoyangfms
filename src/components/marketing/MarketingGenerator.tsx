@@ -391,25 +391,25 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 폼 영역 */}
       <div className="space-y-6">
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-            <Store className="text-blue-500" size={20} /> 기본 정보 입력
+        <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-700 p-6">
+          <h3 className="text-lg font-black text-stone-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight border-b-2 border-stone-800 dark:border-stone-400 pb-3">
+            기본 정보 입력 <span className="text-[10px] font-bold text-stone-400 tracking-widest ml-2">매장 정보</span>
           </h3>
           <div className="space-y-4">
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">매장명</label>
+                <label className="block text-xs font-bold text-stone-500 dark:text-stone-400 mb-1.5 tracking-widest">매장명</label>
                 {allStores.length > 0 ? (
                   <select
                     value={storeName}
                     onChange={e => setStoreName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded-sm focus:outline-none focus:border-stone-800 text-sm font-semibold text-stone-800"
                   >
                     <option value="">매장을 선택하세요</option>
                     {allStores.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 ) : (
-                  <input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="예: 전주본점" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg focus:ring-2 focus:ring-blue-500" />
+                  <input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="예: 전주본점" className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded-sm focus:outline-none focus:border-stone-800 text-sm font-semibold" />
                 )}
                 
                 {storeName && (roiData.some(r => r.매장명 === storeName) || reviews.some(r => r.매장명 === storeName)) && (
@@ -419,8 +419,8 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
                 )}
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">매장 유형</label>
-                <select value={storeType} onChange={e => setStoreType(e.target.value)} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg focus:ring-2 focus:ring-blue-500">
+                <label className="block text-xs font-bold text-stone-500 dark:text-stone-400 mb-1.5 tracking-widest">매장 유형</label>
+                <select value={storeType} onChange={e => setStoreType(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded-sm focus:outline-none focus:border-stone-800 text-sm font-semibold text-stone-800">
                   <option>기존 매장</option>
                   <option>신규 오픈</option>
                 </select>
@@ -429,7 +429,7 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">타겟 고객층 (페르소나)</label>
+                <label className="block text-xs font-bold text-stone-500 dark:text-stone-400 mb-2 tracking-widest">타겟 고객층 (페르소나)</label>
                 <div className="flex flex-wrap gap-1.5">
                   {['가족 모임 (3050)', '데이트 (2030)', '직장인/회식', '혼밥/일상', '타겟 제한 없음'].map(p => (
                     <button key={p} onClick={() => setTargetPersona(p)} className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${targetPersona === p ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700'}`}>
@@ -439,7 +439,7 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">글쓰기 톤앤매너</label>
+                <label className="block text-xs font-bold text-stone-500 dark:text-stone-400 mb-2 tracking-widest">글쓰기 톤앤매너</label>
                 <div className="flex flex-wrap gap-1.5">
                   {['전문적/신뢰감', '친근한 이웃', '감성적/부드러움', '유쾌/파이팅'].map(t => (
                     <button key={t} onClick={() => setTone(t)} className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${tone === t ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700'}`}>
@@ -450,48 +450,48 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
               </div>
             </div>
             
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-slate-800 dark:text-white mb-3">
-                <Info size={16} className="text-emerald-500" /> 상세 팩트 정보
+            <div className="pt-4 mt-2 border-t border-stone-300 dark:border-stone-800">
+              <h4 className="text-sm font-bold flex items-center gap-2 text-stone-800 dark:text-white mb-3">
+                상세 팩트 정보
               </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">오픈 시간</label>
-                  <input type="time" value={openTime} onChange={e => setOpenTime(e.target.value)} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm" />
+                  <label className="block text-[10px] font-bold tracking-widest text-stone-500 mb-1">오픈 시간</label>
+                  <input type="time" value={openTime} onChange={e => setOpenTime(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm text-sm font-medium" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">마감 시간</label>
-                  <input type="time" value={closeTime} onChange={e => setCloseTime(e.target.value)} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm" />
+                  <label className="block text-[10px] font-bold tracking-widest text-stone-500 mb-1">마감 시간</label>
+                  <input type="time" value={closeTime} onChange={e => setCloseTime(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm text-sm font-medium" />
                 </div>
               </div>
               <div className="mt-4">
-                <label className="block text-xs text-slate-500 mb-1">주차장 형태</label>
-                <select value={parkingType} onChange={e => setParkingType(e.target.value)} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm">
+                <label className="block text-[10px] font-bold tracking-widest text-stone-500 mb-1">주차장 형태</label>
+                <select value={parkingType} onChange={e => setParkingType(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm text-sm font-medium">
                   <option>건물 내 주차</option><option>매장 앞 전용</option><option>기계식/타워형</option><option>공영주차장</option><option>주차 불가</option>
                 </select>
               </div>
               <div className="mt-4">
-                <label className="block text-xs text-slate-500 mb-1">이벤트/혜택</label>
-                <input type="text" placeholder="예: 영수증 리뷰 시 음료 증정" value={promoDetails} onChange={e => setPromoDetails(e.target.value)} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm" />
+                <label className="block text-[10px] font-bold tracking-widest text-stone-500 mb-1">이벤트/혜택</label>
+                <input type="text" placeholder="예: 영수증 리뷰 시 음료 증정" value={promoDetails} onChange={e => setPromoDetails(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm text-sm font-medium" />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-            <ImageIcon className="text-amber-500" size={20} /> 사진 업로드
+        <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-700 p-6">
+          <h3 className="text-lg font-black text-stone-900 dark:text-white flex items-center gap-2 mb-4 tracking-tight border-b-2 border-stone-800 dark:border-stone-400 pb-3">
+            사진 업로드 <span className="text-[10px] font-bold text-stone-400 tracking-widest ml-2">사진 첨부</span>
           </h3>
           <div className="space-y-6">
             
             <div className="space-y-3">
-              <div className="p-4 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 relative overflow-hidden group hover:bg-blue-50 transition-colors">
+              <div className="p-6 border-2 border-dashed border-stone-400 dark:border-stone-600 rounded-sm bg-stone-100 dark:bg-stone-800/50 relative overflow-hidden group hover:bg-stone-200 transition-colors">
                 <input type="file" multiple accept="image/*" onChange={handleReviewFilesChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                 <div className="text-center">
-                  <LayoutTemplate className="mx-auto h-8 w-8 text-blue-400 group-hover:text-blue-600 transition-colors" />
-                  <p className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-200">1️⃣ 고객 리뷰 캡처 (필수)</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">리뷰 2장 이상 첨부 시, 닉네임이 모자이크된 <span className="font-bold text-blue-600">인스타용 겹침 콜라주(스크랩북 감성)</span>를 자동 생성합니다.</p>
-                  <p className="text-xs text-blue-600 font-bold mt-2 bg-blue-100 dark:bg-blue-900/40 inline-block px-3 py-1 rounded-full">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '여기를 클릭하여 리뷰 사진 업로드'}</p>
+                  <LayoutTemplate className="mx-auto h-8 w-8 text-stone-400 group-hover:text-stone-600 transition-colors" />
+                  <p className="mt-3 text-sm font-black text-stone-800 dark:text-stone-200 tracking-tight">1. 고객 리뷰 캡처 (필수)</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-medium">리뷰 2장 이상 첨부 시, 닉네임이 모자이크된 인스타용 겹침 콜라주를 자동 생성합니다.</p>
+                  <p className="text-xs text-stone-700 font-bold mt-3 bg-stone-300 dark:bg-stone-700 inline-block px-3 py-1 rounded-sm">{reviewFiles.length > 0 ? `${reviewFiles.length}장 선택됨` : '여기를 클릭하여 리뷰 사진 업로드'}</p>
                 </div>
               </div>
               
@@ -508,13 +508,13 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
               )}
             </div>
             
-            <div className="p-4 border-2 border-dashed border-emerald-300 dark:border-emerald-700 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 relative overflow-hidden group hover:bg-emerald-50 transition-colors">
+            <div className="p-6 border-2 border-dashed border-stone-400 dark:border-stone-600 rounded-sm bg-stone-100 dark:bg-stone-800/50 relative overflow-hidden group hover:bg-stone-200 transition-colors">
               <input type="file" multiple accept="image/*" onChange={handlePhotoFilesChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
               <div className="text-center">
-                <ImageIcon className="mx-auto h-8 w-8 text-emerald-400 group-hover:text-emerald-600 transition-colors" />
-                <p className="mt-2 text-sm font-bold text-slate-800 dark:text-slate-200">2️⃣ 매장/메뉴 실제 사진 (선택)</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">AI가 이 사진들을 보고 <span className="font-bold text-emerald-600">음식의 색감, 플레이팅, 매장 분위기</span>를 글에 생생하게 묘사합니다.</p>
-                <p className="text-xs text-emerald-600 font-bold mt-2 bg-emerald-100 dark:bg-emerald-900/40 inline-block px-3 py-1 rounded-full">{photoFiles.length > 0 ? `${photoFiles.length}장 선택됨` : '여기를 클릭하여 매장/메뉴 사진 업로드'}</p>
+                <ImageIcon className="mx-auto h-8 w-8 text-stone-400 group-hover:text-stone-600 transition-colors" />
+                <p className="mt-3 text-sm font-black text-stone-800 dark:text-stone-200 tracking-tight">2. 매장/메뉴 실제 사진 (선택)</p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 font-medium">AI가 이 사진들을 보고 음식의 색감, 플레이팅, 분위기를 글에 생생하게 묘사합니다.</p>
+                <p className="text-xs text-stone-700 font-bold mt-3 bg-stone-300 dark:bg-stone-700 inline-block px-3 py-1 rounded-sm">{photoFiles.length > 0 ? `${photoFiles.length}장 선택됨` : '여기를 클릭하여 매장/메뉴 사진 업로드'}</p>
               </div>
             </div>
           </div>
@@ -522,7 +522,7 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="w-full mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full mt-6 bg-stone-900 hover:bg-stone-800 text-white font-bold py-3.5 px-4 rounded-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 border border-stone-800"
           >
             {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={18} />}
             {loading ? "채널별 문구 생성 중..." : "마케팅 문구 생성하기"}
@@ -531,50 +531,50 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
       </div>
 
       {/* 결과 영역 */}
-      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col">
-        <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-          결과 확인 및 시뮬레이션
-          <span className="text-[10px] font-normal bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+      <div className="bg-stone-100 dark:bg-stone-800/50 rounded-sm border border-stone-300 dark:border-stone-800 p-6 flex flex-col shadow-sm">
+        <h3 className="text-lg font-black text-stone-900 dark:text-white flex items-center gap-2 mb-4 border-b-2 border-stone-800 dark:border-stone-400 pb-3 tracking-tight">
+          결과 확인 및 시뮬레이션 <span className="text-[10px] font-bold text-stone-400 tracking-widest ml-2">미리보기</span>
+          <span className="ml-auto text-[10px] font-bold bg-white text-stone-600 dark:bg-stone-900 dark:text-stone-400 px-2 py-0.5 rounded-sm border border-stone-300 dark:border-stone-700 flex items-center gap-1">
             <Edit2 size={10} /> 직접 수정 가능
           </span>
         </h3>
         
         {generatedResults ? (
           <div className="space-y-6 flex-1 overflow-auto">
-             <div className="bg-white dark:bg-slate-900 rounded-lg p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-               <div className="flex items-center justify-between mb-2">
-                 <span className="text-sm font-bold text-green-600">네이버 블로그 원고</span>
+             <div className="bg-white dark:bg-stone-900 rounded-sm p-4 shadow-sm border border-stone-300 dark:border-stone-700">
+               <div className="flex items-center justify-between mb-3 border-b border-stone-200 dark:border-stone-800 pb-2">
+                 <span className="text-sm font-black text-stone-900 tracking-tight">네이버 블로그</span>
                </div>
-               <textarea value={generatedResults.n_text} onChange={e => setGeneratedResults({ ...generatedResults, n_text: e.target.value })} className="w-full min-h-[300px] resize-y whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-sans bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-transparent focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all" />
+               <textarea value={generatedResults.n_text} onChange={e => setGeneratedResults({ ...generatedResults, n_text: e.target.value })} className="w-full min-h-[300px] resize-y whitespace-pre-wrap text-sm text-stone-800 dark:text-stone-300 leading-relaxed font-serif bg-stone-50 dark:bg-stone-950 p-4 rounded-sm border border-transparent focus:border-stone-400 focus:ring-1 focus:ring-stone-400 focus:outline-none transition-all" />
              </div>
 
              <div className="grid grid-cols-2 gap-4">
-               <div className="bg-white dark:bg-slate-900 rounded-lg p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                 <div className="flex items-center justify-between mb-2">
-                   <span className="text-sm font-bold text-pink-500">인스타그램</span>
+               <div className="bg-white dark:bg-stone-900 rounded-sm p-4 shadow-sm border border-stone-300 dark:border-stone-700">
+                 <div className="flex items-center justify-between mb-3 border-b border-stone-200 dark:border-stone-800 pb-2">
+                   <span className="text-sm font-black text-stone-900 tracking-tight">인스타그램</span>
                  </div>
-                 <textarea value={generatedResults.i_text} onChange={e => setGeneratedResults({ ...generatedResults, i_text: e.target.value })} className="w-full min-h-[200px] resize-y whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-transparent focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all" />
+                 <textarea value={generatedResults.i_text} onChange={e => setGeneratedResults({ ...generatedResults, i_text: e.target.value })} className="w-full min-h-[200px] resize-y whitespace-pre-wrap text-xs text-stone-800 dark:text-stone-300 leading-relaxed font-serif bg-stone-50 dark:bg-stone-950 p-3 rounded-sm border border-transparent focus:border-stone-400 focus:ring-1 focus:ring-stone-400 focus:outline-none transition-all" />
                </div>
-               <div className="bg-white dark:bg-slate-900 rounded-lg p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                 <div className="flex items-center justify-between mb-2">
-                   <span className="text-sm font-bold text-orange-500">당근마켓(Daangn)</span>
+               <div className="bg-white dark:bg-stone-900 rounded-sm p-4 shadow-sm border border-stone-300 dark:border-stone-700">
+                 <div className="flex items-center justify-between mb-3 border-b border-stone-200 dark:border-stone-800 pb-2">
+                   <span className="text-sm font-black text-stone-900 tracking-tight">당근마켓</span>
                  </div>
-                 <textarea value={generatedResults.d_text} onChange={e => setGeneratedResults({ ...generatedResults, d_text: e.target.value })} className="w-full min-h-[200px] resize-y whitespace-pre-wrap text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-transparent focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all" />
+                 <textarea value={generatedResults.d_text} onChange={e => setGeneratedResults({ ...generatedResults, d_text: e.target.value })} className="w-full min-h-[200px] resize-y whitespace-pre-wrap text-xs text-stone-800 dark:text-stone-300 leading-relaxed font-serif bg-stone-50 dark:bg-stone-950 p-3 rounded-sm border border-transparent focus:border-stone-400 focus:ring-1 focus:ring-stone-400 focus:outline-none transition-all" />
                </div>
              </div>
 
              <button
                 onClick={handleSaveToDb}
-                className="w-full bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 mt-4"
+                className="w-full bg-stone-800 hover:bg-stone-900 text-white font-bold py-3.5 px-4 rounded-sm shadow-md transition-all flex items-center justify-center gap-2 mt-4 border border-stone-900"
               >
                 <Clock size={16} /> 이 원고들을 스케줄러에 저장
               </button>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 pb-10">
+          <div className="flex-1 flex flex-col items-center justify-center text-stone-400 dark:text-stone-600 pb-10">
             <LayoutTemplate size={48} className="mb-4 opacity-50" />
-            <p className="text-center font-medium">채널별 자동화를 시작해보세요!</p>
-            <p className="text-sm text-center mt-2">입력된 조건과 업로드된 사진을 분석하여<br/>플랫폼별 맞춤형 문구를 자동으로 생성해줍니다.</p>
+            <p className="text-center font-bold text-stone-600">채널별 원고 자동화를 시작해보세요!</p>
+            <p className="text-sm text-center mt-2 font-medium">입력된 팩트 정보와 업로드된 사진을 분석하여<br/>플랫폼별 맞춤형 문구를 자동으로 생성합니다.</p>
           </div>
         )}
       </div>

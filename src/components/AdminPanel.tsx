@@ -137,23 +137,23 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
   return (
     <div className="space-y-6">
       {/* Database Maintenance Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
-          <Database className="text-slate-700 dark:text-slate-300" size={20} />
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">데이터베이스 관리</h2>
+      <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+        <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+          <Database className="text-stone-800 dark:text-stone-300" size={20} />
+          <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">데이터베이스 관리</h2>
         </div>
         <div className="p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">매출단가 자동 생성 및 오류 수정</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <h3 className="text-sm font-bold text-stone-900 dark:text-white mb-1">매출단가 자동 생성 및 오류 수정</h3>
+              <p className="text-xs font-medium text-stone-500 dark:text-stone-400">
                 전체 데이터베이스를 검사하여 매출단가가 0원이거나 잘못된 경우 (매출가 / 수량)으로 재계산하여 반영합니다.
               </p>
             </div>
             <button
               onClick={handleRecalculateUnitSalesPrices}
               disabled={isRecalculating}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-sm text-sm font-bold transition-colors shadow-sm"
             >
               {isRecalculating ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -174,14 +174,14 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
       </div>
 
       {/* User Management Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-      <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
-        <ShieldAlert className="text-slate-700 dark:text-slate-300" size={20} />
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">관리자 패널 - 사용자 관리</h2>
+      <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+      <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+        <ShieldAlert className="text-stone-800 dark:text-stone-300" size={20} />
+        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">관리자 패널 - 사용자 관리</h2>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-slate-600 dark:text-slate-400">
-          <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+        <table className="w-full text-sm text-left text-stone-700 dark:text-stone-400">
+          <thead className="text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase tracking-widest bg-stone-100 dark:bg-stone-800/50 border-b border-stone-300 dark:border-stone-700">
             <tr>
               <th className="px-4 py-3">이름</th>
               <th className="px-4 py-3">이메일</th>
@@ -191,28 +191,28 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
               <th className="px-4 py-3 text-center">관리</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <tbody className="divide-y divide-stone-200 dark:divide-stone-800 bg-white dark:bg-stone-900">
             {users.map(user => (
-              <tr key={user.uid} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{user.name}</td>
+              <tr key={user.uid} className="hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                <td className="px-4 py-3 font-bold text-stone-900 dark:text-stone-100">{user.name}</td>
                 <td className="px-4 py-3">{user.email}</td>
                 <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                  <span className={`px-2 py-1 rounded-sm text-[10px] font-bold border ${user.role === 'admin' ? 'bg-stone-800 border-stone-800 text-white' : 'bg-stone-100 border-stone-300 text-stone-600'}`}>
                     {user.role}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center">
                   {user.isApproved ? (
-                    <span className="text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-1"><Check size={14}/> 승인됨</span>
+                    <span className="text-emerald-700 dark:text-emerald-400 font-bold flex items-center justify-center gap-1"><Check size={14}/> 승인됨</span>
                   ) : (
-                    <span className="text-orange-500 dark:text-orange-400 font-medium flex items-center justify-center gap-1">대기중</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center justify-center gap-1">대기중</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   {user.isActive ? (
-                    <span className="text-blue-600 dark:text-blue-400 font-medium">활성</span>
+                    <span className="text-blue-700 dark:text-blue-400 font-bold">활성</span>
                   ) : (
-                    <span className="text-red-500 dark:text-red-400 font-medium">정지됨</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-bold">정지됨</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-center space-x-2">
@@ -220,19 +220,19 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
                     <>
                       <button 
                         onClick={() => handleApprove(user.uid, !user.isApproved)} 
-                        className={`px-2 py-1 text-xs rounded-md border ${user.isApproved ? 'border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20' : 'border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-sm border ${user.isApproved ? 'border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
                       >
                         {user.isApproved ? '승인 취소' : '가입 승인'}
                       </button>
                       <button 
                         onClick={() => handleToggleActive(user.uid, !user.isActive)} 
-                        className={`px-2 py-1 text-xs rounded-md border ${user.isActive ? 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20' : 'border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-sm border ${user.isActive ? 'border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20' : 'border-stone-300 dark:border-stone-800 text-stone-700 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-900/20'}`}
                       >
                         {user.isActive ? '계정 정지' : '계정 활성'}
                       </button>
                       <button 
                         onClick={() => handleDelete(user.uid)} 
-                        className="px-2 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-600 dark:hover:text-red-400"
+                        className="px-2 py-1 text-[10px] font-bold rounded-sm border border-stone-300 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 hover:text-rose-700 dark:hover:text-rose-400"
                         title="완전 삭제"
                       >
                         <Trash2 size={14} />
