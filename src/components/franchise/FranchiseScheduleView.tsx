@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc } from 'firebase/firestore';
 import { FranchiseSchedule, TeamSetting, BrandId } from '../../types';
-import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays } from 'lucide-react';
+import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import { GoogleGenAI } from '@google/genai';
@@ -195,15 +195,6 @@ export function FranchiseScheduleView({ brandId }: Props) {
     } catch(e) { console.error(e); }
   };
 
-  // 💡 신규: 최근 등록된 가장 높은 호수 3개 자동 추출
-  const top3Stores = useMemo(() => {
-    const nums = schedules
-      .map(s => parseInt((s.storeNumber || '').replace(/[^0-9]/g, ''), 10))
-      .filter(n => !isNaN(n))
-      .sort((a, b) => b - a);
-    return [...new Set(nums)].slice(0, 3).map(n => `${n}호`).join(', ');
-  }, [schedules]);
-
   // 💡 신규: 다음 호수 자동 추출 (에러 해결)
   const nextStoreNumber = useMemo(() => {
     const nums = schedules
@@ -213,22 +204,38 @@ export function FranchiseScheduleView({ brandId }: Props) {
     return Math.max(...nums) + 1;
   }, [schedules]);
 
+  // 💡 세부일정 미입력 매장 감지 (사전교육 제외)
+  const missingSchedules = useMemo(() => {
+    return schedules.filter(s =>
+      !s.archived && s.storeName &&
+      !s.constructionStart && !s.constructionEnd &&
+      !s.ovenIn && !s.equipmentIn && !s.trainingStart &&
+      !s.initialStockIn && !s.ownerGuideStart && !s.openDate
+    );
+  }, [schedules]);
+
   const CHAT_QUESTIONS = useMemo(() => {
     return [
-      "안녕하세요! ✨ 일정을 관리해 드릴게요.\n아래 중 원하시는 작업의 번호를 입력해 주세요.\n\n1. 신규 일정 등록\n2. 기존 일정 변경",
-      "어느 매장인가요? (※ 필수 입력. 예: 광주 첨단점)",
-      `몇 호점인가요? (예: 150호. 모르면 엔터)\n\n💡 참고: 최근 등록된 최고 호수 👉 ${top3Stores || '없음'}`,
-      "담당할 팀과 SV(슈퍼바이저)는 누구인가요? (모르면 엔터)",
-      "공사 업체는 어디인가요? (더원, 감리, 직접입력 중 선택. 모르면 엔터)",
-      "공사 시작일과 종료일은 언제인가요? (※ 0410 형식으로 입력. 예: 1005부터 1020까지. 모르면 엔터)",
-      "화덕 입고일과 화구류 입고일은 언제인가요? (※ 0410 형식. 모르면 엔터)",
-      "사전교육 일정을 아래 달력에서 선택해 주세요. (첫 번째 클릭: 시작일, 두 번째 클릭: 종료일. 진행하지 않으면 '진행 안함' 클릭)",
-      "사전교육 장소와 참여 인원은 어떻게 되나요? (예: 남원 3명. 모르면 엔터)",
-      "본사교육 일정을 아래 달력에서 선택해 주세요. (첫 번째 클릭: 시작일, 두 번째 클릭: 종료일. 진행하지 않으면 '진행 안함' 클릭)",
-      "초도물품 입고일과 그랜드 오픈일은 언제인가요? (※ 0410 형식. 모르면 엔터)",
-      "마지막으로 점주 안내 시작일, 간판/가스 종류, 기타 메모가 있나요? (없으면 엔터 치시면 완료됩니다!)"
+      "안녕하세요! ✨ 일정을 관리해 드릴게요.\n원하시는 작업을 버튼으로 선택해 주세요.", // 0
+      "어느 매장인가요? (매장명 2~4글자로 짧게 작성해 주세요. 예: 첨단점)", // 1
+      `몇 호점인가요? (가장 최근 등록된 다음 번호로 세팅되었습니다.)`, // 2
+      "담당할 팀을 선택해 주세요.", // 3
+      "매장 일정을 어떻게 입력하시겠어요?\n\n🔹 자동 계산: 공사일만 선택하면 완료\n🔹 수동 상세 입력: 모든 일정을 직접 캘린더로 지정", // 4
+      "공사 시작일과 종료일을 캘린더에서 선택해 주세요. (첫 클릭: 시작일, 두 번째 클릭: 종료일)", // 5
+      "공사 업체는 어디인가요?", // 6
+      "간판 업체는 어디인가요?", // 7
+      "화덕 입고일은 언제인가요? 캘린더에서 선택해 주세요.", // 8
+      "가스 종류는 무엇인가요?", // 9
+      "화구류 입고일은 언제인가요? 캘린더에서 선택해 주세요.", // 10
+      "점주 안내 시작일은 언제인가요? 캘린더에서 선택해 주세요.", // 11
+      "사전교육 시작일과 종료일을 캘린더에서 선택해 주세요. (진행 안 하시면 '진행 안함' 클릭)", // 12
+      "사전교육 장소와 참여 인원은 어떻게 되나요? (예: 남원 3명. 모르면 엔터)", // 13
+      "초도물품 입고일은 언제인가요? 캘린더에서 선택해 주세요.", // 14
+      "본사교육 시작일과 종료일을 캘린더에서 선택해 주세요. (진행 안 하시면 '진행 안함' 클릭)", // 15
+      "그랜드 오픈일은 언제인가요? 캘린더에서 선택해 주세요.", // 16
+      "마지막으로 기타 특이사항/메모가 있나요? (없으면 엔터 치시면 완료됩니다!)" // 17
     ];
-  }, [top3Stores]);
+  }, []);
 
   const openAiChat = () => {
     setChatMessages([{ role: 'bot', text: CHAT_QUESTIONS[0] }]);
@@ -369,12 +376,13 @@ export function FranchiseScheduleView({ brandId }: Props) {
     if (chatStep === 6 && rawInput !== '엔터 (패스)') newDraft.constructionType = rawInput;
     if (chatStep === 7 && rawInput !== '엔터 (패스)') newDraft.signageType = rawInput;
     if (chatStep === 8) { const d = parseDates(rawInput); if (d) applyDraft('ovenIn', d.start, 'ovenEnd', d.start); }
-    if (chatStep === 9) { const d = parseDates(rawInput); if (d) applyDraft('equipmentIn', d.start, 'equipmentIn', d.start); }
-    if (chatStep === 10) { const d = parseDates(rawInput); if (d) applyDraft('preTrainingStart', d.start, 'preTrainingEnd', d.end); }
-    if (chatStep === 12) { const d = parseDates(rawInput); if (d) applyDraft('trainingStart', d.start, 'trainingEnd', d.end); }
-    if (chatStep === 13) { const d = parseDates(rawInput); if (d) applyDraft('initialStockIn', d.start, 'initialStockEnd', d.start); }
-    if (chatStep === 14) { const d = parseDates(rawInput); if (d) applyDraft('ownerGuideStart', d.start, 'ownerGuideStart', d.start); }
-    if (chatStep === 15) { const d = parseDates(rawInput); if (d) applyDraft('openDate', d.start, 'openDate', d.start); }
+    if (chatStep === 9 && rawInput !== '엔터 (패스)') newDraft.gasType = rawInput;
+    if (chatStep === 10) { const d = parseDates(rawInput); if (d) applyDraft('equipmentIn', d.start, 'equipmentIn', d.start); }
+    if (chatStep === 11) { const d = parseDates(rawInput); if (d) applyDraft('ownerGuideStart', d.start, 'ownerGuideStart', d.start); }
+    if (chatStep === 12) { const d = parseDates(rawInput); if (d) applyDraft('preTrainingStart', d.start, 'preTrainingEnd', d.end); }
+    if (chatStep === 14) { const d = parseDates(rawInput); if (d) applyDraft('initialStockIn', d.start, 'initialStockEnd', d.start); }
+    if (chatStep === 15) { const d = parseDates(rawInput); if (d) applyDraft('trainingStart', d.start, 'trainingEnd', d.end); }
+    if (chatStep === 16) { const d = parseDates(rawInput); if (d) applyDraft('openDate', d.start, 'openDate', d.start); }
     
     setDraftData(newDraft);
 
@@ -406,10 +414,10 @@ export function FranchiseScheduleView({ brandId }: Props) {
          if (updateField === '공사') oldStr = `${newDraft.constructionStart||'-'} ~ ${newDraft.constructionEnd||'-'}`;
          else if (updateField === '화덕') oldStr = `화덕: ${newDraft.ovenIn||'-'}`;
          else if (updateField === '화구') oldStr = `화구: ${newDraft.equipmentIn||'-'}`;
-         else if (updateField === '사전교육') oldStr = `${newDraft.preTrainingStart||'-'} ~ ${newDraft.preTrainingEnd||'-'}`;
-         else if (updateField === '본사교육') oldStr = `${newDraft.trainingStart||'-'} ~ ${newDraft.trainingEnd||'-'}`;
-         else if (updateField === '초도물품') oldStr = `초도물품: ${newDraft.initialStockIn||'-'}`;
          else if (updateField === '점주안내') oldStr = `점주안내: ${newDraft.ownerGuideStart||'-'}`;
+         else if (updateField === '사전교육') oldStr = `${newDraft.preTrainingStart||'-'} ~ ${newDraft.preTrainingEnd||'-'}`;
+         else if (updateField === '초도물품') oldStr = `초도물품: ${newDraft.initialStockIn||'-'}`;
+         else if (updateField === '본사교육') oldStr = `${newDraft.trainingStart||'-'} ~ ${newDraft.trainingEnd||'-'}`;
          else if (updateField === '오픈일') oldStr = `오픈일: ${newDraft.openDate||'-'}`;
 
          let newStr = d.start === d.end ? d.start : `${d.start} ~ ${d.end}`;
@@ -423,10 +431,10 @@ export function FranchiseScheduleView({ brandId }: Props) {
                if (updateField === '공사') { newDraft.constructionStart = d.start; newDraft.constructionEnd = d.end || d.start; }
                else if (updateField === '화덕') { newDraft.ovenIn = d.start; newDraft.ovenEnd = d.start; }
                else if (updateField === '화구') { newDraft.equipmentIn = d.start; }
-               else if (updateField === '사전교육') { newDraft.preTrainingStart = d.start; newDraft.preTrainingEnd = d.end || d.start; }
-               else if (updateField === '본사교육') { newDraft.trainingStart = d.start; newDraft.trainingEnd = d.end || d.start; }
-               else if (updateField === '초도물품') { newDraft.initialStockIn = d.start; newDraft.initialStockEnd = d.start; }
                else if (updateField === '점주안내') { newDraft.ownerGuideStart = d.start; }
+               else if (updateField === '사전교육') { newDraft.preTrainingStart = d.start; newDraft.preTrainingEnd = d.end || d.start; }
+               else if (updateField === '초도물품') { newDraft.initialStockIn = d.start; newDraft.initialStockEnd = d.start; }
+               else if (updateField === '본사교육') { newDraft.trainingStart = d.start; newDraft.trainingEnd = d.end || d.start; }
                else if (updateField === '오픈일') { newDraft.openDate = d.start; }
              }
              setDraftData(newDraft);
@@ -445,7 +453,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
     let nextStep = chatStep + 1;
     // 💡 핵심 분기: 자동 계산 모드면 5번(공사일) 질문 이후 바로 12번(종료)으로 스킵!
     if (chatStep === 5 && isAutoCalc) {
-      nextStep = 16;
+      nextStep = 17;
     }
 
     if (nextStep < CHAT_QUESTIONS.length) {
@@ -454,7 +462,13 @@ export function FranchiseScheduleView({ brandId }: Props) {
       if (nextStep === 3) setChatInput('선택 안함');
       
       setTimeout(() => {
-        setChatMessages(prev => [...prev, { role: 'bot', text: CHAT_QUESTIONS[nextStep] }]);
+        let msgText = CHAT_QUESTIONS[nextStep];
+        
+        // 💡 초도물품 입고일 질문 시 공사 종료일 안내 가이드 동적 삽입
+        if (nextStep === 14) {
+          msgText += `\n\n💡 참고: 설정하신 공사 종료일은 [ ${newDraft.constructionEnd || '미정'} ] 입니다.`;
+        }
+        setChatMessages(prev => [...prev, { role: 'bot', text: msgText }]);
       }, 300); // 약간의 딜레이로 자연스러운 채팅 연출
     } else {
       setChatMessages(prev => [...prev, { role: 'bot', text: '입력하신 정보를 바탕으로 일정을 생성하고 있습니다. 잠시만 기다려주세요... ⏳' }]);
@@ -479,7 +493,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
 
 [🔥 핵심 지침 🔥]
 1. 첫 번째 답변을 분석하여 "CREATE" 또는 "UPDATE"로 'action' 값을 정확히 설정하세요.
-2. 오늘 날짜는 ${todayStr} 입니다. 사용자가 '0410', '410' 등 3~4자리 숫자로 날짜를 입력하면 올해(또는 다가오는) 월/일로 간주하여 정확한 YYYY-MM-DD 형식으로 변환하세요. '내일', '다음주 월요일' 등도 동일하게 변환하세요.
+2. 오늘 날짜는 ${todayStr} 입니다. '내일', '다음주 월요일' 등 날짜 관련 표현을 오늘을 기준으로 정확한 연도와 날짜(YYYY-MM-DD) 형식으로 변환하세요.
 3. 정보가 누락되었거나 '패스', '진행 안함'이라고 대답한 항목은 절대 억지로 지어내지 말고 반드시 빈 문자열("")로 비워두세요.
 4. 마크다운 기호 없이 오직 순수 JSON 객체 1개만 반환하세요.
 
@@ -588,6 +602,7 @@ ${transcript}`;
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             <p>담당 팀: {draftData.team || '미정'} {draftData.supervisor ? `/ ${draftData.supervisor}` : ''}</p>
+            {draftData.gasType && <p>가스 종류: {draftData.gasType}</p>}
           </div>
         </div>
 
@@ -654,6 +669,23 @@ ${transcript}`;
 
   return (
     <div className="space-y-6">
+       {/* 🚨 세부일정 누락 경고 배너 */}
+       {missingSchedules.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+          <div className="flex-1">
+            <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 mb-2 tracking-tight">세부 일정 등록이 필요한 매장이 있습니다.</h4>
+            <div className="flex flex-wrap gap-2">
+              {missingSchedules.map(s => (
+                <button key={s.id} onClick={() => { setEditingData(s); setShowForm(true); }} className="text-xs font-bold bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 px-2.5 py-1.5 rounded-md border border-amber-100 dark:border-amber-700/50 shadow-sm hover:bg-amber-100 dark:hover:bg-slate-700 transition-colors text-left flex items-center gap-1">
+                  {s.storeName} [{s.storeNumber || '호수미정'}] 일정 등록 필요 <span className="opacity-50 ml-0.5">&rarr;</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+       )}
+
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div>
            <h1 className="text-xl font-black text-stone-900 dark:text-white flex items-center gap-2 tracking-tight">
@@ -903,8 +935,8 @@ ${transcript}`;
                     <Sparkles size={18} className="text-indigo-500" />
                     AI 비서와 일정 관리하기
                   </h2>
-                  <button onClick={() => setShowAiModal(false)} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden">
-                    <X size={18} />
+                  <button onClick={() => setShowAiModal(false)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-xs font-bold shadow-sm">
+                    <X size={14} /> 닫기
                   </button>
                 </div>
                 
@@ -933,18 +965,18 @@ ${transcript}`;
                 );
                 if (chatStep === 1 && updateStoreNotFound) return (
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    <select value={chatInput || ''} onChange={e => setChatInput(e.target.value)} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="">진행 중인 매장을 선택해 주세요</option>
                       {schedules.filter(s => !s.archived).map(s => (
                         <option key={s.id} value={s.storeName}>{s.storeName}</option>
                       ))}
                     </select>
-                    <button disabled={!chatInput} onClick={() => submitChat(chatInput)} className="w-20 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50">선택</button>
+                    <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                   </div>
                 );
                 if (chatStep === 20) return (
                   <div className="flex flex-wrap gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    {['공사', '화덕', '화구', '사전교육', '본사교육', '초도물품', '점주안내', '오픈일'].map(f => (
+                    {['공사', '화덕', '화구', '점주안내', '사전교육', '초도물품', '본사교육', '오픈일'].map(f => (
                       <button key={f} onClick={() => submitChat(f)} className="flex-1 min-w-[100px] py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-100 rounded-xl font-bold transition-colors shadow-sm">{f} 일정</button>
                     ))}
                   </div>
@@ -966,7 +998,7 @@ ${transcript}`;
                 );
                 if (chatStep === 2) return (
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    <select value={chatInput || `${nextStoreNumber}호`} onChange={e => setChatInput(e.target.value)} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <select value={chatInput || `${nextStoreNumber}호`} onChange={e => { setChatInput(e.target.value); submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       {Array.from({length: 15}).map((_, i) => {
                         const val = nextStoreNumber - 5 + i;
                         if (val > 0) return <option key={val} value={`${val}호`}>{val}호</option>;
@@ -978,7 +1010,7 @@ ${transcript}`;
                 );
                 if (chatStep === 3) return (
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    <select value={chatInput || '선택 안함'} onChange={e => setChatInput(e.target.value)} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <select value={chatInput || '선택 안함'} onChange={e => { setChatInput(e.target.value); submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="선택 안함">선택 안함</option>
                       {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                     </select>
@@ -987,26 +1019,38 @@ ${transcript}`;
                 );
                 if (chatStep === 6) return (
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    <select value={chatInput || ''} onChange={e => setChatInput(e.target.value)} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="">공사업체 선택 (또는 패스)</option>
                       <option value="더원">더원</option>
                       <option value="감리">감리</option>
                       <option value="직접입력">직접입력</option>
                     </select>
-                    <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm">선택</button>
+                    <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                   </div>
                 );
                 if (chatStep === 7) return (
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                    <select value={chatInput || ''} onChange={e => setChatInput(e.target.value)} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="">간판업체 선택 (또는 패스)</option>
                       <option value="동영">동영</option>
                       <option value="직접">직접</option>
                     </select>
-                    <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm">선택</button>
+                    <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                   </div>
                 );
-                if ([5, 8, 9, 10, 12, 13, 14, 15].includes(chatStep) && !pendingAiData && !isAiProcessing) return (
+              if (chatStep === 9) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="">가스 종류 선택 (또는 패스)</option>
+                    <option value="LNG">LNG</option>
+                    <option value="LPG">LPG</option>
+                    <option value="미등록">미등록</option>
+                    <option value="직접입력">직접입력</option>
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
+                </div>
+              );
+              if ([5, 8, 10, 11, 12, 14, 15, 16].includes(chatStep) && !pendingAiData && !isAiProcessing) return (
                   <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">{renderMiniCalendar()}</div>
                 );
                 return (
@@ -1029,9 +1073,6 @@ ${transcript}`;
 
               {/* 오른쪽: 라이브 프리뷰 */}
               {renderLivePreview()}
-              <button onClick={() => setShowAiModal(false)} className="absolute top-4 right-4 p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hidden md:block">
-                <X size={18} />
-              </button>
             </div>
           </div>
         )}

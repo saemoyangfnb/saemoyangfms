@@ -85,12 +85,25 @@ function HomePage({
   const [activeSchedulesCount, setActiveSchedulesCount] = useState<number | string>('-');
   const [unresolvedReviewsCount, setUnresolvedReviewsCount] = useState<number | string>('-');
   const [competitorChangesCount, setCompetitorChangesCount] = useState<number>(0);
+  const [missingScheduleStores, setMissingScheduleStores] = useState<{name: string, number: string}[]>([]);
 
   useEffect(() => {
     const unsubSch = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
       let count = 0;
-      snap.forEach(d => { if (!d.data().archived) count++; });
+      const missing: {name: string, number: string}[] = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (!data.archived) {
+          count++;
+          // 사전교육을 제외한 핵심 세부일정이 하나도 없는지 체크
+          const hasDetails = data.constructionStart || data.openDate || data.equipmentIn || data.ovenIn || data.initialStockIn || data.trainingStart || data.ownerGuideStart;
+          if (data.storeName && !hasDetails) {
+            missing.push({ name: data.storeName, number: data.storeNumber || '호수미정' });
+          }
+        }
+      });
       setActiveSchedulesCount(count);
+      setMissingScheduleStores(missing);
     });
 
     let unsubRev: any = null;
@@ -123,49 +136,53 @@ function HomePage({
         
         // 💡 [핵심 픽스] 하루 전이 아닌 '최근 7일' 기준으로 변동 감지
         const d = new Date(latestDate);
-        d.setDate(d.getDate() - 7);
-        const weekAgoStr = d.toISOString().split('T')[0];
-        const validPrevDates = dates.filter(date => date >= weekAgoStr && date < latestDate);
-        const prevDate = validPrevDates.length > 0 ? validPrevDates[0] : dates[dates.length - 2];
-        
-        const latestData = data.filter(c => c.수집일자 === latestDate);
-        const prevData = data.filter(c => c.수집일자 === prevDate);
-        
-        const getPrice = (menuStr: string) => {
-          if (!menuStr || menuStr === '수집 실패') return 0;
-          const items = menuStr.replace(/\n/g, '|').split('|').map(s => s.trim()).filter(Boolean);
-          for (let i = 0; i < items.length; i++) {
-            let name = items[i];
-            let priceStr = '';
-            if (items[i].includes(':')) {
-              const parts = items[i].split(':');
-              name = parts[0];
-              priceStr = parts.slice(1).join(':');
-            } else if (i + 1 < items.length && /[0-9,]+\s*원/.test(items[i + 1])) {
-              priceStr = items[i + 1];
-              i++; 
-            } else {
-              const match = items[i].match(/([0-9]{1,2}(?:,[0-9]{3})+|[0-9]{4,5})\s*원?/);
-              if (match) priceStr = match[0];
+        if (!isNaN(d.getTime())) {
+          d.setDate(d.getDate() - 7);
+          const weekAgoStr = d.toISOString().split('T')[0];
+          const validPrevDates = dates.filter(date => date >= weekAgoStr && date < latestDate);
+          const prevDate = validPrevDates.length > 0 ? validPrevDates[0] : dates[dates.length - 2];
+          
+          const latestData = data.filter(c => c.수집일자 === latestDate);
+          const prevData = data.filter(c => c.수집일자 === prevDate);
+          
+          const getPrice = (menuStr: string) => {
+            if (!menuStr || menuStr === '수집 실패') return 0;
+            const items = menuStr.replace(/\n/g, '|').split('|').map(s => s.trim()).filter(Boolean);
+            for (let i = 0; i < items.length; i++) {
+              let name = items[i];
+              let priceStr = '';
+              if (items[i].includes(':')) {
+                const parts = items[i].split(':');
+                name = parts[0];
+                priceStr = parts.slice(1).join(':');
+              } else if (i + 1 < items.length && /[0-9,]+\s*원/.test(items[i + 1])) {
+                priceStr = items[i + 1];
+                i++; 
+              } else {
+                const match = items[i].match(/([0-9]{1,2}(?:,[0-9]{3})+|[0-9]{4,5})\s*원?/);
+                if (match) priceStr = match[0];
+              }
+              if (name.includes('고등어')) {
+                const v = parseInt(priceStr.replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(v) && v >= 3000 && v <= 25000) return v;
+              }
             }
-            if (name.includes('고등어')) {
-              const v = parseInt(priceStr.replace(/[^0-9]/g, ''), 10);
-              if (!isNaN(v) && v >= 3000 && v <= 25000) return v;
-            }
-          }
-          return 0;
-        };
-
-        let changes = 0;
-        const targetBrands = ['산으로간고등어', '화덕으로간고등어', '부산에뜬고등어', '북극해고등어'];
-        targetBrands.forEach(brand => {
-          const lPrices = latestData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
-          const pPrices = prevData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
-          const lMin = lPrices.length ? Math.min(...lPrices) : 0;
-          const pMin = pPrices.length ? Math.min(...pPrices) : 0;
-          if (lMin > 0 && pMin > 0 && lMin !== pMin) changes++;
-        });
-        setCompetitorChangesCount(changes);
+            return 0;
+          };
+  
+          let changes = 0;
+          const targetBrands = ['산으로간고등어', '화덕으로간고등어', '부산에뜬고등어', '북극해고등어'];
+          targetBrands.forEach(brand => {
+            const lPrices = latestData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
+            const pPrices = prevData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
+            const lMin = lPrices.length ? Math.min(...lPrices) : 0;
+            const pMin = pPrices.length ? Math.min(...pPrices) : 0;
+            if (lMin > 0 && pMin > 0 && lMin !== pMin) changes++;
+          });
+          setCompetitorChangesCount(changes);
+        } else {
+          setCompetitorChangesCount(0);
+        }
       } else {
         setCompetitorChangesCount(0);
       }
@@ -247,6 +264,23 @@ function HomePage({
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300 pb-12">
+
+      {/* 🚨 세부일정 누락 경고 배너 */}
+      {missingScheduleStores.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
+          <div className="flex-1">
+            <h4 className="text-sm font-bold text-amber-800 dark:text-amber-400 mb-2 tracking-tight">오픈 일정 등록이 필요한 매장이 있습니다.</h4>
+            <div className="flex flex-wrap gap-2">
+              {missingScheduleStores.map((s, idx) => (
+                <span key={idx} className="text-xs font-bold bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 px-2.5 py-1.5 rounded-md border border-amber-100 dark:border-amber-700/50 shadow-sm cursor-default">
+                  {s.name} [{s.number}] 일정 등록 필요
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* 1. Newspaper Header (Masthead) */}
       <header className="border-b-[3px] border-double border-stone-800 dark:border-stone-300 pb-6 mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
