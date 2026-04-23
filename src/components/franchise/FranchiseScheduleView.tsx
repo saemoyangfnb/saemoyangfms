@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, query, where, writeBatch } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, BrandId, TaskTemplate, DepartmentTask } from '../../types';
+import { FranchiseSchedule, TeamSetting, BrandId, TaskTemplate, DepartmentTask, Department } from '../../types';
 import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, ListTodo } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
@@ -34,6 +34,8 @@ export function FranchiseScheduleView({ brandId, currentUser = null }: Props) {
   const [schedules, setSchedules] = useState<FranchiseSchedule[]>([]);
   const [teams, setTeams] = useState<TeamSetting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarDepts, setCalendarDepts] = useState<Department[]>([]);
+  const [calendarTasks, setCalendarTasks] = useState<DepartmentTask[]>([]);
 
   // View states
   const [viewTab, setViewTab] = useState<'schedule' | 'checklist' | 'tasks' | 'ai'>('schedule');
@@ -94,6 +96,28 @@ export function FranchiseScheduleView({ brandId, currentUser = null }: Props) {
   useEffect(() => {
     fetchData();
   }, [brandId]);
+
+  // 캘린더용 부서 목록 fetch
+  useEffect(() => {
+    getDocs(query(collection(db, 'departments'), where('brandId', '==', brandId)))
+      .then(snap => setCalendarDepts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department))));
+  }, [brandId]);
+
+  // 캘린더용 태스크 fetch (활성 매장 기준)
+  useEffect(() => {
+    const activeIds = schedules.filter(s => !s.archived).map(s => s.id);
+    if (activeIds.length === 0) { setCalendarTasks([]); return; }
+    const CHUNK = 30;
+    const fetchAll = async () => {
+      const all: DepartmentTask[] = [];
+      for (let i = 0; i < activeIds.length; i += CHUNK) {
+        const snap = await getDocs(query(collection(db, 'department_tasks'), where('scheduleId', 'in', activeIds.slice(i, i + CHUNK))));
+        all.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask)));
+      }
+      setCalendarTasks(all);
+    };
+    fetchAll();
+  }, [schedules.length, brandId]);
 
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -933,13 +957,15 @@ ${transcript}`;
                    currentMonth={currentMonth}
                    teams={teams}
                    phaseVisibility={processSettings.phaseVisibility}
+                   tasks={calendarTasks}
+                   departments={calendarDepts}
                    onEditStore={(id) => { const s = schedules.find(item => item.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
-                   onScheduleUpdate={async (id, data, logDetails) => { 
+                   onScheduleUpdate={async (id, data, logDetails) => {
                      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-                     await updateDoc(doc(db, 'franchise_schedules', id), data); 
+                     await updateDoc(doc(db, 'franchise_schedules', id), data);
                      const s = schedules.find(x => x.id === id);
                      await logActivity('일정 변경', logDetails || `[${s?.storeName || '매장'}] 캘린더에서 일정 드래그 이동`);
-                     fetchData(true); 
+                     fetchData(true);
                    }}
                 />
                 {monthsView === 2 && (
@@ -948,13 +974,15 @@ ${transcript}`;
                      currentMonth={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)}
                      teams={teams}
                      phaseVisibility={processSettings.phaseVisibility}
+                     tasks={calendarTasks}
+                     departments={calendarDepts}
                      onEditStore={(id) => { const s = schedules.find(item => item.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
-                     onScheduleUpdate={async (id, data, logDetails) => { 
+                     onScheduleUpdate={async (id, data, logDetails) => {
                        setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-                       await updateDoc(doc(db, 'franchise_schedules', id), data); 
+                       await updateDoc(doc(db, 'franchise_schedules', id), data);
                        const s = schedules.find(x => x.id === id);
                        await logActivity('일정 변경', logDetails || `[${s?.storeName || '매장'}] 캘린더에서 일정 드래그 이동`);
-                       fetchData(true); 
+                       fetchData(true);
                      }}
                   />
                 )}
