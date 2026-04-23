@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
-import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, BrandId } from '../../types';
-import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare } from 'lucide-react';
+import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, query, where, writeBatch } from 'firebase/firestore';
+import { FranchiseSchedule, TeamSetting, BrandId, TaskTemplate, DepartmentTask } from '../../types';
+import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, ListTodo } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import { GoogleGenAI } from '@google/genai';
@@ -13,17 +13,20 @@ import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleFormModal } from './ScheduleFormModal';
 import { TeamSettingsModal } from './TeamSettingsModal';
 import { OpenChecklistView } from './OpenChecklistView';
+import { DepartmentTaskView } from './DepartmentTaskView';
 import {
   ProcessMasterModal,
   ProcessSettings,
   DEFAULT_PROCESS_SETTINGS,
 } from './ProcessMasterModal';
+import { User } from '../../types';
 
 interface Props {
   brandId: BrandId;
+  currentUser?: User | null;
 }
 
-export function FranchiseScheduleView({ brandId }: Props) {
+export function FranchiseScheduleView({ brandId, currentUser = null }: Props) {
   const toast = useToast();
   const { confirm } = useConfirm();
 
@@ -33,7 +36,7 @@ export function FranchiseScheduleView({ brandId }: Props) {
   const [loading, setLoading] = useState(true);
 
   // View states
-  const [viewTab, setViewTab] = useState<'schedule' | 'checklist'>('schedule');
+  const [viewTab, setViewTab] = useState<'schedule' | 'checklist' | 'tasks' | 'ai'>('schedule');
   const [showArchived, setShowArchived] = useState(false);
   const [monthsView, setMonthsView] = useState<1 | 2>(1);
   const [search, setSearch] = useState('');
@@ -126,18 +129,84 @@ export function FranchiseScheduleView({ brandId }: Props) {
     }
   };
 
+  /** openDate 기준으로 태스크 자동 생성 */
+  const generateTasksForSchedule = async (scheduleId: string, openDate: string) => {
+    const now = new Date().toISOString();
+    // 활성 템플릿 조회
+    const tmplSnap = await getDocs(
+      query(collection(db, 'task_templates'), where('brandId', '==', brandId), where('isActive', '==', true))
+    );
+    if (tmplSnap.empty) return;
+
+    // 기존 태스크 삭제
+    const existingSnap = await getDocs(
+      query(collection(db, 'department_tasks'), where('scheduleId', '==', scheduleId))
+    );
+    if (!existingSnap.empty) {
+      const delBatch = writeBatch(db);
+      existingSnap.docs.forEach(d => delBatch.delete(d.ref));
+      await delBatch.commit();
+    }
+
+    // 새 태스크 생성
+    const base = new Date(openDate);
+    const CHUNK = 400;
+    const templates = tmplSnap.docs.map(d => ({ id: d.id, ...d.data() } as TaskTemplate));
+
+    for (let i = 0; i < templates.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      templates.slice(i, i + CHUNK).forEach(tmpl => {
+        const due = new Date(base);
+        due.setDate(due.getDate() + tmpl.dDayOffset);
+        const dueDate = due.toISOString().split('T')[0];
+        const ref = doc(collection(db, 'department_tasks'));
+        const task: Omit<DepartmentTask, 'id'> = {
+          scheduleId,
+          templateId: tmpl.id,
+          departmentId: tmpl.departmentId,
+          brandId,
+          title: tmpl.title,
+          dDayOffset: tmpl.dDayOffset,
+          dueDate,
+          status: 'pending',
+          createdAt: now,
+          updatedAt: now,
+        };
+        batch.set(ref, task);
+      });
+      await batch.commit();
+    }
+  };
+
   const handleSaveSchedule = async (data: Partial<FranchiseSchedule>) => {
     try {
       if (data.id) {
         const { id, ...updates } = data;
+        const prevSchedule = schedules.find(s => s.id === id);
+        const openDateChanged = prevSchedule?.openDate !== updates.openDate;
+
         await updateDoc(doc(db, 'franchise_schedules', id), {
           ...updates,
           updatedAt: new Date().toISOString()
         });
         toast.success('일정이 수정되었습니다.');
         await logActivity('일정 수정', `[${updates.storeName || '매장'}] 오픈 일정 변경`);
+
+        // 오픈일이 변경된 경우 태스크 재생성
+        if (openDateChanged && updates.openDate) {
+          const ok = await confirm({
+            title: '태스크 날짜 재계산',
+            message: `오픈일이 변경되었습니다. 부서별 태스크 마감일을 새 오픈일(${updates.openDate}) 기준으로 다시 계산할까요?`,
+            confirmLabel: '재계산',
+            variant: 'warning',
+          });
+          if (ok) {
+            await generateTasksForSchedule(id, updates.openDate);
+            toast.success('태스크 마감일이 재계산되었습니다.');
+          }
+        }
       } else {
-        await addDoc(collection(db, 'franchise_schedules'), {
+        const docRef = await addDoc(collection(db, 'franchise_schedules'), {
           ...data,
           brandId,
           createdAt: new Date().toISOString(),
@@ -145,6 +214,12 @@ export function FranchiseScheduleView({ brandId }: Props) {
         });
         toast.success('새 일정이 등록되었습니다.');
         await logActivity('일정 등록', `[${data.storeName || '매장'}] 신규 오픈 일정 등록`);
+
+        // 오픈일이 있으면 태스크 자동 생성
+        if (data.openDate) {
+          await generateTasksForSchedule(docRef.id, data.openDate);
+          toast.success('부서별 태스크가 자동 생성되었습니다.');
+        }
       }
       setShowForm(false);
       setEditingData(null);
@@ -779,7 +854,7 @@ ${transcript}`;
          </div>
 
          {/* 💡 뷰 전환 탭 */}
-         <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-lg border border-stone-200 dark:border-stone-700">
+         <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-lg border border-stone-200 dark:border-stone-700 flex-wrap gap-0.5">
            <button
              onClick={() => setViewTab('schedule')}
              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${viewTab === 'schedule' ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200'}`}
@@ -792,14 +867,23 @@ ${transcript}`;
            >
              <CheckSquare size={15} /> 체크리스트
            </button>
+           <button
+             onClick={() => setViewTab('tasks')}
+             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${viewTab === 'tasks' ? 'bg-white dark:bg-stone-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200'}`}
+           >
+             <ListTodo size={15} /> 부서 태스크
+           </button>
+           <button
+             onClick={() => { setViewTab('ai'); if (viewTab !== 'ai') openAiChat(); }}
+             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all ${viewTab === 'ai' ? 'bg-white dark:bg-stone-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200'}`}
+           >
+             <Bot size={15} /> AI 비서
+           </button>
          </div>
 
          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2 md:pb-0 w-full md:w-auto snap-x md:flex-wrap">
             <button onClick={() => { setEditingData({}); setShowForm(true); }} className="shrink-0 snap-start flex items-center gap-1.5 px-3 py-2 bg-stone-900 text-white text-sm font-bold rounded-sm hover:bg-stone-800 transition-colors shadow-sm">
                <Plus size={15} /> 신규 일정 등록
-            </button>
-            <button onClick={openAiChat} className="shrink-0 snap-start flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 text-sm font-bold rounded-sm hover:bg-indigo-100 transition-colors shadow-sm">
-               <Bot size={15} /> AI 자동 작성
             </button>
             <button onClick={() => setShowProcessMaster(true)} className="shrink-0 snap-start flex items-center gap-1.5 px-3 py-2 bg-white text-stone-700 border border-stone-300 dark:bg-stone-800 dark:border-stone-700 dark:text-stone-300 text-sm font-bold rounded-sm hover:bg-stone-100 transition-colors shadow-sm">
                <Layers size={15} /> 공정 마스터
@@ -976,11 +1060,11 @@ ${transcript}`;
            </div>
         )}
         </>
-      ) : (
-        <OpenChecklistView 
-          schedules={schedules} 
-          processSettings={processSettings} 
-          onUpdateProgress={handleUpdateProgress} 
+      ) : viewTab === 'checklist' ? (
+        <OpenChecklistView
+          schedules={schedules}
+          processSettings={processSettings}
+          onUpdateProgress={handleUpdateProgress}
           onUpdateSchedule={async (id, data) => {
             setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
             await updateDoc(doc(db, 'franchise_schedules', id), data);
@@ -992,7 +1076,168 @@ ${transcript}`;
              await updateDoc(doc(db, 'process_settings', brandId), { masterChecklist: list });
           }}
         />
-      )}
+      ) : viewTab === 'tasks' ? (
+        <DepartmentTaskView
+          brandId={brandId}
+          schedules={schedules}
+          currentUser={currentUser}
+        />
+      ) : viewTab === 'ai' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row h-[640px] overflow-hidden">
+          {/* 왼쪽: 채팅 영역 */}
+          <div className="flex-1 flex flex-col h-full min-w-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sparkles size={18} className="text-indigo-500" />
+                AI 비서와 일정 관리하기
+              </h2>
+              <button onClick={() => openAiChat()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-xs font-bold shadow-sm">
+                대화 초기화
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-50 dark:bg-slate-950/50 scroll-smooth">
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'bot' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                    {msg.role === 'bot' ? <Bot size={16} /> : <UserIcon size={16} />}
+                  </div>
+                  <div className={`px-4 py-2.5 rounded-2xl max-w-[75%] text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-tl-sm'}`}>
+                    {msg.text.split('\n').map((line, j) => <React.Fragment key={j}>{line}<br/></React.Fragment>)}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* 다이나믹 채팅 입력창 렌더링 */}
+            {(() => {
+              if (chatStep === 99) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <button onClick={() => openAiChat()} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm">처음으로 돌아가기</button>
+                </div>
+              );
+              if (chatStep === 0) return (
+                <div className="flex flex-wrap gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <button onClick={() => submitChat('신규 일정 등록')} className="flex-1 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-100 rounded-xl font-bold transition-colors shadow-sm">신규 일정 등록</button>
+                  <button onClick={() => submitChat('기존 일정 변경')} className="flex-1 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-100 rounded-xl font-bold transition-colors shadow-sm">기존 일정 변경</button>
+                  <button onClick={() => submitChat('도면 검색')} className="flex-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold transition-colors shadow-sm">도면 검색</button>
+                </div>
+              );
+              if (chatStep === 1 && updateStoreNotFound) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="">매장을 선택해 주세요</option>
+                    {schedules.map(s => (
+                      <option key={s.id} value={s.storeName}>{s.storeName} {s.archived ? '(오픈완료)' : ''}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
+                </div>
+              );
+              if (chatStep === 20) return (
+                <div className="flex flex-wrap gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  {['공사', '화덕', '화구', '점주안내', '사전교육', '초도물품', '본사교육', '오픈일'].map(f => (
+                    <button key={f} onClick={() => submitChat(f)} className="flex-1 min-w-[100px] py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-100 rounded-xl font-bold transition-colors shadow-sm">{f} 일정</button>
+                  ))}
+                </div>
+              );
+              if (chatStep === 21) return (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">{renderMiniCalendar()}</div>
+              );
+              if (chatStep === 22) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <button onClick={() => submitChat('네')} className="flex-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold transition-colors shadow-sm">네, 변경합니다</button>
+                  <button onClick={() => submitChat('아니오')} className="flex-1 py-3 bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400 hover:bg-rose-100 rounded-xl font-bold transition-colors shadow-sm">아니오, 취소</button>
+                </div>
+              );
+              if (chatStep === 4) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <button onClick={() => { setIsAutoCalc(true); submitChat('자동 계산 (공사일만 지정)'); }} className="flex-1 flex flex-col items-center justify-center gap-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold transition-colors shadow-sm">자동 계산 <span className="text-[10px] font-medium text-emerald-600/70 dark:text-emerald-500/70">공사일만 선택 시 완료</span></button>
+                  <button onClick={() => { setIsAutoCalc(false); submitChat('수동 상세 입력 (모든 일정)'); }} className="flex-1 flex flex-col items-center justify-center gap-1 py-3 bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400 hover:bg-blue-100 rounded-xl font-bold transition-colors shadow-sm">수동 상세 입력 <span className="text-[10px] font-medium text-blue-600/70 dark:text-blue-500/70">모든 일정을 직접 선택</span></button>
+                </div>
+              );
+              if (chatStep === 2) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || `${nextStoreNumber}호`} onChange={e => { setChatInput(e.target.value); submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    {Array.from({length: 15}).map((_, i) => { const val = nextStoreNumber - 5 + i; if (val > 0) return <option key={val} value={`${val}호`}>{val}호</option>; return null; })}
+                  </select>
+                  <button onClick={() => submitChat(chatInput || `${nextStoreNumber}호`)} className="w-20 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm">선택</button>
+                </div>
+              );
+              if (chatStep === 3) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || '선택 안함'} onChange={e => { setChatInput(e.target.value); submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="선택 안함">선택 안함</option>
+                    {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '선택 안함')} className="w-20 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-sm">선택</button>
+                </div>
+              );
+              if (chatStep === 6) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <button onClick={() => submitChat('네')} className="flex-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold transition-colors shadow-sm">네, 준비되었습니다</button>
+                  <button onClick={() => submitChat('아니오')} className="flex-1 py-3 bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-xl font-bold transition-colors shadow-sm">아니오, 나중에 할게요</button>
+                </div>
+              );
+              if (chatStep === 7) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="">공사업체 선택 (또는 패스)</option>
+                    <option value="더원">더원</option>
+                    <option value="감리">감리</option>
+                    <option value="직접입력">직접입력</option>
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
+                </div>
+              );
+              if (chatStep === 8) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="">간판업체 선택 (또는 패스)</option>
+                    <option value="동영">동영</option>
+                    <option value="직접">직접</option>
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
+                </div>
+              );
+              if (chatStep === 10) return (
+                <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                    <option value="">가스 종류 선택 (또는 패스)</option>
+                    <option value="LNG">LNG</option>
+                    <option value="LPG">LPG</option>
+                    <option value="미등록">미등록</option>
+                    <option value="직접입력">직접입력</option>
+                  </select>
+                  <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
+                </div>
+              );
+              if ([5, 9, 11, 12, 13, 15, 16, 17].includes(chatStep) && !pendingAiData && !isAiProcessing) return (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">{renderMiniCalendar()}</div>
+              );
+              return (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <form onSubmit={handleSendChatForm} className="flex gap-2 relative">
+                    <input
+                      type="text" autoFocus value={chatInput} onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); if (pendingAiData) { setPendingAiData(null); setChatMessages(prev => [...prev, { role: 'bot', text: '⚠️ 확정이 취소되었습니다. 추가로 수정할 내용을 입력하시거나 창을 닫아주세요.' }]); } } }}
+                      placeholder={isAiProcessing ? "AI가 분석 중입니다..." : pendingAiData ? "엔터(확인) 또는 ESC(취소)를 눌러주세요" : "답변을 입력해주세요..."}
+                      disabled={isAiProcessing} className="flex-1 pl-4 pr-12 py-3 bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-300 dark:focus:border-indigo-700 rounded-xl outline-none text-sm text-slate-900 dark:text-white transition-colors"
+                    />
+                    <button type="submit" disabled={isAiProcessing} className="absolute right-1.5 top-1.5 bottom-1.5 w-10 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 transition-colors shadow-sm">
+                      <Send size={16} className={isAiProcessing ? "animate-bounce" : ""} />
+                    </button>
+                  </form>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* 오른쪽: 라이브 프리뷰 */}
+          {renderLivePreview()}
+        </div>
+      ) : null}
 
         {showForm && (
           <ScheduleFormModal initial={editingData || {}} teams={teams} schedules={schedules} processSettings={processSettings} onSave={handleSaveSchedule} onClose={() => { setShowForm(false); setEditingData(null); }} />
@@ -1010,11 +1255,10 @@ ${transcript}`;
           />
         )}
 
-        {/* ✨ 신규: AI 대화형 일정 등록 모달 */}
-        {showAiModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row h-[600px] overflow-hidden">
-              {/* 왼쪽: 채팅 영역 */}
+        {/* AI 모달은 탭으로 이전됨 */}
+        {false && (
+          <div className="hidden">
+            <div>
               <div className="flex-1 flex flex-col h-full min-w-0">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">

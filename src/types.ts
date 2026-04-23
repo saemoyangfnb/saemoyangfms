@@ -52,6 +52,7 @@ export interface User {
   alertThresholdType?: 'percentage' | 'absolute';
   alertThresholdValue?: number;
   menuOrder?: string[];
+  departmentId?: string; // 소속 부서 ID
 }
 
 export type CostCalcMethod = 'purchase_divide' | 'sales_divide' | 'manual';
@@ -154,6 +155,21 @@ export interface DailySalesRecord {
   date: string;       // 'YYYY-MM-DD'
   storeName: string;  // '매장_요약'
   totalSales: number; // '총매출'
+  createdAt: string;
+}
+
+export interface MenuSalesRecord {
+  id: string;
+  brandId: BrandId;
+  yearMonth: string;       // 'YYYY-MM'
+  storeName: string;       // 원본 매장명 (달빛에구운고등어송천점)
+  storeShortName: string;  // 축약 매장명 (송천점)
+  category1: string;       // 대분류
+  menuName: string;        // 상품명
+  quantity: number;
+  totalSales: number;      // 총매출액
+  discount: number;        // 할인액
+  netSales: number;        // 실매출액
   createdAt: string;
 }
 
@@ -279,4 +295,57 @@ export interface ChecklistItemData {
   note7?: string; // 교육 인원
   note8?: string; // 담당자
   note9?: string; // 교육비 입금 상태 (사전교육) 등 추가 용도
+}
+
+// ==========================================
+// 부서별 태스크 관리 시스템
+// ==========================================
+
+/** 부서 정의 */
+export interface Department {
+  id: string;
+  brandId: BrandId;
+  name: string;    // 예: 마케팅팀, 가맹관리부, 경영지원부, 물류팀
+  color: string;   // Tailwind bg 색상 (예: bg-blue-500)
+  order: number;
+  createdAt?: string;
+}
+
+/** 태스크 입력 타입 */
+export type TaskInputType = 'check' | 'text' | 'number' | 'date';
+
+/** 태스크 템플릿 (관리자가 설정) */
+export interface TaskTemplate {
+  id: string;
+  brandId: BrandId;
+  departmentId: string;
+  title: string;         // 예: 플레이스 생성, 냉동탑차 배차
+  description?: string;  // 상세 설명
+  dDayOffset: number;    // 오픈일 기준 (음수: 이전, 0: 당일, 양수: 이후)
+  inputType: TaskInputType;
+  order: number;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+/** 태스크 상태 */
+export type DepartmentTaskStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
+
+/** 태스크 인스턴스 (오픈 일정별 자동 생성) */
+export interface DepartmentTask {
+  id: string;
+  scheduleId: string;      // FranchiseSchedule.id
+  templateId: string;      // TaskTemplate.id
+  departmentId: string;
+  brandId: BrandId;
+  title: string;
+  dDayOffset: number;
+  dueDate: string;         // YYYY-MM-DD (openDate + dDayOffset)
+  status: DepartmentTaskStatus;
+  value?: string;          // text/number/date 입력값
+  note?: string;
+  completedAt?: string;
+  completedBy?: string;    // 완료 처리한 사용자 이름
+  createdAt?: string;
+  updatedAt?: string;
 }

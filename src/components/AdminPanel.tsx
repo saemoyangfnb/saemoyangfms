@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
+import { db, auth, salesDb } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
-import { User, Ingredient } from '../types';
-import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key } from 'lucide-react';
+import { User, Ingredient, Department, BrandId } from '../types';
+import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Building2, ListChecks } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
+import { DepartmentManager } from './admin/DepartmentManager';
+import { TaskTemplateManager } from './admin/TaskTemplateManager';
 
 enum OperationType {
   CREATE = 'create',
@@ -38,17 +40,20 @@ interface FirestoreErrorInfo {
 interface Props {
   onFirestoreError: (error: unknown, operationType: OperationType, path: string | null) => void;
   ingredients: Ingredient[];
+  activeBrand?: BrandId | null;
 }
 
-export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) => {
+export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, activeBrand }) => {
   const { confirm } = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [recalcStatus, setRecalcStatus] = useState<string | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [naverPlacePassword, setNaverPlacePassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const toast = useToast();
+  const brandId: BrandId = activeBrand || 'dalbitgo';
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -62,6 +67,22 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
     });
     return () => unsubscribe();
   }, [onFirestoreError]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(salesDb, 'departments'), snap => {
+      setDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department)).filter(d => d.brandId === brandId));
+    });
+    return () => unsub();
+  }, [brandId]);
+
+  const handleSetDepartment = async (uid: string, departmentId: string) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), { departmentId: departmentId || null });
+      toast.success('부서가 배정되었습니다.');
+    } catch (error) {
+      onFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    }
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'activity_logs'), orderBy('timestamp', 'desc'), limit(150));
@@ -248,6 +269,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
             <tr>
               <th className="px-4 py-3">이름</th>
               <th className="px-4 py-3">이메일</th>
+              <th className="px-4 py-3 text-center">부서</th>
               <th className="px-4 py-3 text-center">권한</th>
               <th className="px-4 py-3 text-center">승인 상태</th>
               <th className="px-4 py-3 text-center">활성 상태</th>
@@ -259,6 +281,18 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
               <tr key={user.uid} className="hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
                 <td className="px-4 py-3 font-bold text-stone-900 dark:text-stone-100">{user.name}</td>
                 <td className="px-4 py-3">{user.email}</td>
+                <td className="px-4 py-3 text-center">
+                  <select
+                    value={user.departmentId || ''}
+                    onChange={e => handleSetDepartment(user.uid, e.target.value)}
+                    className="text-xs border border-stone-200 dark:border-stone-700 rounded px-1.5 py-1 bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300"
+                  >
+                    <option value="">미배정</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-1 rounded-sm text-[10px] font-bold border ${user.role === 'admin' ? 'bg-stone-800 border-stone-800 text-white' : 'bg-stone-100 border-stone-300 text-stone-600'}`}>
                     {user.role}
@@ -338,6 +372,30 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients }) =
             {logs.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-stone-500">기록된 활동 로그가 없습니다.</td></tr>}
           </tbody>
         </table>
+      </div>
+    </div>
+
+    {/* 부서 관리 */}
+    <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+      <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+        <Building2 className="text-stone-800 dark:text-stone-300" size={20} />
+        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">부서 관리</h2>
+        <span className="text-xs text-stone-400 font-medium ml-1">오픈 태스크에 사용할 부서를 등록합니다</span>
+      </div>
+      <div className="p-6">
+        <DepartmentManager brandId={brandId} />
+      </div>
+    </div>
+
+    {/* 태스크 템플릿 관리 */}
+    <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+      <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+        <ListChecks className="text-stone-800 dark:text-stone-300" size={20} />
+        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">오픈 태스크 템플릿</h2>
+        <span className="text-xs text-stone-400 font-medium ml-1">가맹점 오픈 시 부서별로 자동 생성될 태스크를 설정합니다</span>
+      </div>
+      <div className="p-6">
+        <TaskTemplateManager brandId={brandId} departments={departments} />
       </div>
     </div>
   </div>
