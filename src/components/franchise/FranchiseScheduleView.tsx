@@ -1026,10 +1026,14 @@ ${transcript}`;
             </div>
          </div>
 
-         <div className="flex items-center gap-2">
+         <div className="flex items-center gap-2 flex-wrap">
             <select className="px-3 py-1.5 text-sm font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm focus:outline-none focus:border-stone-800" value={filterTeam} onChange={e => setFilterTeam(e.target.value)}>
               <option value="">전체 팀</option>
               {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+            <select className="px-3 py-1.5 text-sm font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm focus:outline-none focus:border-stone-800" value={selectedDeptFilter} onChange={e => setSelectedDeptFilter(e.target.value)}>
+              <option value="all">전체 부서</option>
+              {dbDepartments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />

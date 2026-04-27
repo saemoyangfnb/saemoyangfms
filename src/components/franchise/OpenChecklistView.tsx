@@ -695,7 +695,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                           <div className="flex flex-col md:flex-row md:items-center gap-2 w-full animate-in fade-in slide-in-from-top-1">
                             <NoteInput type="text" placeholder="접속 아이디" className="flex-1 w-full md:w-32 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800 font-bold" initialValue={itemData.note2 || ''} itemId={item.id} field="note2" workItem={item} onSave={handleUpdateItem} />
                             <div className="relative flex-1 w-full md:w-32 min-w-0">
-                              <NoteInput type="password" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note3 || ''} itemId={item.id} field="note3" workItem={item} onSave={handleUpdateItem} />
+                              <NoteInput type="text" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note3 || ''} itemId={item.id} field="note3" workItem={item} onSave={handleUpdateItem} />
                               <button onClick={() => setUnlockedItems(p => ({...p, [item.id]: false}))} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 print:hidden"><Unlock size={14} /></button>
                             </div>
                             <NoteInput type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
@@ -818,8 +818,8 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                           <p className="text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">
                             {item.text}
                           </p>
-                          {/* check 타입만 날짜 소제목 표시 (task=D-day뱃지, date=우측 입력위젯으로 대체) */}
-                          {item.uDate && item.uType === 'check' && (
+                          {/* check 타입 + 날짜 위젯 없는 경우만 소제목 날짜 표시 */}
+                          {item.uDate && item.uType === 'check' && !['date','file_date','hiorder','training_payment'].includes(item.inputType) && (
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {item.uDate}{item.uEndDate ? ` ~ ${item.uEndDate}` : ''}
                             </p>
