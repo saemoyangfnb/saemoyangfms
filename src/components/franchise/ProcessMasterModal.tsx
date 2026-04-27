@@ -32,6 +32,13 @@ export const DEFAULT_PHASE_VISIBILITY: Record<string, boolean> = {
   open: true,
 };
 
+// 💡 부서 색상 팔레트 (겹치지 않도록)
+export const DEPARTMENT_COLOR_PALETTE = [
+  'bg-indigo-500', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500', 'bg-cyan-500',
+  'bg-purple-500', 'bg-teal-500', 'bg-orange-500', 'bg-fuchsia-500', 'bg-lime-500',
+  'bg-sky-500', 'bg-violet-500', 'bg-yellow-500', 'bg-red-500', 'bg-stone-500',
+];
+
 // 기본 진행 체크 항목 (progressCheck 필드 매핑)
 export const BUILTIN_PROGRESS: any[] = []; // 호환성을 위해 빈 배열로 남김
 
@@ -46,7 +53,7 @@ export const DEFAULT_MASTER_CHECKLIST: ChecklistMasterItem[] = [
   { id: 'item_1', text: '영업신고/사업자등록증 발급', type: 'file' },
   { id: 'item_2', text: '유선 전화번호 발급', type: 'phone' },
   { id: 'item_3', text: '하이오더 설치', type: 'hiorder' },
-  { id: 'item_4', text: '애니워터 설치', type: 'date' },
+  { id: 'item_4', text: '애니워터 설치', type: 'normal' },
   { id: 'item_5', text: '대기실 정수기 설치', type: 'normal' },
   { id: 'item_6', text: '커피머신 설치', type: 'normal' },
   { id: 'item_7', text: '테이블링 설치', type: 'date' },

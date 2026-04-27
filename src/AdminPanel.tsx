@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, auth, salesDb } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
 import { User, Ingredient, Department, BrandId, SystemConfig } from '../types';
-import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Settings2, Tags } from 'lucide-react';
+import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Settings2, ListChecks, Tags } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -37,95 +37,13 @@ interface FirestoreErrorInfo {
   }
 }
 
-const DEFAULT_CONFIG: SystemConfig = {
-  constTypes: ['더원', '감리', '직접입력'],
-  signTypes: ['동영', '직접'],
-  kitchenVendors: ['형제', '신광', '주원'],
-  preTrainingLocations: ['남원', '예당마을', '청주율량', '직접입력'],
-  gasTypes: ['LNG', 'LPG', '미등록', '직접입력']
-};
-
-// 💡 컴포넌트를 외부로 추출하여 'Node not found' 에러 방지 및 성능 최적화
-const SystemConfigManager = () => {
-  const [config, setConfig] = useState<SystemConfig | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const toast = useToast();
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'system_settings', 'config'), (snap) => {
-      if (snap.exists()) {
-        setConfig(snap.data() as SystemConfig);
-      } else {
-        setConfig(DEFAULT_CONFIG); // 문서가 없으면 기본값 노출
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!config) return;
-    setIsSaving(true);
-    try {
-      await setDoc(doc(db, 'system_settings', 'config'), config);
-      toast.success('시스템 공통 코드가 저장되었습니다.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const updateField = (key: keyof SystemConfig, val: string) => {
-    if (!config) return;
-    setConfig({ ...config, [key]: val.split(',').map(s => s.trim()).filter(Boolean) });
-  };
-
-  if (!config) return <div className="p-8 text-center text-stone-400 font-bold animate-pulse">설정 로드 중...</div>;
-
-  return (
-    <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden mb-6 shadow-sm">
-      <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
-        <Tags className="text-stone-800 dark:text-stone-300" size={20} />
-        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">시스템 공통 코드 관리</h2>
-      </div>
-      <form onSubmit={handleSaveConfig} className="p-6 space-y-4">
-        <p className="text-xs text-stone-400 font-medium mb-4">각 항목은 쉼표(,)로 구분하여 입력해 주세요. 저장 시 즉시 일정 폼의 선택 목록에 반영됩니다.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            { label: '공사 업체 리스트', key: 'constTypes' as const },
-            { label: '간판 업체 리스트', key: 'signTypes' as const },
-            { label: '주방 업체 리스트', key: 'kitchenVendors' as const },
-            { label: '가스 종류 리스트', key: 'gasTypes' as const },
-            { label: '사전 교육 장소', key: 'preTrainingLocations' as const },
-          ].map(item => (
-            <div key={item.key}>
-              <label className="block text-[10px] font-bold tracking-widest text-stone-500 dark:text-stone-400 mb-1.5 uppercase">{item.label}</label>
-              <textarea
-                value={config[item.key].join(', ')}
-                onChange={e => updateField(item.key, e.target.value)}
-                rows={2}
-                className="w-full border border-stone-300 dark:border-stone-700 px-3 py-2 rounded-sm focus:outline-none focus:ring-1 focus:ring-stone-900 text-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white font-medium"
-              />
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end pt-4 border-t border-stone-200 dark:border-stone-800 mt-4">
-          <button type="submit" disabled={isSaving} className="px-6 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-black rounded-sm hover:bg-stone-800 dark:hover:bg-white transition-all shadow-sm">
-            {isSaving ? '저장 중...' : '공통 코드 저장'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-};
-
 interface Props {
   onFirestoreError: (error: unknown, operationType: OperationType, path: string | null) => void;
   ingredients: Ingredient[];
-  currentUser: User;
   activeBrand?: BrandId | null;
 }
 
-export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, currentUser, activeBrand }) => {
+export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, activeBrand }) => {
   const { confirm } = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -278,11 +196,82 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
     }
   };
 
+  // 💡 [Step 4] 시스템 설정(공통 코드) 관리 컴포넌트
+  const SystemConfigManager = () => {
+    const [config, setConfig] = useState<SystemConfig | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+      const unsub = onSnapshot(doc(db, 'system_settings', 'config'), (snap) => {
+        if (snap.exists()) setConfig(snap.data() as SystemConfig);
+      });
+      return () => unsub();
+    }, []);
+
+    const handleSaveConfig = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!config) return;
+      setIsSaving(true);
+      try {
+        await setDoc(doc(db, 'system_settings', 'config'), config);
+        toast.success('시스템 공통 코드가 저장되었습니다.');
+      } finally {
+        setIsSaving(false);
+      }
+    };
+
+    const updateField = (key: keyof SystemConfig, val: string) => {
+      if (!config) return;
+      setConfig({ ...config, [key]: val.split(',').map(s => s.trim()).filter(Boolean) });
+    };
+
+    if (!config) return <div className="p-4 text-center text-stone-400">설정 로드 중...</div>;
+
+    return (
+      <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden mt-6">
+        <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+          <Tags className="text-stone-800 dark:text-stone-300" size={20} />
+          <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">시스템 공통 코드 관리</h2>
+        </div>
+        <form onSubmit={handleSaveConfig} className="p-6 space-y-4">
+          <p className="text-xs text-stone-400 font-medium mb-4">각 항목은 쉼표(,)로 구분하여 입력해 주세요. 저장 시 즉시 일정 폼의 선택 목록에 반영됩니다.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[
+              { label: '공사 업체 리스트', key: 'constTypes' as const },
+              { label: '간판 업체 리스트', key: 'signTypes' as const },
+              { label: '주방 업체 리스트', key: 'kitchenVendors' as const },
+              { label: '가스 종류 리스트', key: 'gasTypes' as const },
+              { label: '사전 교육 장소', key: 'preTrainingLocations' as const },
+            ].map(item => (
+              <div key={item.key}>
+                <label className="block text-[10px] font-bold tracking-widest text-stone-500 dark:text-stone-400 mb-1.5 uppercase">{item.label}</label>
+                <textarea
+                  value={config[item.key].join(', ')}
+                  onChange={e => updateField(item.key, e.target.value)}
+                  rows={2}
+                  className="w-full border border-stone-300 dark:border-stone-700 px-3 py-2 rounded-sm focus:outline-none focus:ring-1 focus:ring-stone-900 text-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white font-medium"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end pt-4 border-t border-stone-200 dark:border-stone-800 mt-4">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-6 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-black rounded-sm hover:bg-stone-800 dark:hover:bg-white transition-all shadow-sm"
+            >
+              {isSaving ? '저장 중...' : '공통 코드 저장'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* 💡 [4단계] 시스템 공통 코드 관리 - 위쪽 배치 및 권한 체크 확실히 */}
-      {(currentUser.role === 'admin' || currentUser.email === 'saemoyang_official@naver.com') && <SystemConfigManager />}
-
+      {/* 💡 [Step 4] 시스템 공통 코드 관리 */}
+      {currentUser.role === 'admin' && <SystemConfigManager />}
 
       {/* Database Maintenance Section */}
       <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">

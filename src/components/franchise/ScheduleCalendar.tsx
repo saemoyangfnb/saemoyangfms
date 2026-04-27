@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { FranchiseSchedule, TeamSetting } from '../../types';
+import { FranchiseSchedule, TeamSetting, WorkItem } from '../../types';
 import { isDateInRange, addDays } from '../../utils';
 import { Calendar as CalendarIcon, List } from 'lucide-react';
 
-// 💡 [Tailwind 완벽 해결] Tailwind 스캐너가 인식할 수 있도록 완성된 클래스명을 직접 매핑
 const BG_CLASSES: Record<string, string> = {
   blue: 'bg-blue-500', rose: 'bg-rose-500', emerald: 'bg-emerald-500', amber: 'bg-amber-500',
   purple: 'bg-purple-500', cyan: 'bg-cyan-500', pink: 'bg-pink-500', indigo: 'bg-indigo-500',
@@ -12,18 +11,87 @@ const BG_CLASSES: Record<string, string> = {
   stone: 'bg-stone-500', zinc: 'bg-zinc-500', slate: 'bg-slate-500', neutral: 'bg-neutral-500'
 };
 
+function addBusinessDaysCalc(startDate: Date, days: number): Date {
+  const d = new Date(startDate);
+  const sign = days >= 0 ? 1 : -1;
+  let remaining = Math.abs(days);
+  while (remaining > 0) {
+    d.setDate(d.getDate() + sign);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return d;
+}
+
+function computeWorkItemDates(workItems: WorkItem[], schedule: FranchiseSchedule): Record<string, { start: string; end: string }> {
+  // 1단계: 순수 D-day 계산 (fixedDate 미사용) — anchor 체인 해소용
+  const pureDates: Record<string, { start: string; end: string }> = {};
+  let changed = true;
+  let pass = 0;
+  while (changed && pass < 50) {
+    changed = false;
+    pass++;
+    workItems.forEach(wt => {
+      if (pureDates[wt.id] || wt.dDayOffset === undefined) return;
+      const anchor = wt.anchorField || 'constructionStart';
+      let anchorDate = '';
+      if (anchor === 'constructionStart') anchorDate = schedule.constructionStart || '';
+      else if (anchor === 'constructionEnd') anchorDate = schedule.constructionEnd || '';
+      else anchorDate = pureDates[anchor]?.start || '';
+      if (!anchorDate) return;
+
+      const base = new Date(anchorDate);
+      const startD = wt.skipWeekends ? addBusinessDaysCalc(base, wt.dDayOffset) : (() => { const d = new Date(base); d.setDate(d.getDate() + wt.dDayOffset!); return d; })();
+      const startStr = startD.toISOString().split('T')[0];
+      let endStr = startStr;
+      if (wt.dDayEndOffset !== undefined && wt.dDayOffset !== undefined) {
+        const durDays = wt.dDayEndOffset - wt.dDayOffset;
+        if (durDays > 0) {
+          const endD = wt.skipWeekends ? addBusinessDaysCalc(new Date(startStr), durDays) : (() => { const d = new Date(startStr); d.setDate(d.getDate() + durDays); return d; })();
+          endStr = endD.toISOString().split('T')[0];
+        }
+      }
+      pureDates[wt.id] = { start: startStr, end: endStr };
+      changed = true;
+    });
+  }
+
+  // 2단계: 매장별 fixedDate override 적용 (표시용, anchor 체인에는 영향 없음)
+  const displayDates: Record<string, { start: string; end: string }> = { ...pureDates };
+  workItems.forEach(wt => {
+    const fixedDate = schedule.checklistData?.[wt.id]?.fixedDate;
+    if (!fixedDate) return;
+    const orig = pureDates[wt.id];
+    let endStr = fixedDate;
+    if (orig) {
+      const durMs = new Date(orig.end).getTime() - new Date(orig.start).getTime();
+      const durDays = Math.round(durMs / (1000 * 60 * 60 * 24));
+      if (durDays > 0) {
+        const endD = new Date(fixedDate);
+        endD.setDate(endD.getDate() + durDays);
+        endStr = endD.toISOString().split('T')[0];
+      }
+    }
+    displayDates[wt.id] = { start: fixedDate, end: endStr };
+  });
+
+  return displayDates;
+}
+
 interface Props {
   schedules: FranchiseSchedule[];
   currentMonth: Date;
   teams: TeamSetting[];
+  workItems?: WorkItem[]; // taskItems에서 workItems로 이름 변경 및 통합
   onScheduleUpdate: (id: string, updates: Partial<FranchiseSchedule>, logDetails?: string) => Promise<void>;
+  onTaskOffsetUpdate?: (scheduleId: string, taskItemId: string, diffDays: number, newStartDate: string) => Promise<void>;
   onEditStore?: (id: string) => void;
-  phaseVisibility?: Record<string, boolean>; // 공정 마스터 캘린더 표기 설정
+  phaseVisibility?: Record<string, boolean>;
   selectedDeptFilter?: string;
 }
 
-export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpdate, onEditStore, phaseVisibility = {}, selectedDeptFilter = 'all' }: Props) {
-  // 💡 모바일(화면 너비 768px 미만)일 경우 기본값을 '리스트 뷰'로 설정
+export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [], onScheduleUpdate, onTaskOffsetUpdate, onEditStore, phaseVisibility = {}, selectedDeptFilter = 'all' }: Props) {
+  //  모바일(화면 너비 768px 미만)일 경우 기본값을 '리스트 뷰'로 설정
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>(
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'calendar'
   );
@@ -78,15 +146,19 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
       const colorCode = s.colorCode || 'slate';
       const bgClass = BG_CLASSES[colorCode] || 'bg-slate-500';
 
-      const addEv = (id: string, name: string, start: string, end: string, dept: string, isCustom: boolean = false) => {
+      const addEv = (id: string, name: string, start: string, end: string, depts: string | string[] | undefined, isCustom: boolean = false) => {
         if (!start) return;
-        // 💡 부서 필터링
-        if (selectedDeptFilter !== 'all' && dept !== selectedDeptFilter) return;
+        
+        if (selectedDeptFilter !== 'all' && depts) {
+          const deptList = Array.isArray(depts) ? depts : [depts as string];
+          if (!deptList.includes(selectedDeptFilter)) return;
+        }
 
-        const effectiveEnd = end || start; // end 미입력 시 start와 동일한 1일짜리 이벤트
+        const effectiveEnd = end || start;
         if (!isDateInRange(dateStr, start, effectiveEnd)) return;
-        // eslint-disable-next-line no-param-reassign
-        end = effectiveEnd;
+        
+        // 중복 방지: 이미 동일한 매장의 동일한 이름 이벤트가 해당 날짜에 등록되었는지 확인
+        if (events.some(e => e.scheduleId === s.id && e.phaseName === name)) return;
 
         const yesterday = addDays(dateStr, -1);
         const tomorrow = addDays(dateStr, 1);
@@ -107,22 +179,17 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
         });
       };
 
-      if (isPhaseVisible('constructionStart') && s.constructionStart === dateStr) addEv('constructionStart', '시작', s.constructionStart, s.constructionStart, 'facility');
-      if (isPhaseVisible('constructionEnd') && s.constructionEnd === dateStr) addEv('constructionEnd', '종료', s.constructionEnd, s.constructionEnd, 'facility');
+      // task 카테고리 항목만 캘린더에 표시 (schedule_date는 anchor 계산용, 중복 방지)
+      const computedDates = computeWorkItemDates(workItems, s);
+      workItems.forEach(wt => {
+        if (wt.category !== 'task' || !wt.calendarVisible || wt.isArchived) return;
+        const d = computedDates[wt.id];
+        if (d && isDateInRange(dateStr, d.start, d.end)) {
+          addEv(wt.id, wt.text, d.start, d.end, wt.departmentIds || (wt.departmentId ? [wt.departmentId] : []));
+        }
+      });
 
-      if (isPhaseVisible('oven')) addEv('oven', '화덕', s.ovenIn, s.ovenEnd, 'facility');
-      if (isPhaseVisible('burner') && s.burnerIn === dateStr) addEv('burner', '화구', s.burnerIn, s.burnerIn, 'facility');
-      if (isPhaseVisible('equipment') && s.equipmentIn === dateStr) addEv('equipment', '화구입고', s.equipmentIn, s.equipmentIn, 'facility');
-      if (isPhaseVisible('guide') && s.ownerGuideStart === dateStr) addEv('guide', '안내', s.ownerGuideStart, s.ownerGuideStart, 'sv');
-
-      if (isPhaseVisible('preTraining')) addEv('preTraining', '사전', s.preTrainingStart, s.preTrainingEnd, 'education');
-      if (isPhaseVisible('training')) addEv('training', '교육', s.trainingStart, s.trainingEnd, 'education');
-      if (isPhaseVisible('initialStock')) addEv('initialStock', '초도', s.initialStockIn, s.initialStockEnd, 'sv');
-
-      if (isPhaseVisible('open') && s.openDate === dateStr) {
-        addEv('open', '오픈', s.openDate, s.openDate, 'sv');
-      }
-
+      // 수동으로 추가한 커스텀 단계는 유지
       if (s.customPhases) {
         s.customPhases.forEach(cp => {
           addEv(cp.id, cp.name, cp.startDate, cp.endDate || cp.startDate, 'custom');
@@ -170,16 +237,12 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
           updates.customPhases = newArr;
        }
     } else {
-      if (phaseId === 'constructionStart') updates.constructionStart = addDays(schedule.constructionStart, diffDays);
-      else if (phaseId === 'constructionEnd') updates.constructionEnd = addDays(schedule.constructionEnd, diffDays);
-      else if (phaseId === 'oven') { updates.ovenIn = addDays(schedule.ovenIn, diffDays); updates.ovenEnd = addDays(schedule.ovenEnd, diffDays); }
-      else if (phaseId === 'burner') updates.burnerIn = addDays(schedule.burnerIn, diffDays);
-      else if (phaseId === 'equipment') updates.equipmentIn = addDays(schedule.equipmentIn, diffDays);
-      else if (phaseId === 'guide') updates.ownerGuideStart = addDays(schedule.ownerGuideStart, diffDays);
-      else if (phaseId === 'preTraining') { updates.preTrainingStart = addDays(schedule.preTrainingStart, diffDays); updates.preTrainingEnd = addDays(schedule.preTrainingEnd, diffDays); }
-      else if (phaseId === 'training') { updates.trainingStart = addDays(schedule.trainingStart, diffDays); updates.trainingEnd = addDays(schedule.trainingEnd, diffDays); }
-      else if (phaseId === 'initialStock') { updates.initialStockIn = addDays(schedule.initialStockIn, diffDays); updates.initialStockEnd = addDays(schedule.initialStockEnd, diffDays); }
-      else if (phaseId === 'open') updates.openDate = addDays(schedule.openDate, diffDays);
+      // 💡 [수정] 모든 마스터 항목(일정/태스크)은 통합 핸들러로 전달
+      const workItem = workItems.find(wi => wi.id === phaseId);
+      if (workItem && onTaskOffsetUpdate) {
+        await onTaskOffsetUpdate(scheduleId, phaseId, diffDays, droppedDate);
+        return;
+      }
     }
 
     const logDetails = `[${schedule.storeName}] ${phaseName} 일정 변경 (${draggedDate} → ${droppedDate} / ${diffDays > 0 ? `+${diffDays}일 연기` : `${Math.abs(diffDays)}일 앞당김`})`;
@@ -204,7 +267,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
   return (
     <div className="relative flex flex-col h-full">
       {/* 뷰 모드 토글 */}
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-end mb-2 gap-2">
         <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
           <button onClick={() => setViewMode('calendar')} className={`p-1.5 rounded-md transition-colors ${viewMode === 'calendar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`} title="달력 보기">
             <CalendarIcon size={14} />
@@ -282,16 +345,16 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
                 const uniqueTracks: string[] = Array.from(new Set(weekEvents.map(e => `${e.scheduleId}_${e.phaseId}`))).sort() as string[];
 
                 return (
-                  <div key={wIdx} className="grid grid-cols-7 min-h-[140px] border-b border-slate-100 dark:border-slate-800">
+                  <div key={wIdx} className="grid grid-cols-7 min-h-[140px] border-b-2 border-slate-200 dark:border-slate-700">
                     {week.map((cell, cIdx) => {
                       const cellEvents = getEventsForDate(cell.fullDate);
                       const evMap = cellEvents.reduce((acc, ev) => { acc[`${ev.scheduleId}_${ev.phaseId}`] = ev; return acc; }, {} as Record<string, any>);
                       const isToday = cell.fullDate === todayStr;
-                      
+
                       return (
-                        <div 
-                          key={cIdx} 
-                          className={`relative py-1 flex flex-col ${!cell.isCurrentMonth ? 'bg-slate-50/50 dark:bg-slate-800/20 opacity-50' : ''} ${isToday ? 'ring-2 ring-rose-500 ring-inset bg-rose-50/30 dark:bg-rose-900/20 z-10' : 'border-r border-slate-200 dark:border-slate-800'}`}
+                        <div
+                          key={cIdx}
+                          className={`relative py-1 flex flex-col border-r-2 border-slate-200 dark:border-slate-700 last:border-r-0 ${!cell.isCurrentMonth ? 'bg-slate-50/50 dark:bg-slate-800/20 opacity-50' : ''} ${isToday ? 'ring-2 ring-rose-500 ring-inset bg-rose-50/30 dark:bg-rose-900/20 z-10' : ''}`}
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => handleDrop(e, cell.fullDate)}
                         >
@@ -304,42 +367,30 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, onScheduleUpd
                             {uniqueTracks.map((trackKey, tIdx) => {
                               const ev = evMap[trackKey];
                               if (!ev) {
-                                  return <div key={`spacer-${trackKey}-${tIdx}`} className="h-[34px]" />;
+                                return <div key={`spacer-${trackKey}-${tIdx}`} className="h-[38px]" />;
                               }
-                              
-                              const isLongBlock = ev.duration >= 3;
-                              const showStartText = ev.isActuallyStart || cIdx === 0;
-                              const showEndText = isLongBlock && ev.isActuallyEnd;
 
-                              const roundedCls = (ev.isActuallyStart ? 'rounded-l-lg' : '') + ' ' + (ev.isActuallyEnd ? 'rounded-r-lg' : '');
-                              const borderCls = "border-y border-black/5";
-                              const leftBorder = ev.isActuallyStart ? "border-l border-black/10" : "";
-                              const rightBorder = ev.isActuallyEnd ? "border-r border-black/10" : "";
+                              const isWeekStart = cIdx === 0;
+                              const showText = ev.isActuallyStart || isWeekStart;
+
+                              const roundedCls = (ev.isActuallyStart ? 'rounded-l-md' : '') + ' ' + (ev.isActuallyEnd ? 'rounded-r-md' : '');
 
                               return (
-                                <div 
-                                  key={tIdx} 
+                                <div
+                                  key={tIdx}
                                   onClick={(e) => openEditPopup(e, ev)}
-                                  className={`relative text-[13px] h-[34px] flex items-center shadow-sm cursor-pointer hover:brightness-90 ${ev.bgClass} ${roundedCls} ${borderCls} ${leftBorder} ${rightBorder} transition-all leading-tight border-white/20`} 
-                                  title={`[${ev.team}][${ev.storeName}][${ev.phaseName}]`}
+                                  className={`relative h-[38px] flex items-center cursor-pointer hover:brightness-90 ${ev.bgClass} ${roundedCls} border-y border-black/10 transition-colors z-10`}
+                                  title={`[${ev.team}] ${ev.storeName} · ${ev.phaseName}`}
                                   draggable
-                              onDragStart={(e) => handleDragStart(e, ev.scheduleId, ev.phaseId, ev.phaseName, cell.fullDate, ev.isCustom)}
+                                  onDragStart={(e) => handleDragStart(e, ev.scheduleId, ev.phaseId, ev.phaseName, cell.fullDate, ev.isCustom)}
                                 >
-                                    {showStartText && (
-                                      <div className={`absolute top-0 bottom-0 flex items-center whitespace-nowrap z-20 pointer-events-none overflow-visible ${cIdx === 6 ? 'right-0 pr-1 sm:pr-2' : 'left-0 pl-1 sm:pl-2'}`}>
-                                        <span className="text-white font-black drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] text-[11px] sm:text-[12px] tracking-tighter">
-                                          <span className="opacity-80 font-bold mr-1 text-[10px]">[{ev.team}]</span>
-                                          {ev.storeName} <span className="ml-1 text-[10px] opacity-90">{ev.phaseName}</span>
-                                        </span>
-                                      </div>
-                                    )}
-                                    {showEndText && !showStartText && (
-                                      <div className="absolute right-0 top-0 bottom-0 flex items-center pr-1 sm:pr-2 whitespace-nowrap z-20 pointer-events-none overflow-visible">
-                                        <span className="text-white font-black drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] text-[11px] sm:text-[12px] tracking-tighter opacity-80">
-                                          [{ev.phaseName}]
-                                        </span>
-                                      </div>
-                                    )}
+                                  {showText && (
+                                    <div className={`absolute inset-y-0 flex items-center px-1.5 pointer-events-none z-20 ${cIdx === 6 ? 'right-0' : 'left-0'}`}>
+                                      <span className={`text-slate-900 dark:text-white font-black text-[11px] sm:text-[13px] leading-tight drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)] dark:drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)] whitespace-nowrap`}>
+                                        {ev.storeName} <span className="opacity-80">{ev.phaseName}</span>
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}

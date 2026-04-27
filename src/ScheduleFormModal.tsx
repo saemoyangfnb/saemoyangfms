@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FranchiseSchedule, TeamSetting, FileAttachment, Department } from '../../types';
+import { FranchiseSchedule, TeamSetting, FileAttachment, Department, SystemConfig } from '../../types';
 import { X, Calculator, AlertCircle, Palette, Eye, EyeOff, FileText, UploadCloud, Loader2, ClipboardList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { addDays, diffDays, addExcludingSunday, getOvenInDate, getPreTrainingStartDate } from '../../utils';
 import { ProcessSettings, DEFAULT_MASTER_CHECKLIST, ChecklistMasterItem } from './ProcessMasterModal';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage, salesDb } from '../../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { storage, salesDb, db } from '../../firebase';
+import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
 const CHECKLIST_STATUS_LABELS = ['미진행', '안내완료', '진행중', '완료'];
 const CHECKLIST_STATUS_CLASSES = [
@@ -26,11 +26,14 @@ interface Props {
   onClose: () => void;
 }
 
-const CONST_TYPES = ['더원', '감리', '직접입력'];
-const SIGN_TYPES = ['동영', '직접'];
-const KITCHEN_VENDORS = ['형제', '신광', '주원'];
-const PRE_TRAINING_LOCATIONS = ['남원', '예당마을', '청주율량', '직접입력'];
-const GAS_TYPES = ['LNG', 'LPG', '미등록', '직접입력'];
+// 💡 [Step 4] 기본값 정의 (DB 로드 전까지 사용)
+const DEFAULT_CONFIG: SystemConfig = {
+  constTypes: ['더원', '감리', '직접입력'],
+  signTypes: ['동영', '직접'],
+  kitchenVendors: ['형제', '신광', '주원'],
+  preTrainingLocations: ['남원', '예당마을', '청주율량', '직접입력'],
+  gasTypes: ['LNG', 'LPG', '미등록', '직접입력']
+};
 
 export const CALENDAR_COLORS = [
   { id: 'blue', bg: 'bg-blue-500', hover: 'hover:bg-blue-600' },
@@ -74,6 +77,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('all');
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [sysConfig, setSysConfig] = useState<SystemConfig>(DEFAULT_CONFIG);
 
   //  DB 부서 정보 실시간 로드
   useEffect(() => {
@@ -84,6 +88,16 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
     });
     return () => unsub();
   }, [form.brandId]);
+
+  // 💡 [Step 4] 공통 코드(상수) 실시간 로드
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'system_settings', 'config'), (snap) => {
+      if (snap.exists()) {
+        setSysConfig(snap.data() as SystemConfig);
+      }
+    });
+    return () => unsub();
+  }, []);
   
   //  신규: 일정 자동 계산 토글 (AI가 자동계산을 요청했거나 기존 일정이 없으면 ON)
   const [autoCalc, setAutoCalc] = useState((initial as any).isAiAutoCalc ?? (!initial.id && !initial.openDate));
@@ -134,10 +148,10 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
 
   // 가스 구분 초기화 로직
   useEffect(() => {
-    if (form.gasType && !GAS_TYPES.filter(t => t !== '직접입력').includes(form.gasType)) {
+    if (form.gasType && !sysConfig.gasTypes.filter(t => t !== '직접입력').includes(form.gasType)) {
       setIsGasCustom(true);
     }
-  }, [form.gasType]);
+  }, [form.gasType, sysConfig.gasTypes]);
 
   // 자동 계산 로직
   useEffect(() => {
@@ -241,9 +255,15 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
       }
       const newPdfs = [...getPdfs(), ...uploaded];
       
+      // 💡 [Step 4] 하드코딩된 'item_18' 대신 Metadata(systemAction)로 항목 찾기
+      const checklistItems = (processSettings?.masterItems || [])
+        .filter(item => item.category === 'checklist' && !item.isArchived);
+      const drawingWorkItem = checklistItems.find(i => i.systemAction === 'drawing_upload');
+      const drawingId = drawingWorkItem?.id || 'item_18';
+
       const checklistData = (form as any).checklistData || {};
       const drawingItem = { 
-        ...(checklistData['item_18'] || {}), 
+        ...(checklistData[drawingId] || {}), 
         files: newPdfs, 
         status: 3 // 완료
       };
@@ -252,7 +272,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
         finalDrawingPdfs: newPdfs,
         finalDrawingPdfUrl: newPdfs[0]?.url || '',
         progressCheck: { ...(form.progressCheck as any), drawingUpload: true },
-        checklistData: { ...checklistData, item_18: drawingItem }
+        checklistData: { ...checklistData, [drawingId]: drawingItem }
       };
 
       setForm(prev => ({ ...prev, ...updates }));
@@ -373,7 +393,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
               <label className={labelCls}>공사 구분 / 가스</label>
               <div className="flex gap-2">
                 <select className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" value={form.constructionType || ''} onChange={e => set('constructionType', e.target.value)}>
-                   {CONST_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                   {sysConfig.constTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <div className="flex-1">
                    {isGasCustom ? (
@@ -390,7 +410,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
                            set('gasType', e.target.value);
                         }
                      }}>
-                        {GAS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        {sysConfig.gasTypes.map(t => <option key={t} value={t}>{t}</option>)}
                      </select>
                    )}
                 </div>
@@ -400,14 +420,14 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
               <label className={labelCls}>간판 구분</label>
               <select className={inputCls} value={form.signageType || ''} onChange={e => set('signageType', e.target.value)}>
                 <option value="">업체 선택</option>
-                {SIGN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {sysConfig.signTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>주방 업체</label>
               <select className={inputCls} value={form.kitchenSupplier || ''} onChange={e => set('kitchenSupplier', e.target.value)}>
                 <option value="">업체 선택</option>
-                {KITCHEN_VENDORS.map(t => <option key={t} value={t}>{t}</option>)}
+                {sysConfig.kitchenVendors.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
@@ -503,7 +523,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
                             {item.inputType === 'location_select' && (
                               <select className={inputCls} value={form.preTrainingLocation || ''} onChange={e => set('preTrainingLocation', e.target.value)}>
                                 <option value="">장소 선택</option>
-                                {PRE_TRAINING_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                                {sysConfig.preTrainingLocations.map(l => <option key={l} value={l}>{l}</option>)}
                               </select>
                             )}
                             {item.inputType === 'participant_count' && (
