@@ -300,7 +300,7 @@ export interface Department {
 // 오픈 체크리스트 전용 데이터 타입
 // ==========================================
 
-export type WorkItemCategory = 'checklist' | 'schedule_date';
+export type WorkItemCategory = 'checklist' | 'schedule_date' | 'task';
 
 export type WorkItemInputType = 
   | 'date' 
@@ -320,6 +320,11 @@ export type WorkItemInputType =
   | 'training_payment' 
   | 'normal';
 
+export type SystemActionType = 
+  | 'drawing_upload'      // 도면 PDF 연동
+  | 'pre_training_pay'    // 사전교육비 입금 체크
+  | 'owner_guide_sync';   // 점주 안내 날짜 동기화
+
 export interface WorkItem {
   id: string;
   text: string;
@@ -328,8 +333,23 @@ export interface WorkItem {
   departmentId?: string;
   departmentIds?: string[];
   scheduleField?: keyof FranchiseSchedule;
+  dDayOffset?: number;
+  dDayEndOffset?: number;      // 종료일 오프셋 (미설정시 단일 날짜)
+  skipWeekends?: boolean;      // 주말 제외하여 날짜 계산
+  // 'constructionStart' | 'constructionEnd' 또는 다른 태스크의 id (동적 기준일 체인)
+  anchorField?: string;
   calendarVisible?: boolean;
   syncToField?: keyof FranchiseSchedule;
+  systemAction?: SystemActionType; // 💡 코드 내 하드코딩된 ID 의존성을 제거하기 위한 필드
+  description?: string;            // 업무 처리 매뉴얼 (? 아이콘 호버/더블클릭으로 확인)
   order: number;
   isArchived: boolean;
+}
+
+export interface SystemConfig {
+  constTypes: string[];
+  signTypes: string[];
+  kitchenVendors: string[];
+  preTrainingLocations: string[];
+  gasTypes: string[];
 }

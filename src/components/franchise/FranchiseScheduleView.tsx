@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
-import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem } from '../../types';
+import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, onSnapshot, query, where, writeBatch, orderBy } from 'firebase/firestore';
+import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig } from '../../types';
 import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, LayoutList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Subcomponents
 import { ScheduleTimeline } from './ScheduleTimeline';
@@ -28,6 +28,23 @@ interface Props {
   currentUser: User | null;
 }
 
+// 💡 Firestore 저장을 위한 재귀적 데이터 정제 유틸 (undefined 제거)
+const scrubData = (obj: any): any => {
+  if (obj === null || obj === undefined) return undefined;
+  if (Array.isArray(obj)) {
+    return obj.map(scrubData).filter(v => v !== undefined);
+  }
+  if (obj && typeof obj === 'object') {
+    const newObj: any = {};
+    for (const key in obj) {
+      const val = scrubData(obj[key]);
+      if (val !== undefined) newObj[key] = val;
+    }
+    return newObj;
+  }
+  return obj;
+};
+
 export function FranchiseScheduleView({ brandId, currentUser }: Props) {
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -45,8 +62,19 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
   const [filterTeam, setFilterTeam] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('all');
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [sysConfig, setSysConfig] = useState<SystemConfig>({
+    constTypes: [], signTypes: [], kitchenVendors: [], preTrainingLocations: [], gasTypes: []
+  });
 
-  // 💡 DB 부서 정보 로드
+  // 💡 공통 코드 실시간 로드
+  useEffect(() => {
+    const unsub = onSnapshot(doc(mainDb, 'system_settings', 'config'), (snap) => {
+      if (snap.exists()) setSysConfig(snap.data() as SystemConfig);
+    });
+    return () => unsub();
+  }, []);
+
+  //  DB 부서 정보 로드
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'departments'), snap => {
       setDbDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department))
@@ -80,12 +108,12 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
   const [updateDates, setUpdateDates] = useState<{start: string, end: string|null} | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 💡 미니 달력 선택기 상태
+  //  미니 달력 선택기 상태
   const [rangeStart, setRangeStart] = useState<string | null>(null);
   const [rangeEnd, setRangeEnd] = useState<string | null>(null);
   const [pickerMonth, setPickerMonth] = useState(new Date());
 
-  // 💡 시스템 활동 로그 기록 센서
+  //  시스템 활동 로그 기록 센서
   const logActivity = async (action: string, details: string) => {
     if (!auth.currentUser) return;
     try {
@@ -109,7 +137,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     fetchData();
   }, [brandId]);
 
-  // 💡 [Step 1] 마스터 항목 통합 마이그레이션 및 실시간 구독
+  //   마스터 항목 통합 마이그레이션 및 실시간 구독
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'process_settings', brandId), async (snap) => {
       if (!snap.exists()) return;
@@ -120,41 +148,31 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
         const migratedItems: WorkItem[] = [];
         let order = 0;
 
-        // 💡 Firestore 저장을 위한 재귀적 데이터 정제 유틸 (undefined 제거)
-        const scrub = (obj: any): any => {
-          if (obj === null || obj === undefined) return undefined;
-          if (Array.isArray(obj)) {
-            const arr = obj.map(scrub).filter(v => v !== undefined);
-            return arr;
-          }
-          if (obj && typeof obj === 'object') {
-            const newObj: any = {};
-            for (const key in obj) {
-              const val = scrub(obj[key]);
-              if (val !== undefined) newObj[key] = val;
-            }
-            return newObj;
-          }
-          return obj;
-        };
-
         // 1. 기존 체크리스트 변환
         const oldChecklist = data.masterChecklist || DEFAULT_MASTER_CHECKLIST;
         oldChecklist.forEach(item => {
-          const syncToFieldMap: Record<string, string> = {
-            'item_16': 'preTrainingStart',
-            'item_24': 'ownerGuideStart'
+          const syncToFieldMap: Record<string, keyof FranchiseSchedule> = {
+            'item_16': 'preTrainingStart' as any,
+            'item_24': 'ownerGuideStart' as any
           };
+          const systemActionMap: Record<string, SystemActionType> = {
+            'item_18': 'drawing_upload',
+            'item_16': 'pre_training_pay',
+            'item_24': 'owner_guide_sync'
+          };
+
           const newItem: WorkItem = {
             id: item.id,
             text: item.text,
             category: 'checklist',
             inputType: item.type as any,
             departmentId: item.departmentId || '',
+            dDayOffset: 0, // 💡 기본값 0 할당
             order: order++,
             isArchived: false
           };
-          if (syncToFieldMap[item.id]) newItem.syncToField = syncToFieldMap[item.id] as any;
+          if (syncToFieldMap[item.id]) newItem.syncToField = syncToFieldMap[item.id];
+          if (systemActionMap[item.id]) newItem.systemAction = systemActionMap[item.id];
           
           migratedItems.push(newItem);
         });
@@ -183,7 +201,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
         });
 
         await updateDoc(doc(db, 'process_settings', brandId), {
-          masterItems: scrub(migratedItems),
+          masterItems: scrubData(migratedItems),
           masterItemsMigrated: true
         });
         toast.info("업무 마스터 마이그레이션이 완료되었습니다.");
@@ -233,7 +251,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
         toast.success('일정이 수정되었습니다.');
         await logActivity('일정 수정', `[${updates.storeName || '매장'}] 오픈 일정 변경`);
       } else {
-        // 💡 [신규] 매장 등록과 동시에 템플릿 업무를 자동 생성합니다.
+        //  [신규] 매장 등록과 동시에 템플릿 업무를 자동 생성합니다.
         const docRef = await addDoc(collection(db, 'franchise_schedules'), {
           ...data,
           brandId,
@@ -317,6 +335,71 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     } catch(e) { console.error(e); }
   };
 
+  // 💡 [성능 최적화] 낙관적 업데이트 적용: 화면을 먼저 수정하고 서버는 백그라운드에서 저장
+  const handleTaskOffsetUpdate = async (scheduleId: string, itemId: string, diffDays: number, newStartDate: string) => {
+    const schedule = schedules.find(s => s.id === scheduleId);
+    const workItem = (processSettings.masterItems || []).find(i => i.id === itemId);
+    if (!schedule || !workItem) return;
+
+    // 1. 고정 필드형 (Milestone) 처리
+    if (workItem.category === 'schedule_date' && workItem.scheduleField) {
+      const updates: any = { [workItem.scheduleField]: newStartDate };
+      
+      setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, ...updates } : s));
+      await updateDoc(doc(db, 'franchise_schedules', scheduleId), updates);
+      toast.success(`[${schedule.storeName}] ${workItem.text} 일정이 변경되었습니다.`);
+      return;
+    }
+
+    // 2. 태스크/체크리스트형 처리 (fixedDate 사용)
+    const currentData = (schedule as any).checklistData || {};
+    const itemData = currentData[itemId] || { status: 0 };
+
+    // 💡 [독립성 보장] 시작일만 변경하고 종료일은 기존 고정 데이터를 유지하거나 시작일과 동일하게 설정
+    const finalEndDate = itemData.fixedEndDate || (itemData.fixedDate ? itemData.fixedDate : newStartDate);
+
+    // 1. 로컬 상태 즉시 업데이트 (사용자는 딜레이를 느끼지 못함)
+    setSchedules(prev => prev.map(s => {
+      if (s.id === scheduleId) {
+        return {
+          ...s,
+          checklistData: {
+            ...currentData,
+            [itemId]: { ...itemData, fixedDate: newStartDate, fixedEndDate: finalEndDate }
+          }
+        };
+      }
+      return s;
+    }));
+
+    // 2. 서버 업데이트 (비동기 처리)
+    const updatedChecklistData = {
+      ...currentData,
+      [itemId]: { ...itemData, fixedDate: newStartDate, fixedEndDate: finalEndDate }
+    };
+
+    try {
+      // 메인 문서 업데이트
+      updateDoc(doc(db, 'franchise_schedules', scheduleId), { checklistData: updatedChecklistData });
+
+      // 관련 태스크 문서 검색 및 업데이트 (성능을 위해 await 제거)
+      const taskQuery = query(collection(db, 'department_tasks'), 
+        where('scheduleId', '==', scheduleId), 
+        where('title', '==', workItem.text)
+      );
+      getDocs(taskQuery).then(taskSnap => {
+        if (!taskSnap.empty) {
+          updateDoc(doc(db, 'department_tasks', taskSnap.docs[0].id), { dueDate: newStartDate });
+        }
+      });
+
+      await logActivity('매장 일정 개별 변경', `${schedule.storeName}: ${workItem.text} 이동`);
+    } catch (err) {
+      toast.error('일정 저장 중 오류가 발생했습니다.');
+      fetchData(true); // 실패 시에만 원복을 위해 재로드
+    }
+  };
+
   const handleArchive = async (id: string) => {
     const ok = await confirm({ title: '오픈 완료 및 보관', message: '오픈 완료 상태로 보관하시겠습니까?', confirmLabel: '보관하기', variant: 'danger' });
     if (!ok) return;
@@ -329,7 +412,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     } catch(e) { console.error(e); }
   };
 
-  // 💡 신규: 다음 호수 자동 추출 (에러 해결)
+  //  신규: 다음 호수 자동 추출 (에러 해결)
   const nextStoreNumber = useMemo(() => {
     const nums = schedules
       .map(s => parseInt((s.storeNumber || '').replace(/[^0-9]/g, ''), 10))
@@ -338,7 +421,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     return Math.max(...nums) + 1;
   }, [schedules]);
 
-  // 💡 세부일정 미입력 매장 감지 (사전교육 제외)
+  //  세부일정 미입력 매장 감지 (사전교육 제외)
   const missingSchedules = useMemo(() => {
     return schedules.filter(s =>
       !s.archived && s.storeName &&
@@ -348,12 +431,12 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     );
   }, [schedules]);
 
-  // 💡 도면 미입력 매장 감지
+  //  도면 미입력 매장 감지
   const missingDrawings = useMemo(() => {
     return schedules.filter(s => !s.archived && s.storeName && !s.finalDrawingPdfUrl);
   }, [schedules]);
 
-  // 💡 교육비 미입금 매장 감지
+  //  교육비 미입금 매장 감지
   const unpaidSchedules = useMemo(() => {
     return schedules.filter(s => {
       if (s.archived) return false;
@@ -403,7 +486,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     setShowAiModal(true);
   };
 
-  // 💡 미니 캘린더 렌더러
+  //  미니 캘린더 렌더러
   const renderMiniCalendar = () => {
     const year = pickerMonth.getFullYear();
     const month = pickerMonth.getMonth();
@@ -482,7 +565,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     const newMessages = [...chatMessages, { role: 'user' as const, text: rawInput || '엔터 (패스)' }];
     setChatMessages(newMessages);
 
-    // 💡 [핵심] 라이브 프리뷰 업데이트 (Draft Data)
+    //   라이브 프리뷰 업데이트 (Draft Data)
     let currentMode = chatMode;
     if (chatStep === 0) {
       if (rawInput.includes('신규') || rawInput.includes('1')) currentMode = 'CREATE';
@@ -559,7 +642,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
       return; // ❌ 에러가 있으면 다음 단계로 안 넘어감!
     }
 
-    // 💡 [핵심] UPDATE(변경) 모드 전용 채팅 플로우
+    //   UPDATE(변경) 모드 전용 채팅 플로우
     if (currentMode === 'UPDATE') {
       if (chatStep === 1) {
          setDraftData(newDraft);
@@ -619,7 +702,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     }
 
     let nextStep = chatStep + 1;
-    // 💡 핵심 분기: 자동 계산 모드면 6번(도면) 질문 이후 바로 18번(종료)으로 스킵!
+    //  핵심 분기: 자동 계산 모드면 6번(도면) 질문 이후 바로 18번(종료)으로 스킵!
     if (chatStep === 6 && isAutoCalc) {
       nextStep = 18;
     }
@@ -632,7 +715,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
       setTimeout(() => {
         let msgText = CHAT_QUESTIONS[nextStep];
         
-        // 💡 초도물품 입고일 질문 시 공사 종료일 안내 가이드 동적 삽입
+        //  초도물품 입고일 질문 시 공사 종료일 안내 가이드 동적 삽입
         if (nextStep === 15) {
           msgText += `\n\n💡 참고: 설정하신 공사 종료일은 [ ${newDraft.constructionEnd || '미정'} ] 입니다.`;
         }
@@ -652,7 +735,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     }
     setIsAiProcessing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenerativeAI(apiKey);
       const transcript = messages.map(m => `${m.role === 'bot' ? '질문' : '답변'}: ${m.text}`).join('\n');
       
       const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -749,7 +832,7 @@ ${transcript}`;
     }
   };
 
-  // 💡 라이브 프리뷰 (미니 캘린더) 렌더러
+  //  라이브 프리뷰 (미니 캘린더) 렌더러
   const renderLivePreview = () => {
     const baseDateStr = draftData.constructionStart || draftData.openDate || new Date().toISOString().split('T')[0];
     // pickerMonth와 동기화하여 현재 선택중인 달을 보여줍니다.
@@ -974,15 +1057,16 @@ ${transcript}`;
                    schedules={filteredSchedules}
                    currentMonth={currentMonth}
                    teams={teams}
+                   workItems={(processSettings.masterItems || []).filter(i => !i.isArchived)}
                    phaseVisibility={processSettings.phaseVisibility}
                    selectedDeptFilter={selectedDeptFilter}
                    onEditStore={(id) => { setChecklistSelectedStoreId(id); setViewTab('store'); }}
-                   onScheduleUpdate={async (id, data, logDetails) => { 
+                   onTaskOffsetUpdate={handleTaskOffsetUpdate}
+                   onScheduleUpdate={async (id, data, logDetails) => {
                      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-                     await updateDoc(doc(db, 'franchise_schedules', id), data); 
+                     await updateDoc(doc(db, 'franchise_schedules', id), data);
                      const s = schedules.find(x => x.id === id);
                      await logActivity('일정 변경', logDetails || `[${s?.storeName || '매장'}] 캘린더에서 일정 드래그 이동`);
-                     fetchData(true); 
                    }}
                 />
                 {monthsView === 2 && (
@@ -990,14 +1074,15 @@ ${transcript}`;
                      schedules={filteredSchedules}
                      currentMonth={new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)}
                      teams={teams}
+                     workItems={(processSettings.masterItems || []).filter(i => !i.isArchived)}
                      phaseVisibility={processSettings.phaseVisibility}
                      onEditStore={(id) => { setChecklistSelectedStoreId(id); setViewTab('store'); }}
-                     onScheduleUpdate={async (id, data, logDetails) => { 
+                     onTaskOffsetUpdate={handleTaskOffsetUpdate}
+                     onScheduleUpdate={async (id, data, logDetails) => {
                        setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-                       await updateDoc(doc(db, 'franchise_schedules', id), data); 
+                       await updateDoc(doc(db, 'franchise_schedules', id), data);
                        const s = schedules.find(x => x.id === id);
                        await logActivity('일정 변경', logDetails || `[${s?.storeName || '매장'}] 캘린더에서 일정 드래그 이동`);
-                       fetchData(true); 
                      }}
                   />
                 )}
@@ -1097,11 +1182,16 @@ ${transcript}`;
               {!showArchived && (
                 <div className="pb-10">
                    <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3">공정 타임라인 (Gantt)</h3>
-                   <ScheduleTimeline schedules={filteredSchedules} viewStartDate={timelineDates.start} viewEndDate={timelineDates.end} />
+                   <ScheduleTimeline
+                     schedules={filteredSchedules}
+                     viewStartDate={timelineDates.start}
+                     viewEndDate={timelineDates.end}
+                     workItems={(processSettings.masterItems || []).filter((i: WorkItem) => !i.isArchived)}
+                   />
                 </div>
               )}
-           </div>
-        )}
+            </div>
+          )}
         </>
       ) : (
         <OpenChecklistView
@@ -1116,11 +1206,10 @@ ${transcript}`;
             setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
             await updateDoc(doc(db, 'franchise_schedules', id), data);
             await logActivity('체크리스트 업데이트', `오픈 체크리스트 상세 항목 및 일정 동기화`);
-            fetchData(true);
           }}
           onUpdateMasterList={async (list) => {
-             setProcessSettings(prev => ({ ...prev, masterChecklist: list }));
-             await updateDoc(doc(db, 'process_settings', brandId), { masterChecklist: list });
+             setProcessSettings(prev => ({ ...prev, masterItems: list }));
+             await updateDoc(doc(db, 'process_settings', brandId), { masterItems: list });
           }}
         />
       )}
@@ -1149,6 +1238,7 @@ ${transcript}`;
           <StoreRegistrationModal
             brandId={brandId}
             teams={teams}
+            schedules={schedules}
             onClose={() => setShowStoreReg(false)}
             onCreated={(id) => {
               setShowStoreReg(false);
@@ -1269,9 +1359,7 @@ ${transcript}`;
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                     <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="">공사업체 선택 (또는 패스)</option>
-                      <option value="더원">더원</option>
-                      <option value="감리">감리</option>
-                      <option value="직접입력">직접입력</option>
+                      {sysConfig.constTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                   </div>
@@ -1280,8 +1368,7 @@ ${transcript}`;
                   <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                     <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                       <option value="">간판업체 선택 (또는 패스)</option>
-                      <option value="동영">동영</option>
-                      <option value="직접">직접</option>
+                      {sysConfig.signTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                   </div>
@@ -1290,10 +1377,7 @@ ${transcript}`;
                 <div className="flex gap-2 w-full p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                   <select value={chatInput || ''} onChange={e => { setChatInput(e.target.value); if(e.target.value) submitChat(e.target.value); }} className="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
                     <option value="">가스 종류 선택 (또는 패스)</option>
-                    <option value="LNG">LNG</option>
-                    <option value="LPG">LPG</option>
-                    <option value="미등록">미등록</option>
-                    <option value="직접입력">직접입력</option>
+                    {sysConfig.gasTypes.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <button onClick={() => submitChat(chatInput || '엔터 (패스)')} className="w-20 py-3 bg-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-300 transition-colors shadow-sm">패스</button>
                 </div>

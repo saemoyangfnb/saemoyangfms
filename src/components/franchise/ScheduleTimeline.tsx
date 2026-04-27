@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { FranchiseSchedule } from '../../types';
+import { FranchiseSchedule, WorkItem } from '../../types';
 import { diffDays, addDays } from '../../utils';
 
 interface Props {
   schedules: FranchiseSchedule[];
   viewStartDate: string;
   viewEndDate: string;
+  workItems?: WorkItem[];
 }
 
 const LABEL_WIDTH = 200; // px
@@ -17,10 +18,89 @@ const PHASES = [
   { key: 'training',     startKey: 'trainingStart',     endKey: 'trainingEnd',     label: '본사교육',    color: 'bg-blue-400 border-blue-500 text-blue-900' },
 ] as const;
 
-export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Props) {
+function addBusinessDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  const sign = days >= 0 ? 1 : -1;
+  let remaining = Math.abs(days);
+  while (remaining > 0) {
+    d.setDate(d.getDate() + sign);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return d;
+}
+
+function computeWorkItemDates(workItems: WorkItem[], schedule: FranchiseSchedule): Record<string, { start: string; end: string }> {
+  const pureDates: Record<string, { start: string; end: string }> = {};
+  let changed = true;
+  let pass = 0;
+  while (changed && pass < 50) {
+    changed = false;
+    pass++;
+    workItems.forEach(wt => {
+      if (pureDates[wt.id] || wt.dDayOffset === undefined) return;
+      const anchor = wt.anchorField || 'constructionStart';
+      let anchorDate = '';
+      if (anchor === 'constructionStart') anchorDate = schedule.constructionStart || '';
+      else if (anchor === 'constructionEnd') anchorDate = schedule.constructionEnd || '';
+      else anchorDate = pureDates[anchor]?.start || '';
+      if (!anchorDate) return;
+
+      const base = new Date(anchorDate);
+      const startD = wt.skipWeekends
+        ? addBusinessDays(base, wt.dDayOffset)
+        : (() => { const d = new Date(base); d.setDate(d.getDate() + wt.dDayOffset!); return d; })();
+      const startStr = startD.toISOString().split('T')[0];
+      let endStr = startStr;
+      if (wt.dDayEndOffset !== undefined && wt.dDayOffset !== undefined) {
+        const durDays = wt.dDayEndOffset - wt.dDayOffset;
+        if (durDays > 0) {
+          const endD = wt.skipWeekends
+            ? addBusinessDays(new Date(startStr), durDays)
+            : (() => { const d = new Date(startStr); d.setDate(d.getDate() + durDays); return d; })();
+          endStr = endD.toISOString().split('T')[0];
+        }
+      }
+      pureDates[wt.id] = { start: startStr, end: endStr };
+      changed = true;
+    });
+  }
+
+  // fixedDate override
+  const displayDates: Record<string, { start: string; end: string }> = { ...pureDates };
+  workItems.forEach(wt => {
+    const fixedDate = schedule.checklistData?.[wt.id]?.fixedDate;
+    if (!fixedDate) return;
+    const orig = pureDates[wt.id];
+    let endStr = fixedDate;
+    if (orig) {
+      const durMs = new Date(orig.end).getTime() - new Date(orig.start).getTime();
+      const durDays = Math.round(durMs / (1000 * 60 * 60 * 24));
+      if (durDays > 0) {
+        const endD = new Date(fixedDate);
+        endD.setDate(endD.getDate() + durDays);
+        endStr = endD.toISOString().split('T')[0];
+      }
+    }
+    displayDates[wt.id] = { start: fixedDate, end: endStr };
+  });
+
+  return displayDates;
+}
+
+// 태스크별 행 높이(px) — 각 매장 행 안에서 태스크 바를 세로로 쌓음
+const TASK_ROW_H = 26;
+const TASK_TOP_OFFSET = 4;
+
+export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workItems = [] }: Props) {
   const visibleSchedules = useMemo(() => schedules.filter(s => s.showInCalendar !== false), [schedules]);
   const totalDays = useMemo(() => Math.max(diffDays(viewStartDate, viewEndDate) + 1, 1), [viewStartDate, viewEndDate]);
   const timelineWidth = totalDays * DAY_WIDTH;
+
+  const calendarWorkItems = useMemo(() =>
+    workItems.filter(w => !w.isArchived && w.calendarVisible !== false && (w.category === 'task' || w.category === 'checklist')),
+    [workItems]
+  );
 
   const daysArray = useMemo(() =>
     Array.from({ length: totalDays }).map((_, i) => addDays(viewStartDate, i)),
@@ -39,6 +119,7 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
 
   return (
     <div className="overflow-x-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm">
+      {/* 헤더 */}
       <div className="flex sticky top-0 z-20 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 select-none">
         <div
           className="shrink-0 sticky left-0 z-30 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex items-center px-3 py-2 font-semibold text-xs text-slate-500"
@@ -75,16 +156,34 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
       ) : (
         visibleSchedules.map((schedule) => {
           const storeColor = schedule.colorCode || 'slate';
+
+          // 이 매장의 workItem 날짜 계산
+          const taskDates = calendarWorkItems.length > 0
+            ? computeWorkItemDates(calendarWorkItems, schedule)
+            : {};
+
+          // 보기 범위 안에 있는 태스크만 추출
+          const visibleTasks = calendarWorkItems.filter(wt => {
+            const d = taskDates[wt.id];
+            if (!d) return false;
+            return d.start <= viewEndDate && d.end >= viewStartDate;
+          });
+
+          const phaseRowH = 48;
+          const taskAreaH = visibleTasks.length > 0 ? (visibleTasks.length * TASK_ROW_H + TASK_TOP_OFFSET * 2) : 0;
+          const rowH = phaseRowH + taskAreaH;
+
           return (
             <div
               key={schedule.id}
               className="flex border-b border-slate-100 dark:border-slate-800 last:border-0"
             >
+              {/* 라벨 */}
               <div
-                className="shrink-0 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 px-3 py-2 flex flex-col justify-center gap-1"
-                style={{ width: LABEL_WIDTH, minHeight: 64 }}
+                className="shrink-0 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 px-3 py-2 flex flex-col justify-start gap-1"
+                style={{ width: LABEL_WIDTH, minHeight: rowH }}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-1">
                   <div className={`w-2 h-2 rounded-full bg-${storeColor}-500 shadow-sm`} />
                   <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">{schedule.storeName}</span>
                 </div>
@@ -95,10 +194,12 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                 )}
               </div>
 
+              {/* 타임라인 영역 */}
               <div
                 className="relative"
-                style={{ width: timelineWidth, minHeight: 64, flexShrink: 0 }}
+                style={{ width: timelineWidth, minHeight: rowH, flexShrink: 0 }}
               >
+                {/* 날짜 배경 그리드 */}
                 <div className="absolute inset-0 flex pointer-events-none">
                   {daysArray.map((day) => {
                     const d = new Date(day + 'T00:00:00');
@@ -114,6 +215,7 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                   })}
                 </div>
 
+                {/* 오늘 선 */}
                 {todayIdx >= 0 && (
                   <div
                     className="absolute top-0 bottom-0 z-10 pointer-events-none"
@@ -125,6 +227,7 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                   />
                 )}
 
+                {/* 레거시 페이즈 바 (공사/사전교육/본사교육) */}
                 {PHASES.map((phase) => {
                   const schedAny = schedule as unknown as Record<string, string>;
                   const start = schedAny[phase.startKey];
@@ -137,7 +240,6 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                   const w  = x2 - x;
                   if (w <= 2) return null;
 
-                  // 매장 고유 색상을 바의 배경색으로 활용
                   const bgClass = `bg-${storeColor}-500/80`;
                   const borderClass = `border-${storeColor}-600`;
 
@@ -153,32 +255,34 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                   );
                 })}
 
+                {/* 커스텀 페이즈 */}
                 {(schedule.customPhases || []).map((cp) => {
-                   const start = cp.startDate;
-                   const end = cp.endDate || cp.startDate;
-                   if (!start || !end) return null;
-                   if (start > viewEndDate || end < viewStartDate) return null;
+                  const start = cp.startDate;
+                  const end = cp.endDate || cp.startDate;
+                  if (!start || !end) return null;
+                  if (start > viewEndDate || end < viewStartDate) return null;
 
-                   const x  = dateToX(start);
-                   const x2 = dateToX(end) + DAY_WIDTH;
-                   const w  = x2 - x;
-                   if (w <= 2) return null;
-                   
-                   const isShort = cp.type === '단기';
-                   const bg = isShort ? 'z-20 border-2' : 'z-10 bg-slate-100 dark:bg-slate-800 opacity-60';
-                   
-                   return (
-                     <div
-                       key={cp.id}
-                       className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 shadow-sm ${bg}`}
-                       style={{ left: x, width: w - 2, top: 8 }}
-                       title={`${cp.name}: ${start} ${isShort ? '' : '~ ' + end}`}
-                     >
-                       {w > 44 && <span className="truncate">📌 {cp.name}</span>}
-                     </div>
-                   );
+                  const x  = dateToX(start);
+                  const x2 = dateToX(end) + DAY_WIDTH;
+                  const w  = x2 - x;
+                  if (w <= 2) return null;
+
+                  const isShort = cp.type === '단기';
+                  const bg = isShort ? 'z-20 border-2' : 'z-10 bg-slate-100 dark:bg-slate-800 opacity-60';
+
+                  return (
+                    <div
+                      key={cp.id}
+                      className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 shadow-sm ${bg}`}
+                      style={{ left: x, width: w - 2, top: 8 }}
+                      title={`${cp.name}: ${start} ${isShort ? '' : '~ ' + end}`}
+                    >
+                      {w > 44 && <span className="truncate">📌 {cp.name}</span>}
+                    </div>
+                  );
                 })}
 
+                {/* 오픈일 마커 */}
                 {schedule.openDate &&
                   schedule.openDate >= viewStartDate &&
                   schedule.openDate <= viewEndDate && (
@@ -190,6 +294,35 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate }: Prop
                     🎉
                   </div>
                 )}
+
+                {/* WorkItem 태스크 바 */}
+                {visibleTasks.map((wt, idx) => {
+                  const d = taskDates[wt.id]!;
+                  const x  = dateToX(d.start);
+                  const x2 = dateToX(d.end) + DAY_WIDTH;
+                  const w  = Math.max(x2 - x, DAY_WIDTH);
+                  const top = phaseRowH + TASK_TOP_OFFSET + idx * TASK_ROW_H;
+
+                  // 완료 상태 확인
+                  const taskStatus = (schedule.checklistData as any)?.[wt.id]?.status ?? 0;
+                  const isDone = taskStatus === 3;
+
+                  return (
+                    <div
+                      key={wt.id}
+                      className={`absolute rounded text-[10px] font-bold flex items-center px-2 overflow-hidden shadow-sm border transition-opacity
+                        ${isDone
+                          ? 'bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300'
+                          : 'bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300'
+                        }`}
+                      style={{ left: x, width: w - 2, top, height: TASK_ROW_H - 4 }}
+                      title={`${wt.text}: ${d.start}${d.end !== d.start ? ' ~ ' + d.end : ''}`}
+                    >
+                      {isDone && <span className="mr-1 shrink-0">✓</span>}
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis">{wt.text}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

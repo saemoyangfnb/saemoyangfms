@@ -16,6 +16,41 @@ npm run lint     # ESLint 검사
 
 배포는 GitHub push → Vercel 자동 배포 (`Joyj9331/dalbitgo_calculator` → `dalbitgo-calculator.vercel.app`)
 
+## 배포 절차 (반드시 준수)
+
+코드 수정 후 배포할 때는 아래 순서를 **항상** 따른다.
+
+### 1. 빌드 확인 (필수)
+```bash
+npm run build
+```
+오류 없이 `✓ built` 가 나와야 다음 단계로 진행.
+
+### 2. 변경 파일만 선택적으로 스테이징
+```bash
+git add src/ package.json package-lock.json
+```
+- `git add .` 또는 `git add -A` **절대 사용 금지** — 불필요한 파일이 딸려 올라감
+- **절대 포함하면 안 되는 파일/폴더:**
+  - `src/AdminPanel.tsx` (루트 중복 파일, 실제 소스는 `src/components/AdminPanel.tsx`)
+  - `src/ScheduleFormModal.tsx` (루트 중복 파일)
+  - `src/components/franchise/types.ts` (루트 `src/types.ts`와 중복)
+  - `src/components/marketing/myExcel (1).csv` / `src/myExcel (1).csv` (데이터 파일)
+  - `dalbitgo-review/` (Python 봇 서브모듈 — 별도 관리)
+  - `dist/` (빌드 산출물)
+
+### 3. 커밋 & 푸시
+```bash
+git commit -m "feat: 변경 내용 요약"
+git push origin main
+```
+push 후 Vercel이 자동으로 1~2분 안에 배포 완료.
+
+### 핵심 원칙
+- **데이터(Firestore)는 배포와 무관** — 코드 배포가 실제 매장 데이터에 영향을 주지 않는다.
+- 배포 전 반드시 `npm run build` 성공을 확인한다.
+- 의심스러운 파일은 `git diff --name-only HEAD` 또는 `git status`로 먼저 확인한다.
+
 ## 기술 스택
 
 - **프론트엔드**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4

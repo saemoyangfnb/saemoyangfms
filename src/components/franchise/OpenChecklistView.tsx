@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Search, Printer, Plus, FileText, UploadCloud, Info, CheckCircle2, X, Eye, EyeOff, Lock, Unlock, CalendarDays, Clock, AlertTriangle, CheckCheck, Calendar, CheckSquare, Target, LayoutList, ListTodo, LayoutGrid } from 'lucide-react';
-import { FranchiseSchedule, FileAttachment, Department, WorkItem, DepartmentTask, DepartmentTaskStatus, User } from '../../types';
+import { ArrowLeft, Search, Printer, Plus, FileText, UploadCloud, Info, CheckCircle2, X, Eye, EyeOff, Lock, Unlock, CheckSquare, Loader2, Clock } from 'lucide-react';
+import { FranchiseSchedule, FileAttachment, Department, WorkItem, User, DepartmentTask, DepartmentTaskStatus } from '../../types';
 import { ProcessSettings } from './ProcessMasterModal';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import { uploadBytes, ref, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage, db, salesDb } from '../../firebase';
-import { doc, getDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, updateDoc, query, where } from 'firebase/firestore';
 
 interface Props {
   schedules?: FranchiseSchedule[];
@@ -18,6 +18,19 @@ interface Props {
   onUpdateProgress?: (scheduleId: string, checkId: string, isCustom: boolean, current: boolean) => void;
   onUpdateSchedule?: (scheduleId: string, data: Partial<FranchiseSchedule>) => Promise<void>;
   onUpdateMasterList?: (list: any[]) => Promise<void>;
+}
+
+// 주말(토·일)을 건너뛰며 n 영업일 후 날짜를 반환
+function addBusinessDays(startDate: Date, days: number): Date {
+  const d = new Date(startDate);
+  const sign = days >= 0 ? 1 : -1;
+  let remaining = Math.abs(days);
+  while (remaining > 0) {
+    d.setDate(d.getDate() + sign);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return d;
 }
 
 const STATUS_STAGES = [
@@ -41,6 +54,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
   const [currentTab, setCurrentTab] = useState<'active' | 'completed'>('active');
   
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [storeTasks, setStoreTasks] = useState<DepartmentTask[]>([]);
   const [uploadingItem, setUploadingItem] = useState<string | null>(null);
   
   const [unlockedItems, setUnlockedItems] = useState<Record<string, boolean>>({});
@@ -48,7 +62,11 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
   const [adminPwdInput, setAdminPwdInput] = useState('');
   const [actualAdminPwd, setActualAdminPwd] = useState('1234');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('all');
-  const [storeTasks, setStoreTasks] = useState<DepartmentTask[]>([]);
+
+  // ? 아이콘 — 매뉴얼 설명 모달
+  const [descModal, setDescModal] = useState<{ itemId: string; text: string; desc: string } | null>(null);
+  const [descEdit, setDescEdit] = useState('');
+  const [hoveredDescId, setHoveredDescId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPwd = async () => {
@@ -63,13 +81,46 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
   }, []);
 
   
-  // 💡 부서 정보 실시간 로드
+  // 매뉴얼 설명 저장
+  const saveDescription = async () => {
+    if (!descModal || !onUpdateMasterList) return;
+    const masterItems = processSettings.masterItems || [];
+    const updated = masterItems.map((m: WorkItem) =>
+      m.id === descModal.itemId ? { ...m, description: descEdit } : m
+    );
+    await onUpdateMasterList(updated);
+    toast.success('매뉴얼이 저장되었습니다.');
+    setDescModal(null);
+  };
+
+  const deleteDescription = async () => {
+    if (!descModal || !onUpdateMasterList) return;
+    const masterItems = processSettings.masterItems || [];
+    const updated = masterItems.map((m: WorkItem) =>
+      m.id === descModal.itemId ? { ...m, description: '' } : m
+    );
+    await onUpdateMasterList(updated);
+    toast.success('매뉴얼이 삭제되었습니다.');
+    setDescModal(null);
+  };
+
+  //  부서 정보 실시간 로드
   useEffect(() => {
     const unsub = onSnapshot(collection(salesDb, 'departments'), snap => {
       setDbDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
     });
     return () => unsub();
   }, []);
+
+  // 매장별 실제 태스크 데이터 로드 (실제 DB 연동)
+  useEffect(() => {
+    if (!selectedStoreId) { setStoreTasks([]); return; }
+    const q = query(collection(salesDb, 'department_tasks'), where('scheduleId', '==', selectedStoreId));
+    const unsub = onSnapshot(q, snap => {
+      setStoreTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask)));
+    });
+    return () => unsub();
+  }, [selectedStoreId]);
 
   // 캘린더에서 매장 선택 시 자동 선택
   useEffect(() => {
@@ -78,20 +129,6 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
       onClearInitialStore?.();
     }
   }, [initialSelectedStoreId]);
-
-  // 선택 매장의 D-day 태스크 로드
-  useEffect(() => {
-    if (!selectedStoreId) { setStoreTasks([]); return; }
-    getDocs(query(collection(salesDb, 'department_tasks'), where('scheduleId', '==', selectedStoreId)))
-      .then(snap => setStoreTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask))))
-      .catch(() => {});
-  }, [selectedStoreId]);
-
-  const handleTaskStatusChange = async (taskId: string, status: DepartmentTaskStatus) => {
-    const now = new Date().toISOString();
-    setStoreTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
-    await updateDoc(doc(salesDb, 'department_tasks', taskId), { status, updatedAt: now });
-  };
 
   const activeChecklist = useMemo(() =>
     (processSettings?.masterItems || [])
@@ -107,6 +144,11 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
     [processSettings?.masterItems]
   );
 
+  const activeTaskItems = useMemo(() =>
+    (processSettings?.masterItems || [])
+      .filter(item => item.category === 'task' && !item.isArchived),
+    [processSettings?.masterItems]
+  );
   const filteredStores = schedules
     .filter(s => s.storeName.includes(searchQuery) && (currentTab === 'active' ? !s.archived : s.archived))
     .sort((a, b) => {
@@ -116,7 +158,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
     });
   const selectedStore = schedules?.find(s => s.id === selectedStoreId);
 
-  // 💡 [핵심] 모든 항목을 하나의 리스트로 통합 및 정렬
+  //   모든 항목을 하나의 리스트로 통합 및 정렬
   const unifiedList = useMemo(() => {
     if (!selectedStore) return [];
     
@@ -140,52 +182,104 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
       items.push({
         ...wc,
         uType: 'check',
-        uDate: data.note3 || '', // 날짜 메모가 있으면 날짜로 취급
+        uDate: wc.inputType === 'password' ? '' : (data.note3 || ''),
         uStatus: data.status,
       });
     });
 
-    // 3. D-day 태스크 추가 (Collection)
-    storeTasks.forEach(task => {
+    // 3. 태스크 날짜 의존성 체인 계산
+    // anchorField = 'constructionStart' | 'constructionEnd' | 다른 태스크 ID
+    const taskDates: Record<string, string> = {};
+    const taskEndDates: Record<string, string> = {};
+
+    const calcTaskDate = (anchorDate: string, offset: number, skipWeekends?: boolean): string => {
+      if (!anchorDate) return '';
+      const base = new Date(anchorDate);
+      const result = skipWeekends ? addBusinessDays(base, offset) : (() => { const d = new Date(base); d.setDate(d.getDate() + offset); return d; })();
+      return result.toISOString().split('T')[0];
+    };
+
+    // 의존성 순서대로 반복 계산 (최대 50회 — 순환 방지)
+    let changed = true;
+    let pass = 0;
+    while (changed && pass < 50) {
+      changed = false;
+      pass++;
+      activeTaskItems.forEach(wt => {
+        if (taskDates[wt.id] !== undefined) return;
+        const anchor = wt.anchorField || 'constructionStart';
+        let anchorDate = '';
+        if (anchor === 'constructionStart') anchorDate = selectedStore.constructionStart || '';
+        else if (anchor === 'constructionEnd') anchorDate = selectedStore.constructionEnd || '';
+        else anchorDate = taskDates[anchor] || '';
+
+        if (!anchorDate || wt.dDayOffset === undefined) return;
+        taskDates[wt.id] = calcTaskDate(anchorDate, wt.dDayOffset, wt.skipWeekends);
+        if (wt.dDayEndOffset !== undefined) {
+          taskEndDates[wt.id] = calcTaskDate(anchorDate, wt.dDayEndOffset, wt.skipWeekends);
+        }
+        changed = true;
+      });
+    }
+
+    activeTaskItems.forEach(wt => {
+      const realTask = storeTasks.find(t => t.title === wt.text);
+      const statusMap: Record<DepartmentTaskStatus, number> = { pending: 0, in_progress: 2, done: 3, blocked: 0 };
+      // 드래그로 저장된 fixedDate가 있으면 우선 사용 (캘린더와 동기화)
+      const fixedDate = (selectedStore.checklistData as any)?.[wt.id]?.fixedDate;
+      const calcStart = taskDates[wt.id] || '';
+      const calcEnd = taskEndDates[wt.id] || '';
+      const displayStart = fixedDate || calcStart;
+      let displayEnd = calcEnd;
+      if (fixedDate && calcStart && calcEnd && calcStart !== calcEnd) {
+        const durMs = new Date(calcEnd).getTime() - new Date(calcStart).getTime();
+        const endD = new Date(fixedDate);
+        endD.setTime(endD.getTime() + durMs);
+        displayEnd = endD.toISOString().split('T')[0];
+      } else if (fixedDate) {
+        displayEnd = fixedDate;
+      }
+
       items.push({
-        id: task.id,
-        text: task.title,
-        category: 'task',
+        ...wt,
         uType: 'task',
-        uDate: task.dueDate,
-        uStatus: task.status === 'done' ? 3 : task.status === 'in_progress' ? 2 : 0,
-        departmentId: task.departmentId,
-        originalTask: task
+        uDate: displayStart,
+        uEndDate: displayEnd,
+        uStatus: realTask ? statusMap[realTask.status] : ((selectedStore.checklistData as any)?.[wt.id]?.status ?? 0),
+        uNote: realTask?.note || '',
+        realTaskId: realTask?.id // 실제 DB 수정을 위해 ID 보관
       });
     });
 
-    // 정렬 로직: 부서 필터링 후, (마감임박/과거날짜순 -> 미정 항목순)
-    return items
-      .filter(i => {
-        if (selectedDeptFilter === 'all') return true;
-        const ids: string[] = i.departmentIds?.length ? i.departmentIds : (i.departmentId ? [i.departmentId] : []);
-        return ids.includes(selectedDeptFilter);
-      })
-      .sort((a, b) => {
-        if (!a.uDate && b.uDate) return 1;
-        if (a.uDate && !b.uDate) return -1;
-        return (a.uDate || '').localeCompare(b.uDate || '');
-      });
-  }, [selectedStore, activeChecklist, activeScheduleDates, storeTasks, selectedDeptFilter]);
+    // 날짜로 정렬하지 않음 — 원래 등록 순서(order) 유지, 날짜는 참고 표기
+    return items.filter(i => {
+      if (selectedDeptFilter === 'all') return true;
+      const ids: string[] = i.departmentIds?.length ? i.departmentIds : (i.departmentId ? [i.departmentId] : []);
+      return ids.includes(selectedDeptFilter);
+    });
+  }, [selectedStore, activeChecklist, activeScheduleDates, activeTaskItems, selectedDeptFilter]);
 
   const getStoreData = (store: FranchiseSchedule) => (store as any).checklistData || {};
 
-  // 💡 [Step 4] 양방향 동기화 엔진 개선
+  //   양방향 동기화 엔진 개선
   const handleUpdateItem = (itemId: string, field: string, value: any, workItem: WorkItem) => {
     if (!selectedStore || !onUpdateSchedule) return;
     const currentData = getStoreData(selectedStore);
-    const itemData = currentData[itemId] || { status: 0 };
     
+    // 태스크인 경우 별도 컬렉션 업데이트
+    if (workItem.category === 'task' && (workItem as any).realTaskId) {
+       if (field === 'note1') {
+         updateDoc(doc(salesDb, 'department_tasks', (workItem as any).realTaskId), { note: value, updatedAt: new Date().toISOString() });
+       }
+       return; // checklistData 업데이트는 건너뜀 (또는 필요시 병행)
+    }
+
+    const itemData = currentData[itemId] || { status: 0 };
     const updates: any = {
       checklistData: { ...currentData, [itemId]: { ...itemData, [field]: value } }
     };
 
-    // 💡 [핵심] 마스터 설정 기반 syncToField 동기화 (날짜 메모 변경 시)
+    //   마스터 설정 기반 syncToField 동기화 (날짜 메모 변경 시)
     if (field === 'note3' && workItem.syncToField) {
       updates[workItem.syncToField] = value;
       // 기간 데이터인 경우 End 필드도 함께 업데이트 시도
@@ -195,7 +289,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
       }
     }
     
-    // 💡 기존 하드코딩된 예외 케이스 처리 (인원 등)
+    //  기존 하드코딩된 예외 케이스 처리 (인원 등)
     if (workItem.inputType === 'training_payment' && field === 'note7') {
       updates.preTrainingParticipants = parseInt(String(value).replace('명','')) || 0;
     } else if (workItem.inputType === 'training_payment' && field === 'note1') {
@@ -205,8 +299,32 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
     onUpdateSchedule(selectedStore.id, updates);
   };
 
-  const cycleStatus = (itemId: string, workItem: WorkItem) => {
+  const handleTaskStatusChange = async (taskId: string, currentStatus: number) => {
+    const statusCycle: DepartmentTaskStatus[] = ['pending', 'in_progress', 'done', 'blocked'];
+    const currentStatusKey = statusCycle.find(s => {
+       if (s === 'pending') return currentStatus === 0;
+       if (s === 'in_progress') return currentStatus === 2;
+       if (s === 'done') return currentStatus === 3;
+       return false;
+    }) || 'pending';
+    
+    const nextIndex = (statusCycle.indexOf(currentStatusKey) + 1) % statusCycle.length;
+    const nextStatus = statusCycle[nextIndex];
+
+    await updateDoc(doc(salesDb, 'department_tasks', taskId), { 
+      status: nextStatus, 
+      updatedAt: new Date().toISOString(),
+      completedBy: nextStatus === 'done' ? (currentUser?.name || '알 수 없음') : null,
+      completedAt: nextStatus === 'done' ? new Date().toISOString() : null
+    });
+  };
+
+  const cycleStatus = async (itemId: string, workItem: WorkItem) => {
     if (!selectedStore) return;
+    if (workItem.category === 'task' && (workItem as any).realTaskId) {
+       handleTaskStatusChange((workItem as any).realTaskId, (workItem as any).uStatus);
+       return;
+    }
     const currentData = getStoreData(selectedStore);
     const currentStatus = currentData[itemId]?.status || 0;
     const nextStatus = (currentStatus + 1) % STATUS_STAGES.length;
@@ -275,8 +393,9 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
         checklistData: { ...currentData, [itemId]: newItemData } 
       };
 
-      // 💡 [Step 4] 도면(item_18) 메인 필드 양방향 동기화
-      if (itemId === 'item_18') {
+      //   Metadata 기반 도면 연동 (Hardcoded ID 제거)
+      const workItem = activeChecklist.find(i => i.id === itemId);
+      if (workItem?.systemAction === 'drawing_upload') {
         updates.finalDrawingPdfs = newFiles;
         updates.finalDrawingPdfUrl = newFiles[0].url;
         updates.progressCheck = { ...(selectedStore.progressCheck || {}), drawingUpload: true };
@@ -292,6 +411,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
   };
 
   return (
+    <>
     <div className="h-[calc(100vh-120px)] min-h-0 flex gap-3 md:gap-6 animate-in fade-in duration-300 relative print:h-auto print:block print:bg-white">
 
       {/* 왼쪽: 매장 리스트 패널 — 모바일: 전체 / PC: 고정 사이드바 */}
@@ -304,7 +424,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                  <Plus size={12} /> 신규
                </button>
              )}
-          </div>
+                                  </div>
           <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg mb-3">
             <button onClick={() => { setCurrentTab('active'); setSelectedStoreId(null); }} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentTab === 'active' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}>진행 중</button>
             <button onClick={() => { setCurrentTab('completed'); setSelectedStoreId(null); }} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${currentTab === 'completed' ? 'bg-white dark:bg-slate-700 text-slate-800 shadow-sm' : 'text-slate-500'}`}>완료</button>
@@ -388,57 +508,38 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
             </div>
 
             {/* ── 통합 스크롤 뷰 ── */}
-            <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-900 print:overflow-visible print:h-auto divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 print:overflow-visible print:h-auto p-3 space-y-2">
               {unifiedList.length === 0 ? (
                 <div className="py-20 text-center text-slate-400 font-bold">
                   {selectedDeptFilter === 'all' ? '등록된 항목이 없습니다.' : '선택한 부서의 항목이 없습니다.'}
                 </div>
               ) : (
                 unifiedList.map((item) => {
-                  const dept = dbDepartments.find(d => d.id === item.departmentId);
-                  const itemData = item.uType === 'check' ? (getStoreData(selectedStore)[item.id] || { status: 0 }) : { status: 0 };
-                  const statusObj = STATUS_STAGES[itemData.status ?? 0];
+                  const itemData = (item.uType === 'check' || item.uType === 'task')
+                    ? (getStoreData(selectedStore)[item.id] || { status: 0 })
+                    : { status: 0 };
+                  const statusIdx = item.uStatus ?? itemData.status ?? 0;
+                  const statusObj = STATUS_STAGES[statusIdx];
+                  const isDone = statusIdx === 3;
                   const timeOptions = () => Array.from({length: 14}, (_, i) => {
                     const time = String(i + 9).padStart(2, '0') + ':00';
                     return <option key={time} value={time}>{time}</option>;
                   });
 
-                  // 상태/액션 버튼
-                  let actionButton = null;
-                  if (item.uType === 'date') {
-                    const schedField = item.scheduleField as keyof FranchiseSchedule | undefined;
-                    const currentValue = schedField ? (selectedStore as any)[schedField] || '' : '';
-                    actionButton = (
-                      <input type="date" value={currentValue}
-                        onChange={e => schedField && onUpdateSchedule(selectedStore!.id, { [schedField]: e.target.value } as any)}
-                        className="text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 font-bold focus:outline-none focus:border-blue-500 transition-colors"
-                      />
-                    );
-                  } else if (item.uType === 'task') {
-                    const taskStatuses: DepartmentTaskStatus[] = ['pending', 'in_progress', 'done', 'blocked'];
-                    const curIdx = taskStatuses.indexOf(item.originalTask.status);
-                    const nextStatus = taskStatuses[(curIdx + 1) % taskStatuses.length];
-                    const canEdit = currentUser?.role === 'admin' || (currentUser?.departmentIds || []).includes(item.departmentId);
-                    const taskStatusClass = item.originalTask.status === 'done' ? STATUS_STAGES[3].class : item.originalTask.status === 'in_progress' ? STATUS_STAGES[2].class : STATUS_STAGES[0].class;
-                    const taskStatusLabel = item.originalTask.status === 'done' ? '완료' : item.originalTask.status === 'in_progress' ? '진행중' : '미진행';
-                    actionButton = (
-                      <button onClick={() => canEdit ? handleTaskStatusChange(item.id, nextStatus) : toast.error('권한이 없습니다.')}
-                        className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-tighter whitespace-nowrap min-w-[64px] ${taskStatusClass}`}>
-                        {taskStatusLabel}
-                      </button>
-                    );
-                  } else {
-                    actionButton = (
+                  // 상태 토글 버튼 (왼쪽 배치)
+                  let statusButton = null;
+                  if (item.uType !== 'date') {
+                    statusButton = (
                       <button onClick={() => cycleStatus(item.id, item)}
-                        className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-tighter whitespace-nowrap min-w-[64px] ${statusObj.class}`}>
+                        className={`shrink-0 px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-tighter whitespace-nowrap min-w-[64px] ${statusObj.class}`}>
                         {statusObj.label}
                       </button>
                     );
                   }
 
-                  // 체크리스트 입력 UI
+                  // 체크리스트 / 태스크 입력 UI
                   let inputHtml = null;
-                  if (item.uType === 'check') {
+                  if (item.uType === 'check' || item.uType === 'task') {
                     if (item.inputType === 'file' || item.inputType === 'email') {
                       const attachedFiles = getItemFiles(itemData);
                       inputHtml = (
@@ -449,7 +550,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                               <>
                                 <input type="file" id={`file-${item.id}`} className="hidden" multiple onChange={(e) => handleFileUpload(e, item.id)} />
                                 <label htmlFor={`file-${item.id}`} className="shrink-0 p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg cursor-pointer transition-colors print:hidden">
-                                  {uploadingItem === item.id ? <span className="animate-spin inline-block text-sm">⏳</span> : <UploadCloud size={15} />}
+                                  {uploadingItem === item.id ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
                                 </label>
                               </>
                             )}
@@ -527,7 +628,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                               <input type="text" placeholder="메모 입력" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
                               <input type="file" id={`file-${item.id}`} className="hidden" multiple onChange={(e) => handleFileUpload(e, item.id)} />
                               <label htmlFor={`file-${item.id}`} className="shrink-0 p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded cursor-pointer transition-colors print:hidden">
-                                {uploadingItem === item.id ? <span className="animate-spin inline-block text-sm">⏳</span> : <UploadCloud size={15} />}
+                                {uploadingItem === item.id ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
                               </label>
                             </div>
                           </div>
@@ -565,7 +666,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                           <div className="flex flex-col md:flex-row md:items-center gap-2 w-full animate-in fade-in slide-in-from-top-1">
                             <input type="text" placeholder="접속 아이디" className="flex-1 w-full md:w-32 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800 font-bold" value={itemData.note2 || ''} onChange={e => handleUpdateItem(item.id, 'note2', e.target.value, item)} />
                             <div className="relative flex-1 w-full md:w-32 min-w-0">
-                              <input type="text" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note3 || ''} onChange={e => handleUpdateItem(item.id, 'note3', e.target.value, item)} />
+                              <input type="password" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note3 || ''} onChange={e => handleUpdateItem(item.id, 'note3', e.target.value, item)} />
                               <button onClick={() => setUnlockedItems(p => ({...p, [item.id]: false}))} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 print:hidden"><Unlock size={14} /></button>
                             </div>
                             <input type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
@@ -637,23 +738,86 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                     }
                   }
 
+                  // D-day 뱃지 계산
+                  const today = new Date().toISOString().split('T')[0];
+                  let dDayBadge = null;
+                  if (item.uType === 'task' && item.uDate) {
+                    const diff = Math.round((new Date(item.uDate).getTime() - new Date(today).getTime()) / 86400000);
+                    const badgeColor = isDone ? 'bg-emerald-100 text-emerald-600' : diff < 0 ? 'bg-rose-100 text-rose-600' : diff === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500';
+                    const label = isDone ? '완료' : diff === 0 ? 'D-Day' : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
+                    dDayBadge = <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${badgeColor}`}>{label}</span>;
+                  }
+
+                  // ? 매뉴얼 아이콘
+                  const masterItem = (processSettings.masterItems || []).find((m: WorkItem) => m.id === item.id);
+                  const itemDesc = masterItem?.description || '';
+                  const qIcon = (
+                    <div className="relative shrink-0 print:hidden">
+                      <button
+                        onMouseEnter={() => setHoveredDescId(item.id)}
+                        onMouseLeave={() => setHoveredDescId(null)}
+                        onDoubleClick={() => {
+                          setDescModal({ itemId: item.id, text: item.text, desc: itemDesc });
+                          setDescEdit(itemDesc);
+                        }}
+                        className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 hover:bg-blue-100 hover:text-blue-500 flex items-center justify-center text-[10px] font-black border border-slate-200 dark:border-slate-600 transition-colors"
+                        title="더블클릭으로 매뉴얼 편집"
+                      >?</button>
+                      {hoveredDescId === item.id && (
+                        <div className="absolute top-full right-0 mt-1.5 z-50 w-64 bg-slate-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl pointer-events-none">
+                          <div className="absolute bottom-full right-3 border-4 border-transparent border-b-slate-800" />
+                          {itemDesc ? (
+                            <p className="whitespace-pre-wrap leading-relaxed">{itemDesc}</p>
+                          ) : (
+                            <p className="text-slate-400 italic">매뉴얼이 없습니다. 더블클릭으로 등록하세요.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+
                   return (
-                    <div key={`${item.uType}-${item.id}`} className="p-4 flex flex-col gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 shrink-0">
-                          {item.uType === 'date' ? <CalendarDays size={16} className="text-blue-500" /> : item.uType === 'task' ? <Clock size={16} className="text-amber-500" /> : <CheckSquare size={16} className="text-emerald-500" />}
-                        </div>
+                    <div key={`${item.uType}-${item.id}`}
+                      className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                      {/* 카드 상단: 상태버튼(왼) + 제목/날짜 + D-day뱃지(우) */}
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        {/* 상태 버튼 — 왼쪽 */}
+                        {statusButton}
+
+                        {/* 제목 + 날짜 */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{item.text}</p>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            {dept && <span className="text-[9px] px-1.5 py-0.5 rounded font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{dept.name}</span>}
-                            {item.uDate && <span className="text-[10px] text-slate-400 font-bold flex items-center gap-0.5"><CalendarDays size={10} /> {item.uDate}</span>}
-                            {item.uType === 'task' && item.originalTask?.dDayOffset !== undefined && <span className="text-[10px] text-rose-500 font-black">D{item.originalTask.dDayOffset >= 0 ? '+' : ''}{item.originalTask.dDayOffset}</span>}
-                          </div>
+                          <p className="text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">
+                            {item.text}
+                          </p>
+                          {item.uDate && (
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {item.uDate}{item.uEndDate ? ` ~ ${item.uEndDate}` : ''}
+                            </p>
+                          )}
                         </div>
-                        <div className="shrink-0">{actionButton}</div>
+
+                        {/* 오른쪽: D-day 뱃지 or 날짜 입력 + ? 아이콘 */}
+                        <div className="flex items-center gap-1.5">
+                          {item.uType === 'date' ? (() => {
+                            const schedField = item.scheduleField as keyof FranchiseSchedule | undefined;
+                            const currentValue = schedField ? (selectedStore as any)[schedField] || '' : '';
+                            return (
+                              <input type="date" value={currentValue}
+                                onChange={e => schedField && onUpdateSchedule(selectedStore!.id, { [schedField]: e.target.value } as any)}
+                                className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 font-bold focus:outline-none focus:border-blue-500"
+                              />
+                            );
+                          })() : dDayBadge}
+                          {qIcon}
+                        </div>
                       </div>
-                      {inputHtml && <div className="ml-7">{inputHtml}</div>}
+
+                      {/* 입력 영역 */}
+                      {inputHtml && (
+                        <div className="px-4 pb-3 border-t border-slate-100 dark:border-slate-800">
+                          <div className="pt-3">{inputHtml}</div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -669,5 +833,52 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
         )}
       </div>
     </div>
+
+    {/* 매뉴얼 편집 모달 */}
+
+    {descModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <p className="text-[10px] text-slate-400 mb-0.5">업무 매뉴얼</p>
+              <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 leading-snug">{descModal.text}</h3>
+            </div>
+            <button onClick={() => setDescModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="px-5 py-4">
+            <textarea
+              value={descEdit}
+              onChange={e => setDescEdit(e.target.value)}
+              placeholder="이 업무를 어떻게 처리하는지 매뉴얼을 작성해주세요..."
+              rows={6}
+              className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"
+            />
+          </div>
+          <div className="flex items-center gap-2 px-5 pb-4">
+            {currentUser?.role === 'admin' && descModal.desc && (
+              <button onClick={deleteDescription}
+                className="px-3 py-2 rounded-lg text-xs font-bold text-rose-600 border border-rose-200 hover:bg-rose-50 transition-colors">
+                삭제
+              </button>
+            )}
+            <div className="flex-1" />
+            <button onClick={() => setDescModal(null)}
+              className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              취소
+            </button>
+            {currentUser?.role === 'admin' && (
+              <button onClick={saveDescription}
+                className="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                저장
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
