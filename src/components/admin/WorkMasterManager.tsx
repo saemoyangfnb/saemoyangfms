@@ -153,9 +153,10 @@ function SortableWorkItemRow({
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [localText, setLocalText] = useState(item.text);
   const [localDDayOffset, setLocalDDayOffset] = useState<string>(String(item.dDayOffset ?? -7));
-  // 소요일수 = dDayEndOffset - dDayOffset (표시용), 저장 시 dDayEndOffset = dDayOffset + 소요일수
+  // 소요일수 표시: (dDayEndOffset - dDayOffset) + 1 = 사용자에게 보이는 일수
+  // 저장 시: dDayEndOffset = dDayOffset + 소요일수 - 1
   const durationDays = item.dDayEndOffset !== undefined && item.dDayOffset !== undefined
-    ? item.dDayEndOffset - item.dDayOffset
+    ? item.dDayEndOffset - item.dDayOffset + 1
     : undefined;
   const [localDDayEndOffset, setLocalDDayEndOffset] = useState<string>(durationDays !== undefined ? String(durationDays) : '');
 
@@ -172,7 +173,7 @@ function SortableWorkItemRow({
   useEffect(() => {
     if (!isDDayEndFocused.current) {
       const dur = item.dDayEndOffset !== undefined && item.dDayOffset !== undefined
-        ? item.dDayEndOffset - item.dDayOffset
+        ? item.dDayEndOffset - item.dDayOffset + 1
         : undefined;
       setLocalDDayEndOffset(dur !== undefined ? String(dur) : '');
     }

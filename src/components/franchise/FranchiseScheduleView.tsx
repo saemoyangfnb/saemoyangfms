@@ -372,7 +372,7 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
 
     try {
       // 메인 문서 업데이트
-      updateDoc(doc(db, 'franchise_schedules', scheduleId), { checklistData: updatedChecklistData });
+      await updateDoc(doc(db, 'franchise_schedules', scheduleId), { checklistData: updatedChecklistData });
 
       // 관련 태스크 문서 검색 및 업데이트 (성능을 위해 await 제거)
       const taskQuery = query(collection(db, 'department_tasks'), 

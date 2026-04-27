@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reviewDb as db, db as mainDb, auth } from '../../firebase';
-import { collection, onSnapshot, addDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { Download, RefreshCw, FileText, Star, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
 import { WeeklyReport } from './types';
@@ -25,15 +25,13 @@ export function WeeklyReportTab() {
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'weekly_reports'), snap => {
-      const data: WeeklyReport[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() } as WeeklyReport));
+    getDocs(collection(db, 'weekly_reports')).then(snap => {
+      const data: WeeklyReport[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as WeeklyReport));
       data.sort((a, b) => b.기간_시작.localeCompare(a.기간_시작));
       setReports(data);
-      if (data.length > 0 && !selectedReport) setSelectedReport(data[0]);
+      if (data.length > 0) setSelectedReport(data[0]);
       setLoading(false);
-    });
-    return () => unsub();
+    }).catch(() => setLoading(false));
   }, []);
 
   const handleExportExcel = () => {

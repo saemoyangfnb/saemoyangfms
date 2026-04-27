@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reviewDb as db, auth } from '../../firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, query, where } from 'firebase/firestore';
 import { AlertTriangle, RefreshCw, Activity, Store, Target, Eye, FileText } from 'lucide-react';
 import { Review, RankData, RoiData, CompetitorData, ReviewState, TabType } from './types';
 import { OverviewTab } from './OverviewTab';
@@ -23,57 +23,41 @@ export function ReviewDashboard({ initialTab }: { initialTab?: string }) {
     if (initialTab) setActiveTab(initialTab as TabType);
   }, [initialTab]);
 
-  useEffect(() => {
-    const unsubs: (() => void)[] = [];
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const sixtyDaysAgo = new Date(); sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+      const date60Str = sixtyDaysAgo.toISOString().split('T')[0];
+      const date14Str = fourteenDaysAgo.toISOString().split('T')[0];
 
-    const sixtyDaysAgo = new Date(); sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-    const date60Str = sixtyDaysAgo.toISOString().split('T')[0];
-    const date14Str = fourteenDaysAgo.toISOString().split('T')[0];
+      const [reviewsSnap, rankSnap, roiSnap, compSnap, resolvedDoc, overriddenDoc] = await Promise.all([
+        getDocs(query(collection(db, 'reviews'), where('작성일', '>=', date60Str))),
+        getDocs(query(collection(db, 'rank_tracking'), where('수집일자', '>=', date14Str))),
+        getDocs(collection(db, 'roi_analysis')),
+        getDocs(query(collection(db, 'competitor_menu'), where('수집일자', '>=', date14Str))),
+        getDoc(doc(db, 'review_states', 'resolved')),
+        getDoc(doc(db, 'review_states', 'overridden')),
+      ]);
 
-    const qReviews = query(collection(db, 'reviews'), where('작성일', '>=', date60Str));
-    unsubs.push(onSnapshot(qReviews, snap => {
-      const data: Review[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() } as Review));
-      setReviews(data);
+      setReviews(reviewsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Review)));
+      setRankData(rankSnap.docs.map(d => ({ id: d.id, ...d.data() } as RankData)));
+      setRoiData(roiSnap.docs.map(d => ({ id: d.id, ...d.data() } as RoiData)));
+      setCompetitorData(compSnap.docs.map(d => ({ id: d.id, ...d.data() } as CompetitorData)));
+      setReviewState({
+        resolved: resolvedDoc.exists() ? resolvedDoc.data()?.ids || [] : [],
+        overridden: overriddenDoc.exists() ? overriddenDoc.data()?.ids || [] : [],
+      });
       setLastUpdated(new Date().toLocaleTimeString('ko-KR'));
+    } catch (e) {
+      console.error('데이터 로드 실패', e);
+    } finally {
       setLoading(false);
-    }));
+    }
+  };
 
-    const qRank = query(collection(db, 'rank_tracking'), where('수집일자', '>=', date14Str));
-    unsubs.push(onSnapshot(qRank, snap => {
-      const data: RankData[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() } as RankData));
-      setRankData(data);
-    }));
-
-    unsubs.push(onSnapshot(collection(db, 'roi_analysis'), snap => {
-      const data: RoiData[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() } as RoiData));
-      setRoiData(data);
-    }));
-
-    const qComp = query(collection(db, 'competitor_menu'), where('수집일자', '>=', date14Str));
-    unsubs.push(onSnapshot(qComp, snap => {
-      const data: CompetitorData[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() } as CompetitorData));
-      setCompetitorData(data);
-    }));
-
-    const loadState = async () => {
-      try {
-        const [resolvedDoc, overriddenDoc] = await Promise.all([
-          getDoc(doc(db, 'review_states', 'resolved')),
-          getDoc(doc(db, 'review_states', 'overridden')),
-        ]);
-        setReviewState({
-          resolved: resolvedDoc.exists() ? resolvedDoc.data()?.ids || [] : [],
-          overridden: overriddenDoc.exists() ? overriddenDoc.data()?.ids || [] : [],
-        });
-      } catch { }
-    };
-    loadState();
-    return () => unsubs.forEach(u => u());
+  useEffect(() => {
+    fetchAllData();
   }, []);
 
   const handleResolve = async (id: string) => {
@@ -109,10 +93,15 @@ export function ReviewDashboard({ initialTab }: { initialTab?: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          리뷰 수집 · 순위 추적 · 키워드 ROI · 경쟁사 모니터링 · 주간 리포트
-          {lastUpdated && <span className="ml-2 text-slate-400">· 갱신 {lastUpdated}</span>}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            리뷰 수집 · 순위 추적 · 키워드 ROI · 경쟁사 모니터링 · 주간 리포트
+            {lastUpdated && <span className="ml-2 text-slate-400">· 갱신 {lastUpdated}</span>}
+          </p>
+          <button onClick={fetchAllData} disabled={loading} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition disabled:opacity-50">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> 새로고침
+          </button>
+        </div>
         {activeNegCount > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg shrink-0">
             <AlertTriangle size={13} className="text-rose-500" />

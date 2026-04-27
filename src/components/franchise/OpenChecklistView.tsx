@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Search, Printer, Plus, FileText, UploadCloud, Info, CheckCircle2, X, Eye, EyeOff, Lock, Unlock, CheckSquare, Loader2, Clock } from 'lucide-react';
 import { FranchiseSchedule, FileAttachment, Department, WorkItem, User, DepartmentTask, DepartmentTaskStatus } from '../../types';
 import { ProcessSettings } from './ProcessMasterModal';
@@ -33,6 +33,23 @@ function addBusinessDays(startDate: Date, days: number): Date {
   return d;
 }
 
+function NoteInput({ itemId, field, initialValue, workItem, onSave, className, placeholder, type = 'text' }: {
+  itemId: string; field: string; initialValue: string; workItem: any;
+  onSave: (itemId: string, field: string, value: string, workItem: any) => void;
+  className?: string; placeholder?: string; type?: string;
+}) {
+  const [local, setLocal] = useState(initialValue);
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setLocal(initialValue); }, [initialValue]);
+  return (
+    <input type={type} value={local} className={className} placeholder={placeholder}
+      onChange={e => setLocal(e.target.value)}
+      onFocus={() => { focused.current = true; }}
+      onBlur={() => { focused.current = false; onSave(itemId, field, local, workItem); }}
+    />
+  );
+}
+
 const STATUS_STAGES = [
   { label: '미진행', class: 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200' },
   { label: '안내완료', class: 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200' },
@@ -62,6 +79,8 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
   const [adminPwdInput, setAdminPwdInput] = useState('');
   const [actualAdminPwd, setActualAdminPwd] = useState('1234');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('all');
+
+  // (debounce 제거 — NoteInput 컴포넌트의 onBlur 저장으로 대체)
 
   // ? 아이콘 — 매뉴얼 설명 모달
   const [descModal, setDescModal] = useState<{ itemId: string; text: string; desc: string } | null>(null);
@@ -257,11 +276,11 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
       const ids: string[] = i.departmentIds?.length ? i.departmentIds : (i.departmentId ? [i.departmentId] : []);
       return ids.includes(selectedDeptFilter);
     });
-  }, [selectedStore, activeChecklist, activeScheduleDates, activeTaskItems, selectedDeptFilter]);
+  }, [selectedStore, activeChecklist, activeScheduleDates, activeTaskItems, selectedDeptFilter, storeTasks]);
 
   const getStoreData = (store: FranchiseSchedule) => (store as any).checklistData || {};
 
-  //   양방향 동기화 엔진 개선
+  //   양방향 동기화 엔진
   const handleUpdateItem = (itemId: string, field: string, value: any, workItem: WorkItem) => {
     if (!selectedStore || !onUpdateSchedule) return;
     const currentData = getStoreData(selectedStore);
@@ -275,8 +294,12 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
     }
 
     const itemData = currentData[itemId] || { status: 0 };
+    const modMeta = {
+      lastModifiedBy: currentUser?.name || currentUser?.email || '알 수 없음',
+      lastModifiedAt: new Date().toISOString(),
+    };
     const updates: any = {
-      checklistData: { ...currentData, [itemId]: { ...itemData, [field]: value } }
+      checklistData: { ...currentData, [itemId]: { ...itemData, [field]: value, ...modMeta } }
     };
 
     //   마스터 설정 기반 syncToField 동기화 (날짜 메모 변경 시)
@@ -518,6 +541,12 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                   const itemData = (item.uType === 'check' || item.uType === 'task')
                     ? (getStoreData(selectedStore)[item.id] || { status: 0 })
                     : { status: 0 };
+                  const lastModBy: string = itemData.lastModifiedBy || '';
+                  const lastModAt: string = itemData.lastModifiedAt || '';
+                  const lastModDate = lastModAt ? new Date(lastModAt) : null;
+                  const lastModLabel = lastModBy && lastModDate && !isNaN(lastModDate.getTime())
+                    ? `${lastModBy} · ${lastModDate.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} ${lastModDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`
+                    : '';
                   const statusIdx = item.uStatus ?? itemData.status ?? 0;
                   const statusObj = STATUS_STAGES[statusIdx];
                   const isDone = statusIdx === 3;
@@ -545,7 +574,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                       inputHtml = (
                         <div className="flex flex-col gap-1 w-full">
                           <div className="flex items-center gap-2">
-                            <input type="text" placeholder={item.inputType === 'email' ? '이메일 주소 입력' : '메모 입력'} className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                            <NoteInput type="text" placeholder={item.inputType === 'email' ? '이메일 주소 입력' : '메모 입력'} className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                             {item.inputType === 'file' && (
                               <>
                                 <input type="file" id={`file-${item.id}`} className="hidden" multiple onChange={(e) => handleFileUpload(e, item.id)} />
@@ -571,15 +600,15 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                     } else if (item.inputType === 'phone') {
                       inputHtml = (
                         <div className="flex flex-col md:flex-row md:items-center gap-2 w-full">
-                          <input type="tel" placeholder="000-0000-0000" className="flex-none w-full md:w-[140px] text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note2 || ''} onChange={e => handleUpdateItem(item.id, 'note2', e.target.value, item)} />
-                          <input type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                          <NoteInput type="tel" placeholder="000-0000-0000" className="flex-none w-full md:w-[140px] text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note2 || ''} itemId={item.id} field="note2" workItem={item} onSave={handleUpdateItem} />
+                          <NoteInput type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                         </div>
                       );
                     } else if (item.inputType === 'date') {
                       inputHtml = (
                         <div className="flex flex-col md:flex-row md:items-center gap-2 w-full">
                           <input type="date" className="flex-none w-full md:w-[130px] text-sm font-bold text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note3 || ''} onChange={e => handleUpdateItem(item.id, 'note3', e.target.value, item)} />
-                          <input type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                          <NoteInput type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                         </div>
                       );
                     } else if (item.inputType === 'hiorder') {
@@ -590,7 +619,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                             <input type="checkbox" checked={itemData.note4 === 'Y'} onChange={e => handleUpdateItem(item.id, 'note4', e.target.checked ? 'Y' : 'N', item)} className="rounded" />
                             광케이블 설치
                           </label>
-                          <input type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                          <NoteInput type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                         </div>
                       );
                     } else if (item.inputType === 'showcase') {
@@ -604,7 +633,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                               </select>
                             ))}
                           </div>
-                          <input type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                          <NoteInput type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                         </div>
                       );
                     } else if (item.inputType === 'food_waste') {
@@ -615,7 +644,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                             <option value="음식물수거통">음식물수거통</option>
                             <option value="음식물처리기">음식물처리기</option>
                           </select>
-                          <input type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                          <NoteInput type="text" placeholder="비고 작성란" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                         </div>
                       );
                     } else if (item.inputType === 'file_date') {
@@ -625,7 +654,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                           <div className="flex flex-col md:flex-row md:items-center gap-2">
                             <input type="date" className="flex-none w-full md:w-[130px] text-sm font-bold text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note3 || ''} onChange={e => handleUpdateItem(item.id, 'note3', e.target.value, item)} />
                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <input type="text" placeholder="메모 입력" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                              <NoteInput type="text" placeholder="메모 입력" className="flex-1 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                               <input type="file" id={`file-${item.id}`} className="hidden" multiple onChange={(e) => handleFileUpload(e, item.id)} />
                               <label htmlFor={`file-${item.id}`} className="shrink-0 p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded cursor-pointer transition-colors print:hidden">
                                 {uploadingItem === item.id ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
@@ -658,18 +687,18 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                                 <button onClick={() => verifyAdminPwd(item.id)} className="bg-slate-900 text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-slate-800">확인</button>
                               </div>
                             )}
-                            <input type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                            <NoteInput type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                           </div>
                         );
                       } else {
                         inputHtml = (
                           <div className="flex flex-col md:flex-row md:items-center gap-2 w-full animate-in fade-in slide-in-from-top-1">
-                            <input type="text" placeholder="접속 아이디" className="flex-1 w-full md:w-32 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800 font-bold" value={itemData.note2 || ''} onChange={e => handleUpdateItem(item.id, 'note2', e.target.value, item)} />
+                            <NoteInput type="text" placeholder="접속 아이디" className="flex-1 w-full md:w-32 min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800 font-bold" initialValue={itemData.note2 || ''} itemId={item.id} field="note2" workItem={item} onSave={handleUpdateItem} />
                             <div className="relative flex-1 w-full md:w-32 min-w-0">
-                              <input type="password" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note3 || ''} onChange={e => handleUpdateItem(item.id, 'note3', e.target.value, item)} />
+                              <NoteInput type="password" placeholder="비밀번호" className="w-full text-sm font-bold border-slate-200 dark:border-slate-700 rounded border pl-2 pr-8 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note3 || ''} itemId={item.id} field="note3" workItem={item} onSave={handleUpdateItem} />
                               <button onClick={() => setUnlockedItems(p => ({...p, [item.id]: false}))} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 print:hidden"><Unlock size={14} /></button>
                             </div>
-                            <input type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />
+                            <NoteInput type="text" placeholder="비고 작성란" className="flex-1 w-full min-w-0 text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none dark:bg-slate-800" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />
                           </div>
                         );
                       }
@@ -694,7 +723,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                                 <option value="">선택</option>
                                 {['예당마을점', '남원점', '청주율량점', '직접입력'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                               </select>
-                              {itemData.note1 === '직접입력' && <input type="text" placeholder="직접입력" className="flex-1 md:w-24 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 dark:bg-slate-800 min-w-0" value={itemData.note2 || ''} onChange={e => handleUpdateItem(item.id, 'note2', e.target.value, item)} />}
+                              {itemData.note1 === '직접입력' && <NoteInput type="text" placeholder="직접입력" className="flex-1 md:w-24 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 dark:bg-slate-800 min-w-0" initialValue={itemData.note2 || ''} itemId={item.id} field="note2" workItem={item} onSave={handleUpdateItem} />}
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-slate-500 md:ml-2 w-8 md:w-auto shrink-0">인원</span>
@@ -734,7 +763,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                         </div>
                       );
                     } else {
-                      inputHtml = <input type="text" placeholder="비고 작성란 (선택)" className="w-full text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none bg-transparent hover:bg-white dark:hover:bg-slate-800 transition" value={itemData.note1 || ''} onChange={e => handleUpdateItem(item.id, 'note1', e.target.value, item)} />;
+                      inputHtml = <NoteInput type="text" placeholder="비고 작성란 (선택)" className="w-full text-sm border-slate-200 dark:border-slate-700 rounded border px-2 py-1.5 focus:border-blue-500 focus:outline-none bg-transparent hover:bg-white dark:hover:bg-slate-800 transition" initialValue={itemData.note1 || ''} itemId={item.id} field="note1" workItem={item} onSave={handleUpdateItem} />;
                     }
                   }
 
@@ -789,9 +818,15 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                           <p className="text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">
                             {item.text}
                           </p>
-                          {item.uDate && (
+                          {/* check 타입만 날짜 소제목 표시 (task=D-day뱃지, date=우측 입력위젯으로 대체) */}
+                          {item.uDate && item.uType === 'check' && (
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {item.uDate}{item.uEndDate ? ` ~ ${item.uEndDate}` : ''}
+                            </p>
+                          )}
+                          {lastModLabel && (
+                            <p className="text-[10px] text-slate-300 dark:text-slate-600 mt-0.5 print:hidden">
+                              ✎ {lastModLabel}
                             </p>
                           )}
                         </div>
