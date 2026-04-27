@@ -1173,17 +1173,7 @@ ${transcript}`;
                  </div>
               </div>
 
-              {!showArchived && (
-                <div className="pb-10">
-                   <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3">공정 타임라인 (Gantt)</h3>
-                   <ScheduleTimeline
-                     schedules={filteredSchedules}
-                     viewStartDate={timelineDates.start}
-                     viewEndDate={timelineDates.end}
-                     workItems={(processSettings.masterItems || []).filter((i: WorkItem) => !i.isArchived)}
-                   />
-                </div>
-              )}
+{/* 간츠 차트 비활성화 */}
             </div>
           )}
         </>
