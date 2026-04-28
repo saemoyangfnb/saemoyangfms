@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Search, Printer, Plus, FileText, UploadCloud, Info, CheckCircle2, X, Eye, EyeOff, Lock, Unlock, CheckSquare, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, Search, Printer, Plus, FileText, UploadCloud, Info, CheckCircle2, X, Eye, EyeOff, Lock, Unlock, CheckSquare, Loader2, Clock, Pencil } from 'lucide-react';
 import { FranchiseSchedule, FileAttachment, Department, WorkItem, User, DepartmentTask, DepartmentTaskStatus } from '../../types';
 import { ProcessSettings } from './ProcessMasterModal';
 import { useToast } from '../Toast';
@@ -18,6 +18,7 @@ interface Props {
   onUpdateProgress?: (scheduleId: string, checkId: string, isCustom: boolean, current: boolean) => void;
   onUpdateSchedule?: (scheduleId: string, data: Partial<FranchiseSchedule>) => Promise<void>;
   onUpdateMasterList?: (list: any[]) => Promise<void>;
+  onOpenForm?: (scheduleId: string) => void;
 }
 
 // 주말(토·일)을 건너뛰며 n 영업일 후 날짜를 반환
@@ -57,7 +58,7 @@ const STATUS_STAGES = [
   { label: '완료', class: 'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200 font-bold' }
 ];
 
-export function OpenChecklistView({ schedules, currentUser, processSettings, initialSelectedStoreId, onClearInitialStore, onNewStore, onUpdateSchedule, onUpdateMasterList }: Props) {
+export function OpenChecklistView({ schedules, currentUser, processSettings, initialSelectedStoreId, onClearInitialStore, onNewStore, onUpdateSchedule, onUpdateMasterList, onOpenForm }: Props) {
   if (!schedules || !processSettings || !onUpdateSchedule) {
     return (
       <div className="py-20 text-center text-slate-400 font-bold">오픈 체크리스트 로딩 중...</div>
@@ -474,6 +475,9 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
                     <span className="font-black text-sm text-slate-900 dark:text-white truncate">{store.storeName}</span>
                     <span className="text-[10px] font-bold text-slate-400 shrink-0">{store.storeNumber || ''}</span>
                   </div>
+                  {store.team && (
+                    <p className="text-[10px] font-bold text-indigo-400 dark:text-indigo-500 truncate mb-1">{store.team}</p>
+                  )}
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1 h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                       <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
@@ -514,6 +518,11 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
               </div>
               {/* 우측 버튼들 */}
               <div className="flex items-center gap-1.5 shrink-0 print:hidden">
+                {onOpenForm && (
+                  <button onClick={() => onOpenForm(selectedStore.id)} className="hidden sm:flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded text-xs font-bold transition">
+                    <Pencil size={13} /> 매장 편집
+                  </button>
+                )}
                 <button onClick={() => window.print()} className="hidden sm:flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1.5 rounded text-xs font-bold transition">
                   <Printer size={13} /> 인쇄
                 </button>

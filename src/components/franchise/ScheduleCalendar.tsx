@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FranchiseSchedule, TeamSetting, WorkItem } from '../../types';
 import { isDateInRange, addDays } from '../../utils';
-import { Calendar as CalendarIcon, List } from 'lucide-react';
+import { Calendar as CalendarIcon, List, CheckSquare, Pencil } from 'lucide-react';
 
 const BG_CLASSES: Record<string, string> = {
   blue: 'bg-blue-500', rose: 'bg-rose-500', emerald: 'bg-emerald-500', amber: 'bg-amber-500',
@@ -86,15 +86,31 @@ interface Props {
   onScheduleUpdate: (id: string, updates: Partial<FranchiseSchedule>, logDetails?: string) => Promise<void>;
   onTaskOffsetUpdate?: (scheduleId: string, taskItemId: string, diffDays: number, newStartDate: string) => Promise<void>;
   onEditStore?: (id: string) => void;
+  onOpenForm?: (id: string) => void;
   phaseVisibility?: Record<string, boolean>;
   selectedDeptFilter?: string;
 }
 
-export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [], onScheduleUpdate, onTaskOffsetUpdate, onEditStore, phaseVisibility = {}, selectedDeptFilter = 'all' }: Props) {
+export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [], onScheduleUpdate, onTaskOffsetUpdate, onEditStore, onOpenForm, phaseVisibility = {}, selectedDeptFilter = 'all' }: Props) {
   //  모바일(화면 너비 768px 미만)일 경우 기본값을 '리스트 뷰'로 설정
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>(
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'list' : 'calendar'
   );
+
+  // 팝오버 state
+  const [popover, setPopover] = useState<{ ev: any; x: number; y: number } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!popover) return;
+    const close = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setPopover(null);
+    };
+    const closeKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPopover(null); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', closeKey);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', closeKey); };
+  }, [popover]);
   const isPhaseVisible = (id: string) => phaseVisibility[id] !== false; // 기본: 표시
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -253,9 +269,10 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [
     }
   };
 
-  const openEditPopup = (e: React.MouseEvent, ev: any) => {
-     e.stopPropagation();
-     if (onEditStore) onEditStore(ev.scheduleId);
+  const openPopover = (e: React.MouseEvent, ev: any) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPopover({ ev, x: rect.left + window.scrollX, y: rect.bottom + window.scrollY + 6 });
   };
 
   const weeks = [];
@@ -300,7 +317,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [
                     </div>
                     <div className="flex-1 space-y-2 border-l-2 border-slate-100 dark:border-slate-800 pl-4 pb-2">
                       {events.map((ev, idx) => (
-                        <div key={idx} onClick={(e) => openEditPopup(e, ev)} className="relative p-3 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-all group overflow-hidden">
+                        <div key={idx} onClick={(e) => openPopover(e, ev)} className="relative p-3 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-all group overflow-hidden">
                           {/* 좌측 강조 포인트 선 */}
                           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${ev.bgClass}`} />
                           <div className="pl-1">
@@ -380,7 +397,7 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [
                               return (
                                 <div
                                   key={tIdx}
-                                  onClick={(e) => openEditPopup(e, ev)}
+                                  onClick={(e) => openPopover(e, ev)}
                                   className={`relative h-[38px] flex items-center cursor-pointer hover:brightness-90 ${ev.bgClass} ${roundedCls} border-y border-black/10 transition-colors z-10`}
                                   title={`[${ev.team}] ${ev.storeName} · ${ev.phaseName}`}
                                   draggable
@@ -407,6 +424,31 @@ export function ScheduleCalendar({ schedules, currentMonth, teams, workItems = [
           </div>
         )}
       </div>
+
+      {/* 클릭 팝오버 */}
+      {popover && (
+        <div
+          ref={popoverRef}
+          className="fixed z-[999] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-1.5 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+          style={{ left: popover.x, top: popover.y }}
+        >
+          <p className="px-3 py-1.5 text-[11px] font-black text-slate-400 dark:text-slate-500 truncate border-b border-slate-100 dark:border-slate-700 mb-1">
+            {popover.ev.storeName}
+          </p>
+          <button
+            onClick={() => { setPopover(null); if (onEditStore) onEditStore(popover.ev.scheduleId); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <CheckSquare size={14} className="text-indigo-500" /> 체크리스트 열기
+          </button>
+          <button
+            onClick={() => { setPopover(null); if (onOpenForm) onOpenForm(popover.ev.scheduleId); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <Pencil size={14} className="text-amber-500" /> 매장 정보 편집
+          </button>
+        </div>
+      )}
     </div>
   );
 }

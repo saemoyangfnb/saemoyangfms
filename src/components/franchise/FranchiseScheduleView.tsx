@@ -151,18 +151,19 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
     return () => { unsubSch(); unsubTeam(); };
   }, [brandId]);
 
-  //   마스터 항목 통합 마이그레이션 및 실시간 구독
+  //   마스터 항목 통합 마이그레이션 및 로드 (onSnapshot → getDoc으로 변경, write-in-listener 루프 방지)
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'process_settings', brandId), async (snap) => {
-      if (!snap.exists()) return;
+    let cancelled = false;
+    const load = async () => {
+      const snap = await getDoc(doc(db, 'process_settings', brandId));
+      if (!snap.exists() || cancelled) return;
       const data = snap.data() as ProcessSettings;
-      
+
       if (!data.masterItemsMigrated || !data.masterItems) {
         console.log("🛠️ 업무 마스터 통합 마이그레이션 시작...");
         const migratedItems: WorkItem[] = [];
         let order = 0;
 
-        // 1. 기존 체크리스트 변환
         const oldChecklist = data.masterChecklist || DEFAULT_MASTER_CHECKLIST;
         oldChecklist.forEach(item => {
           const syncToFieldMap: Record<string, keyof FranchiseSchedule> = {
@@ -181,17 +182,15 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
             category: 'checklist',
             inputType: item.type as any,
             departmentId: item.departmentId || '',
-            dDayOffset: 0, // 💡 기본값 0 할당
+            dDayOffset: 0,
             order: order++,
             isArchived: false
           };
           if (syncToFieldMap[item.id]) newItem.syncToField = syncToFieldMap[item.id];
           if (systemActionMap[item.id]) newItem.systemAction = systemActionMap[item.id];
-          
           migratedItems.push(newItem);
         });
 
-        // 2. 기존 일정 필드 변환
         const fieldToKeyMap: Record<string, keyof FranchiseSchedule> = {
           'constructionStart': 'constructionStart', 'constructionEnd': 'constructionEnd',
           'oven': 'ovenIn', 'burner': 'burnerIn', 'equipment': 'equipmentIn',
@@ -214,16 +213,22 @@ export function FranchiseScheduleView({ brandId, currentUser }: Props) {
           migratedItems.push(newItem);
         });
 
-        await updateDoc(doc(db, 'process_settings', brandId), {
-          masterItems: scrubData(migratedItems),
-          masterItemsMigrated: true
-        });
-        toast.info("업무 마스터 마이그레이션이 완료되었습니다.");
+        if (!cancelled) {
+          await updateDoc(doc(db, 'process_settings', brandId), {
+            masterItems: scrubData(migratedItems),
+            masterItemsMigrated: true
+          });
+          toast.info("업무 마스터 마이그레이션이 완료되었습니다.");
+          // 마이그레이션 후 재로드
+          const snap2 = await getDoc(doc(db, 'process_settings', brandId));
+          if (!cancelled && snap2.exists()) setProcessSettings(snap2.data() as ProcessSettings);
+        }
       } else {
-        setProcessSettings(data);
+        if (!cancelled) setProcessSettings(data);
       }
-    });
-    return () => unsub();
+    };
+    load();
+    return () => { cancelled = true; };
   }, [brandId]);
 
 
@@ -1055,6 +1060,7 @@ ${transcript}`;
                    phaseVisibility={processSettings.phaseVisibility}
                    selectedDeptFilter={selectedDeptFilter}
                    onEditStore={(id) => { setChecklistSelectedStoreId(id); setViewTab('store'); }}
+                   onOpenForm={(id) => { const s = schedules.find(x => x.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
                    onTaskOffsetUpdate={handleTaskOffsetUpdate}
                    onScheduleUpdate={async (id, data, logDetails) => {
                      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
@@ -1071,6 +1077,7 @@ ${transcript}`;
                      workItems={(processSettings.masterItems || []).filter(i => !i.isArchived)}
                      phaseVisibility={processSettings.phaseVisibility}
                      onEditStore={(id) => { setChecklistSelectedStoreId(id); setViewTab('store'); }}
+                     onOpenForm={(id) => { const s = schedules.find(x => x.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
                      onTaskOffsetUpdate={handleTaskOffsetUpdate}
                      onScheduleUpdate={async (id, data, logDetails) => {
                        setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
@@ -1195,6 +1202,7 @@ ${transcript}`;
              setProcessSettings(prev => ({ ...prev, masterItems: list }));
              await updateDoc(doc(db, 'process_settings', brandId), { masterItems: list });
           }}
+          onOpenForm={(id) => { const s = schedules.find(x => x.id === id); if (s) { setEditingData(s); setShowForm(true); } }}
         />
       )}
 
