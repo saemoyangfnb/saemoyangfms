@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { salesDb as db } from '../../firebase';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { BrandId, WorkItem, WorkItemCategory, WorkItemInputType, Department, FranchiseSchedule } from '../../types';
-import { Plus, Trash2, Archive, RotateCcw, GripVertical, Eye, EyeOff, Save, X, Info, Settings2, Check, Lock } from 'lucide-react';
+import { Plus, Trash2, Archive, RotateCcw, GripVertical, Eye, EyeOff, Save, X, Info, Settings2, Check, Lock, ClipboardList } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS, useUniqueId } from '@dnd-kit/utilities';
@@ -321,8 +321,8 @@ function SortableWorkItemRow({
         />
       </td>
       <td className="p-3 border-b border-slate-100 dark:border-slate-800 text-center">
-        {(item.category === 'schedule_date' || item.category === 'task') && (
-          <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-1">
+          {(item.category === 'schedule_date' || item.category === 'task') && (
             <button
               onClick={() => onUpdate(item.id, { calendarVisible: !item.calendarVisible })}
               className={`p-1 rounded transition-colors ${item.calendarVisible ? 'text-blue-500' : 'text-slate-300'}`}
@@ -330,17 +330,26 @@ function SortableWorkItemRow({
             >
               {item.calendarVisible ? <Eye size={16} /> : <EyeOff size={16} />}
             </button>
-            {item.category === 'task' && (
-              <button
-                onClick={() => onUpdate(item.id, { anchorLocked: !item.anchorLocked })}
-                className={`p-1 rounded transition-colors text-[9px] font-black ${item.anchorLocked ? 'text-amber-500' : 'text-slate-300'}`}
-                title={item.anchorLocked ? '기준일 연동 — 기준일 변경 시 태스크도 함께 이동 (드래그 불가)' : '날짜 독립 — 드래그로 수동 고정 가능'}
-              >
-                {item.anchorLocked ? '연동' : '독립'}
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          {(item.category === 'checklist' || item.category === 'task') && (
+            <button
+              onClick={() => onUpdate(item.id, { showOnCard: !item.showOnCard })}
+              className={`p-1 rounded transition-colors ${item.showOnCard ? 'text-emerald-500' : 'text-slate-300'}`}
+              title="매장 카드에 표시"
+            >
+              <ClipboardList size={16} />
+            </button>
+          )}
+          {item.category === 'task' && (
+            <button
+              onClick={() => onUpdate(item.id, { anchorLocked: !item.anchorLocked })}
+              className={`p-1 rounded transition-colors text-[9px] font-black ${item.anchorLocked ? 'text-amber-500' : 'text-slate-300'}`}
+              title={item.anchorLocked ? '기준일 연동 — 기준일 변경 시 태스크도 함께 이동 (드래그 불가)' : '날짜 독립 — 드래그로 수동 고정 가능'}
+            >
+              {item.anchorLocked ? '연동' : '독립'}
+            </button>
+          )}
+        </div>
       </td>
       <td className="p-3 border-b border-slate-100 dark:border-slate-800">
         <DescriptionCell item={item} onUpdate={onUpdate} />

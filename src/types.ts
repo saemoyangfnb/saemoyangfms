@@ -344,6 +344,7 @@ export interface WorkItem {
   description?: string;            // 업무 처리 매뉴얼 (? 아이콘 호버/더블클릭으로 확인)
   anchorLocked?: boolean;          // true = 기준일자 연동 고정 (fixedDate 드래그 불가)
   isSystem?: boolean;              // true = 시스템 필수 항목 (삭제·이름 변경 불가)
+  showOnCard?: boolean;            // true = 매장 카드에 완료 상태 표시
   order: number;
   isArchived: boolean;
 }

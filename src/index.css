@@ -21,6 +21,19 @@
   font-weight: 700 !important;
 }
 
+/* 캘린더 인쇄 스타일 */
+@media print {
+  body * { visibility: hidden; }
+  #calendar-print-area, #calendar-print-area * { visibility: visible; }
+  #calendar-print-area {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    z-index: 9999;
+  }
+  @page { margin: 8mm; }
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;

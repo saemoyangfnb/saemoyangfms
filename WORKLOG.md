@@ -26,6 +26,59 @@
 
 ---
 
+## 2026-04-30 새벽2 — Claude Code
+
+### 완료
+- 인쇄: window.print() + @media print CSS로 변경 (현재 표시 중인 캘린더 그대로 출력, 필터 반영됨)
+  - `#calendar-print-area`만 출력되도록 CSS 격리
+- 매장 카드 showOnCard 항목: 이름 + 날짜/일정(시작~종료) + 상태 배지 표시로 개선 (줄긋기 제거)
+  - task: computeWorkItemDates, schedule_date: scheduleField, checklist: fixedDate 기준
+- computeWorkItemDates를 utils.ts로 이동 (캘린더·타임라인·카드 공통 사용)
+
+### 주의 / 메모
+- 인쇄 시 브라우저 기본 인쇄 다이얼로그 사용 → A4/A3 용지·방향은 브라우저 설정에서 선택
+- PrintCalendar.tsx 파일은 미사용 상태로 남아있음 (삭제 가능)
+
+---
+
+## 2026-04-30 새벽 — Claude Code
+
+### 완료
+- WorkItem `showOnCard` 필드 추가 — WorkMasterManager에서 클립보드 아이콘으로 토글 (체크리스트/태스크 모두 지원)
+- FranchiseScheduleView 매장 카드에 showOnCard 항목 완료 상태 표시 (미진행/안내완료/진행중/완료 색상 뱃지)
+- PrintCalendar 컴포넌트 신규 — A4/A3 가로 인쇄, 2개월 연속 출력 지원
+- 캘린더 컨트롤바에 용지선택(A4/A3) + 🖨️ 인쇄 버튼 추가
+
+### 주의 / 메모
+- 인쇄: 브라우저 팝업 차단 해제 필요 (window.open 사용)
+- showOnCard 토글은 WorkMasterManager → 해당 항목 눈 아이콘 옆 클립보드 아이콘
+
+---
+
+## 2026-04-29 심야3 — Claude Code
+
+### 완료
+- ScheduleTimeline: 하드코딩된 PHASES 배열 제거 → schedule_date masterItems(Firebase) 기반 동적 페이즈 바 렌더링
+- FranchiseScheduleView 매장 카드 info grid: ovenIn/trainingStart 등 하드코딩 제거 → masterItems.scheduleField 기반 동적 렌더링
+- 공사시작/종료는 시스템 항목으로 고정 유지, 오픈일은 openDate scheduleField로 탐색
+
+### 주의 / 메모
+- Option 1 적용 (읽기 방식 통일, 데이터 변경 없음). 기존 Firestore 필드(ovenIn 등) 그대로 유지
+- Option 2 (저장 방식 통일 → checklistData 기반) 는 추후 별도 작업
+
+---
+
+## 2026-04-29 심야2 — Claude Code
+
+### 완료
+- 공사일정 하드코딩 위치 전수 조사 및 정리 (코드 변경 없음, 분석만)
+
+### 주의 / 메모
+- `schedule.constructionStart` / `schedule.constructionEnd` 필드명이 7개 파일에 분산 하드코딩됨
+- 변경 필요 시: ScheduleCalendar, OpenChecklistView, ScheduleTimeline, FranchiseScheduleView, App.tsx, HomePage, WorkMasterManager 전부 수정 필요
+
+---
+
 ## 2026-04-29 심야 — Claude Code
 
 ### 완료

@@ -12,11 +12,7 @@ interface Props {
 const LABEL_WIDTH = 200; // px
 const DAY_WIDTH = 32;    // px per day
 
-const PHASES = [
-  { key: 'construction', startKey: 'constructionStart', endKey: 'constructionEnd', label: '공사/준비', color: 'bg-amber-400 border-amber-500 text-amber-900' },
-  { key: 'pretraining',  startKey: 'preTrainingStart',  endKey: 'preTrainingEnd',  label: '사전교육',    color: 'bg-emerald-400 border-emerald-500 text-emerald-900' },
-  { key: 'training',     startKey: 'trainingStart',     endKey: 'trainingEnd',     label: '본사교육',    color: 'bg-blue-400 border-blue-500 text-blue-900' },
-] as const;
+// schedule_date masterItems에서 동적으로 파생 — 하드코딩 제거
 
 function addBusinessDays(base: Date, days: number): Date {
   const d = new Date(base);
@@ -99,6 +95,14 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workIt
 
   const calendarWorkItems = useMemo(() =>
     workItems.filter(w => !w.isArchived && w.calendarVisible !== false && (w.category === 'task' || w.category === 'checklist')),
+    [workItems]
+  );
+
+  // schedule_date 항목: isSystem 제외, scheduleField 있는 것만 (하드코딩 대체)
+  const scheduleDateItems = useMemo(() =>
+    workItems
+      .filter(w => w.category === 'schedule_date' && !w.isArchived && !w.isSystem && w.scheduleField && w.calendarVisible !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [workItems]
   );
 
@@ -227,12 +231,35 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workIt
                   />
                 )}
 
-                {/* 레거시 페이즈 바 (공사/사전교육/본사교육) */}
-                {PHASES.map((phase) => {
-                  const schedAny = schedule as unknown as Record<string, string>;
-                  const start = schedAny[phase.startKey];
-                  const end   = schedAny[phase.endKey];
+                {/* 공사 기간 바 (시스템 항목 — 항상 표시) */}
+                {(() => {
+                  const start = schedule.constructionStart;
+                  const end = schedule.constructionEnd;
                   if (!start || !end) return null;
+                  if (start > viewEndDate || end < viewStartDate) return null;
+                  const x = dateToX(start);
+                  const x2 = dateToX(end) + DAY_WIDTH;
+                  const w = x2 - x;
+                  if (w <= 2) return null;
+                  return (
+                    <div
+                      key="construction"
+                      className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 overflow-hidden shadow-sm text-white bg-${storeColor}-500/80 border-${storeColor}-600`}
+                      style={{ left: x, width: w - 2, top: 8 }}
+                      title={`공사/준비: ${start} ~ ${end}`}
+                    >
+                      {w > 44 && <span className="truncate">공사/준비</span>}
+                    </div>
+                  );
+                })()}
+
+                {/* schedule_date masterItems 기반 동적 페이즈 바 */}
+                {scheduleDateItems.map((item) => {
+                  const schedAny = schedule as unknown as Record<string, string>;
+                  const start = schedAny[item.scheduleField!];
+                  const endField = item.scheduleField!.replace('Start', 'End').replace('In', 'End');
+                  const end = schedAny[endField] || start;
+                  if (!start) return null;
                   if (start > viewEndDate || end < viewStartDate) return null;
 
                   const x  = dateToX(start);
@@ -240,17 +267,14 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workIt
                   const w  = x2 - x;
                   if (w <= 2) return null;
 
-                  const bgClass = `bg-${storeColor}-500/80`;
-                  const borderClass = `border-${storeColor}-600`;
-
                   return (
                     <div
-                      key={phase.key}
-                      className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 overflow-hidden shadow-sm text-white ${bgClass} ${borderClass}`}
+                      key={item.id}
+                      className={`absolute h-8 rounded border text-[10px] font-bold flex items-center px-2 overflow-hidden shadow-sm text-white bg-${storeColor}-400/70 border-${storeColor}-500`}
                       style={{ left: x, width: w - 2, top: 8 }}
-                      title={`${phase.label}: ${start} ~ ${end}`}
+                      title={`${item.text}: ${start}${end !== start ? ' ~ ' + end : ''}`}
                     >
-                      {w > 44 && <span className="truncate">{phase.label}</span>}
+                      {w > 44 && <span className="truncate">{item.text}</span>}
                     </div>
                   );
                 })}
@@ -282,18 +306,21 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workIt
                   );
                 })}
 
-                {/* 오픈일 마커 */}
-                {schedule.openDate &&
-                  schedule.openDate >= viewStartDate &&
-                  schedule.openDate <= viewEndDate && (
-                  <div
-                    className="absolute top-1 z-10 w-6 h-6 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[11px] shadow-md cursor-help"
-                    style={{ left: dateToX(schedule.openDate) + Math.floor(DAY_WIDTH / 2) - 12 }}
-                    title={`그랜드 오픈: ${schedule.openDate}`}
-                  >
-                    🎉
-                  </div>
-                )}
+                {/* 오픈일 마커 — masterItems에서 openDate scheduleField 탐색 */}
+                {(() => {
+                  const openItem = workItems.find(w => w.category === 'schedule_date' && w.scheduleField === 'openDate' && !w.isArchived);
+                  const openDate = openItem ? (schedule as unknown as Record<string, string>)[openItem.scheduleField!] : schedule.openDate;
+                  if (!openDate || openDate < viewStartDate || openDate > viewEndDate) return null;
+                  return (
+                    <div
+                      className="absolute top-1 z-10 w-6 h-6 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900 flex items-center justify-center text-[11px] shadow-md cursor-help"
+                      style={{ left: dateToX(openDate) + Math.floor(DAY_WIDTH / 2) - 12 }}
+                      title={`그랜드 오픈: ${openDate}`}
+                    >
+                      🎉
+                    </div>
+                  );
+                })()}
 
                 {/* WorkItem 태스크 바 */}
                 {visibleTasks.map((wt, idx) => {

@@ -14,7 +14,7 @@ import { ScheduleFormModal } from './ScheduleFormModal';
 import { TeamSettingsModal } from './TeamSettingsModal';
 import { OpenChecklistView } from './OpenChecklistView';
 import { DepartmentTaskView } from './DepartmentTaskView';
-import { addDays } from '../../utils';
+import { addDays, computeWorkItemDates } from '../../utils';
 import {
   ProcessSettings,
   DEFAULT_PROCESS_SETTINGS,
@@ -1077,6 +1077,14 @@ ${transcript}`;
                <button className="text-stone-400 hover:text-stone-800" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>&gt;</button>
                <button className="ml-2 text-[10px] bg-stone-800 text-white px-2 py-0.5 rounded-sm font-bold tracking-widest" onClick={() => setCurrentMonth(new Date())}>오늘</button>
             </div>
+            {/* 인쇄 버튼 */}
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-stone-400 rounded-sm font-bold hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors ml-2"
+              title="현재 캘린더 인쇄 (브라우저 인쇄 다이얼로그)"
+            >
+              🖨️ 인쇄
+            </button>
          </div>
 
          <div className="flex items-center gap-2 flex-wrap">
@@ -1099,7 +1107,7 @@ ${transcript}`;
           <div className="py-20 text-center text-stone-400 font-bold">불러오는 중...</div>
        ) : (
           <div className="flex flex-col gap-10">
-              <div className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
+              <div id="calendar-print-area" className={`grid grid-cols-1 ${monthsView === 2 ? 'xl:grid-cols-2' : ''} gap-6 items-start`}>
                 <ScheduleCalendar
                    schedules={filteredSchedules}
                    currentMonth={currentMonth}
@@ -1197,32 +1205,108 @@ ${transcript}`;
                             </div>
                           </div>
                           
-                          {/* Info Grid */}
-                          <div className="mt-auto bg-white dark:bg-stone-800/50 rounded-sm border border-stone-300 p-4 space-y-3 text-xs">
-                             <div className="flex justify-between items-center">
-                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 tracking-widest">가스 구분</span>
-                               <span className="font-bold text-stone-800 dark:text-stone-300">{sch.gasType || '-'}</span>
-                             </div>
-                             <div className="flex justify-between items-start">
-                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-0.5 tracking-widest">공사/입고</span>
-                               <div className="text-right font-bold text-stone-700 dark:text-stone-400">
-                                 <div>S: {sch.constructionStart || '-'} / E: {sch.constructionEnd || '-'}</div>
-                                 <div className="mt-0.5">🔥: {sch.ovenIn || '-'} / 📦: {sch.initialStockIn || '-'}</div>
-                               </div>
-                             </div>
-                             <div className="flex justify-between items-start">
-                               <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-0.5 tracking-widest">사전/본 교육</span>
-                               <div className="text-right">
-                                 <div className="font-bold text-stone-800 dark:text-stone-300">{sch.preTrainingStart || '-'} ({sch.preTrainingDays || 0}일)</div>
-                                 <div className="text-[10px] text-stone-400 mb-0.5">📍 {sch.preTrainingLocation || '-'}</div>
-                                 <div className="font-bold text-stone-700 dark:text-stone-400">본: {sch.trainingStart || '-'} ~ {sch.trainingEnd || '-'}</div>
-                               </div>
-                             </div>
-                             <div className="flex justify-between items-center border-t border-stone-300 dark:border-stone-700 pt-3 mt-3">
-                               <span className="text-[11px] text-stone-500 dark:text-stone-400 font-bold tracking-widest">오픈일</span>
-                               <span className="text-base font-black text-rose-700 tracking-tighter">{sch.openDate || '-'}</span>
-                             </div>
-                          </div>
+                          {/* Info Grid — schedule_date masterItems 기반 동적 렌더링 */}
+                          {(() => {
+                            const schedAny = sch as unknown as Record<string, string>;
+                            const dateItems = (processSettings.masterItems || [])
+                              .filter(i => i.category === 'schedule_date' && !i.isArchived && i.scheduleField)
+                              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                            const openItem = dateItems.find(i => i.scheduleField === 'openDate');
+                            const nonOpenItems = dateItems.filter(i => i.scheduleField !== 'openDate');
+                            return (
+                              <div className="mt-auto bg-white dark:bg-stone-800/50 rounded-sm border border-stone-300 p-4 space-y-3 text-xs">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 tracking-widest">가스 구분</span>
+                                  <span className="font-bold text-stone-800 dark:text-stone-300">{sch.gasType || '-'}</span>
+                                </div>
+                                {/* 공사 기간 — 시스템 항목 고정 */}
+                                <div className="flex justify-between items-start">
+                                  <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 mt-0.5 tracking-widest">공사 기간</span>
+                                  <div className="text-right font-bold text-stone-700 dark:text-stone-400">
+                                    <div>S: {sch.constructionStart || '-'}</div>
+                                    <div>E: {sch.constructionEnd || '-'}</div>
+                                  </div>
+                                </div>
+                                {/* 나머지 schedule_date 항목 동적 렌더 */}
+                                {nonOpenItems.map(item => {
+                                  const val = schedAny[item.scheduleField!];
+                                  const endField = item.scheduleField!.replace('Start', 'End').replace('In', 'End');
+                                  const endVal = schedAny[endField];
+                                  if (!val && !endVal) return null;
+                                  return (
+                                    <div key={item.id} className="flex justify-between items-center">
+                                      <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400 tracking-widest">{item.text}</span>
+                                      <span className="font-bold text-stone-700 dark:text-stone-400 text-right">
+                                        {val || '-'}{endVal && endVal !== val ? ` ~ ${endVal}` : ''}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                {/* 오픈일 — 시각적으로 강조 */}
+                                {openItem && (
+                                  <div className="flex justify-between items-center border-t border-stone-300 dark:border-stone-700 pt-3 mt-3">
+                                    <span className="text-[11px] text-stone-500 dark:text-stone-400 font-bold tracking-widest">{openItem.text}</span>
+                                    <span className="text-base font-black text-rose-700 tracking-tighter">{schedAny[openItem.scheduleField!] || '-'}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* showOnCard 항목: 이름 + 날짜/일정 + 상태 */}
+                          {(() => {
+                            const cardItems = (processSettings.masterItems || [])
+                              .filter(i => i.showOnCard && !i.isArchived)
+                              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                            if (cardItems.length === 0) return null;
+                            const allWorkItems = (processSettings.masterItems || []).filter(i => !i.isArchived);
+                            const computed = computeWorkItemDates(allWorkItems, sch);
+                            const schedAny2 = sch as unknown as Record<string, string>;
+                            const STATUS_LABELS = ['미진행', '안내완료', '진행중', '완료'];
+                            const STATUS_CLS = [
+                              'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400',
+                              'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                              'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                            ];
+                            return (
+                              <div className="mt-2 bg-white dark:bg-stone-800/50 rounded-sm border border-stone-300 p-3 space-y-2">
+                                <p className="text-[10px] font-black text-stone-400 tracking-widest">체크리스트 / 태스크</p>
+                                {cardItems.map(item => {
+                                  const status = (sch.checklistData as any)?.[item.id]?.status ?? 0;
+                                  const statusLabel = STATUS_LABELS[status] || '미진행';
+                                  const statusCls = STATUS_CLS[status] || STATUS_CLS[0];
+
+                                  // 날짜 계산: task → computeWorkItemDates, schedule_date → scheduleField 직접, checklist → fixedDate
+                                  let dateStr = '';
+                                  if (item.category === 'task') {
+                                    const d = computed[item.id];
+                                    if (d) dateStr = d.start === d.end ? d.start : `${d.start} ~ ${d.end}`;
+                                  } else if (item.category === 'schedule_date' && item.scheduleField) {
+                                    const start = schedAny2[item.scheduleField];
+                                    const endField = item.scheduleField.replace('Start', 'End').replace('In', 'End');
+                                    const end = schedAny2[endField];
+                                    if (start) dateStr = (end && end !== start) ? `${start} ~ ${end}` : start;
+                                  } else {
+                                    const fixedDate = (sch.checklistData as any)?.[item.id]?.fixedDate;
+                                    if (fixedDate) dateStr = fixedDate;
+                                  }
+
+                                  return (
+                                    <div key={item.id} className="space-y-0.5">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 truncate">{item.text}</span>
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded shrink-0 ${statusCls}`}>{statusLabel}</span>
+                                      </div>
+                                      {dateStr && (
+                                        <div className="text-[10px] text-stone-400 font-bold">{dateStr}</div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))
                     )}

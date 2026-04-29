@@ -216,6 +216,63 @@ export const getPreTrainingStartDate = (endDateStr: string): string => {
   
   // 지난 주 월요일로 7일 더 뒤로
   d.setDate(d.getDate() - 7);
-  
+
   return d.toISOString().split('T')[0];
-};
+};
+
+function snapToWeekday(d: Date): Date {
+  const r = new Date(d);
+  const dow = r.getDay();
+  if (dow === 6) r.setDate(r.getDate() - 1);
+  else if (dow === 0) r.setDate(r.getDate() - 2);
+  return r;
+}
+
+/** 워크아이템 D-day 날짜 계산 (캘린더·타임라인·카드 공통 사용) */
+export function computeWorkItemDates(
+  workItems: import('./types').WorkItem[],
+  schedule: import('./types').FranchiseSchedule
+): Record<string, { start: string; end: string }> {
+  const pureDates: Record<string, { start: string; end: string }> = {};
+  let changed = true, pass = 0;
+  while (changed && pass < 50) {
+    changed = false; pass++;
+    workItems.forEach(wt => {
+      if (pureDates[wt.id] || wt.dDayOffset === undefined) return;
+      const anchor = wt.anchorField || 'constructionStart';
+      let anchorDate = '';
+      if (anchor === 'constructionStart') anchorDate = schedule.constructionStart || '';
+      else if (anchor === 'constructionEnd') anchorDate = schedule.constructionEnd || '';
+      else anchorDate = pureDates[anchor]?.start || '';
+      if (!anchorDate) return;
+      const base = new Date(anchorDate);
+      const sd = new Date(base); sd.setDate(sd.getDate() + wt.dDayOffset!);
+      const startD = wt.skipWeekends ? snapToWeekday(sd) : sd;
+      const startStr = startD.toISOString().split('T')[0];
+      let endStr = startStr;
+      if (wt.dDayEndOffset !== undefined && wt.dDayOffset !== undefined) {
+        const dur = wt.dDayEndOffset - wt.dDayOffset;
+        if (dur > 0) {
+          const ed = new Date(startStr); ed.setDate(ed.getDate() + dur);
+          endStr = (wt.skipWeekends ? snapToWeekday(ed) : ed).toISOString().split('T')[0];
+        }
+      }
+      pureDates[wt.id] = { start: startStr, end: endStr };
+      changed = true;
+    });
+  }
+  const displayDates = { ...pureDates };
+  workItems.forEach(wt => {
+    if (wt.anchorLocked) return;
+    const fixedDate = schedule.checklistData?.[wt.id]?.fixedDate;
+    if (!fixedDate) return;
+    const orig = pureDates[wt.id];
+    let endStr = fixedDate;
+    if (orig) {
+      const dur = Math.round((new Date(orig.end).getTime() - new Date(orig.start).getTime()) / 86400000);
+      if (dur > 0) { const ed = new Date(fixedDate); ed.setDate(ed.getDate() + dur); endStr = ed.toISOString().split('T')[0]; }
+    }
+    displayDates[wt.id] = { start: fixedDate, end: endStr };
+  });
+  return displayDates;
+}
