@@ -3,7 +3,7 @@ import { useToast } from '../Toast';
 import { GoogleGenAI } from '@google/genai';
 import { Clock, Image as ImageIcon, Send, Store, Info, LayoutTemplate, Sparkles, Edit2, Download } from 'lucide-react';
 import { reviewDb, db as mainDb, auth } from '../../firebase';
-import { collection, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 
 export function MarketingGenerator({ activeBrand }: { activeBrand: string | null }) {
   const toast = useToast();
@@ -43,17 +43,20 @@ export function MarketingGenerator({ activeBrand }: { activeBrand: string | null
   };
 
   useEffect(() => {
-    const unsubRoi = onSnapshot(collection(reviewDb, 'roi_analysis'), snap => {
-      const data: any[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-      setRoiData(data);
-    });
-    const unsubRev = onSnapshot(collection(reviewDb, 'reviews'), snap => {
-      const data: any[] = [];
-      snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-      setReviews(data);
-    });
-    return () => { unsubRoi(); unsubRev(); };
+    // roi_analysis: 실시간 불필요 — 1회 조회
+    getDocs(collection(reviewDb, 'roi_analysis')).then(snap => {
+      setRoiData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }).catch(() => {});
+
+    // reviews: 전체 구독 → 최근 60일 + 최대 500건으로 제한
+    const date60 = new Date();
+    date60.setDate(date60.getDate() - 60);
+    const date60Str = date60.toISOString().split('T')[0];
+    getDocs(
+      query(collection(reviewDb, 'reviews'), where('작성일', '>=', date60Str), limit(500))
+    ).then(snap => {
+      setReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }).catch(() => {});
   }, []);
 
   const allStores = Array.from(new Set([...roiData.map(r => r.매장명), ...reviews.map(r => r.매장명)])).sort() as string[];

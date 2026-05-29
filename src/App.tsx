@@ -38,8 +38,8 @@ import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenu
 import { auth, db, reviewDb, salesDb } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
-  doc, getDoc, collection, onSnapshot, setDoc, updateDoc, addDoc,
-  deleteDoc, writeBatch, query, where, deleteField
+  doc, getDoc, getDocs, collection, onSnapshot, setDoc, updateDoc, addDoc,
+  deleteDoc, writeBatch, query, where, deleteField, limit
 } from 'firebase/firestore';
 
 enum OperationType {
@@ -117,98 +117,65 @@ function HomePage({
       setMissingDrawingStores(missingDrawings);
     }, (error) => onFirestoreError(error, OperationType.GET, 'franchise_schedules'));
 
-    let unsubRev: any = null;
-    getDoc(doc(reviewDb, 'review_states', 'resolved')).then(resolvedDoc => {
-      getDoc(doc(reviewDb, 'review_states', 'overridden')).then(overriddenDoc => {
-        const resolved = resolvedDoc.exists() ? resolvedDoc.data()?.ids || [] : [];
-        const overridden = overriddenDoc.exists() ? overriddenDoc.data()?.ids || [] : [];
-        
-        // 💡 [비용 절감] 1만 개의 전체 리뷰 대신, '부정'으로 판별된 수십 개의 리뷰만 쏙 골라와서 읽기 횟수 95% 절감!
-        const qRev = query(collection(reviewDb, 'reviews'), where('감정분석', '==', '부정'));
-        unsubRev = onSnapshot(qRev, snap => {
-          let count = 0;
-          snap.forEach(d => {
-            if (!resolved.includes(d.id) && !overridden.includes(d.id)) {
-              count++;
-            }
-          });
-          setUnresolvedReviewsCount(count);
-        }, (error) => onFirestoreError(error, OperationType.GET, 'reviews'));
+    // 미조치 부정리뷰 수 — 실시간 불필요, 1회 조회
+    Promise.all([
+      getDoc(doc(reviewDb, 'review_states', 'resolved')),
+      getDoc(doc(reviewDb, 'review_states', 'overridden')),
+    ]).then(([resolvedDoc, overriddenDoc]) => {
+      const resolved = resolvedDoc.exists() ? resolvedDoc.data()?.ids || [] : [];
+      const overridden = overriddenDoc.exists() ? overriddenDoc.data()?.ids || [] : [];
+      const qRev = query(collection(reviewDb, 'reviews'), where('감정분석', '==', '부정'), limit(200));
+      getDocs(qRev).then(snap => {
+        let count = 0;
+        snap.forEach(d => { if (!resolved.includes(d.id) && !overridden.includes(d.id)) count++; });
+        setUnresolvedReviewsCount(count);
       });
     }).catch(() => setUnresolvedReviewsCount(0));
 
-    // 경쟁사 가격 변동 감지
-    // 💡 [비용 절감] 몇 달 치 전체 데이터 대신 최근 14일 치 데이터만 가볍게 조회
+    // 경쟁사 가격 변동 — 실시간 불필요, 1회 조회
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    const compQ = query(collection(reviewDb, 'competitor_menu'), where('수집일자', '>=', twoWeeksAgo.toISOString().split('T')[0]));
-    const unsubComp = onSnapshot(compQ, snap => {
+    getDocs(
+      query(collection(reviewDb, 'competitor_menu'), where('수집일자', '>=', twoWeeksAgo.toISOString().split('T')[0]))
+    ).then(snap => {
       const data: any[] = [];
       snap.forEach(d => data.push(d.data()));
-      
-      const dates = [...new Set(data.map(c => c.수집일자 as string))].filter(Boolean).sort();
-      if (dates.length >= 2) {
-        const latestDate = dates[dates.length - 1];
-        
-        // 💡 [핵심 픽스] 하루 전이 아닌 '최근 7일' 기준으로 변동 감지
-        const d = new Date(latestDate);
-        if (!isNaN(d.getTime())) {
-          d.setDate(d.getDate() - 7);
-          const weekAgoStr = d.toISOString().split('T')[0];
-          const validPrevDates = dates.filter(date => date >= weekAgoStr && date < latestDate);
-          const prevDate = validPrevDates.length > 0 ? validPrevDates[0] : dates[dates.length - 2];
-          
-          const latestData = data.filter(c => c.수집일자 === latestDate);
-          const prevData = data.filter(c => c.수집일자 === prevDate);
-          
-          const getPrice = (menuStr: string) => {
-            if (!menuStr || menuStr === '수집 실패') return 0;
-            const items = menuStr.replace(/\n/g, '|').split('|').map(s => s.trim()).filter(Boolean);
-            for (let i = 0; i < items.length; i++) {
-              let name = items[i];
-              let priceStr = '';
-              if (items[i].includes(':')) {
-                const parts = items[i].split(':');
-                name = parts[0];
-                priceStr = parts.slice(1).join(':');
-              } else if (i + 1 < items.length && /[0-9,]+\s*원/.test(items[i + 1])) {
-                priceStr = items[i + 1];
-                i++; 
-              } else {
-                const match = items[i].match(/([0-9]{1,2}(?:,[0-9]{3})+|[0-9]{4,5})\s*원?/);
-                if (match) priceStr = match[0];
-              }
-              if (name.includes('고등어')) {
-                const v = parseInt(priceStr.replace(/[^0-9]/g, ''), 10);
-                if (!isNaN(v) && v >= 3000 && v <= 25000) return v;
-              }
-            }
-            return 0;
-          };
-  
-          let changes = 0;
-          const targetBrands = ['산으로간고등어', '화덕으로간고등어', '부산에뜬고등어', '북극해고등어'];
-          targetBrands.forEach(brand => {
-            const lPrices = latestData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
-            const pPrices = prevData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0);
-            const lMin = lPrices.length ? Math.min(...lPrices) : 0;
-            const pMin = pPrices.length ? Math.min(...pPrices) : 0;
-            if (lMin > 0 && pMin > 0 && lMin !== pMin) changes++;
-          });
-          setCompetitorChangesCount(changes);
-        } else {
-          setCompetitorChangesCount(0);
-        }
-      } else {
-        setCompetitorChangesCount(0);
-      }
-    }, (error) => onFirestoreError(error, OperationType.GET, 'competitor_menu'));
 
-    return () => {
-      unsubSch();
-      if (unsubRev) unsubRev();
-      unsubComp();
-    };
+      const dates = [...new Set(data.map(c => c.수집일자 as string))].filter(Boolean).sort();
+      if (dates.length < 2) { setCompetitorChangesCount(0); return; }
+      const latestDate = dates[dates.length - 1];
+      const d = new Date(latestDate);
+      if (isNaN(d.getTime())) { setCompetitorChangesCount(0); return; }
+      d.setDate(d.getDate() - 7);
+      const weekAgoStr = d.toISOString().split('T')[0];
+      const validPrevDates = dates.filter(date => date >= weekAgoStr && date < latestDate);
+      const prevDate = validPrevDates.length > 0 ? validPrevDates[0] : dates[dates.length - 2];
+      const latestData = data.filter(c => c.수집일자 === latestDate);
+      const prevData = data.filter(c => c.수집일자 === prevDate);
+
+      const getPrice = (menuStr: string) => {
+        if (!menuStr || menuStr === '수집 실패') return 0;
+        const items = menuStr.replace(/\n/g, '|').split('|').map(s => s.trim()).filter(Boolean);
+        for (let i = 0; i < items.length; i++) {
+          let name = items[i]; let priceStr = '';
+          if (items[i].includes(':')) { const parts = items[i].split(':'); name = parts[0]; priceStr = parts.slice(1).join(':'); }
+          else if (i + 1 < items.length && /[0-9,]+\s*원/.test(items[i + 1])) { priceStr = items[i + 1]; i++; }
+          else { const match = items[i].match(/([0-9]{1,2}(?:,[0-9]{3})+|[0-9]{4,5})\s*원?/); if (match) priceStr = match[0]; }
+          if (name.includes('고등어')) { const v = parseInt(priceStr.replace(/[^0-9]/g, ''), 10); if (!isNaN(v) && v >= 3000 && v <= 25000) return v; }
+        }
+        return 0;
+      };
+
+      let changes = 0;
+      ['산으로간고등어', '화덕으로간고등어', '부산에뜬고등어', '북극해고등어'].forEach(brand => {
+        const lMin = Math.min(...latestData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0));
+        const pMin = Math.min(...prevData.filter(d => (d.경쟁브랜드명_엑셀 || '').includes(brand)).map(d => getPrice(d.메뉴_및_가격)).filter(p => p > 0));
+        if (lMin > 0 && pMin > 0 && lMin !== pMin) changes++;
+      });
+      setCompetitorChangesCount(changes);
+    }).catch(() => setCompetitorChangesCount(0));
+
+    return () => { unsubSch(); };
   }, []);
 
   const alertMenus = menus.filter(m => (m.hasAlert || checkMenuAlert(m, ingredients, menus)) && !m.isArchived).length;
