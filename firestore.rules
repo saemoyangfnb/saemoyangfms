@@ -187,5 +187,9 @@ service cloud.firestore {
       allow create: if (isAdmin() || isApprovedUser()) && isValidIngredientChange(request.resource.data);
       allow delete: if isAdmin();
     }
+
+    match /meetings/{meetingId} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

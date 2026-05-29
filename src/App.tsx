@@ -22,6 +22,7 @@ import { MarketingDashboard } from './components/marketing';
 import { SalesDashboard } from './components/sales/SalesDashboard';
 import { FranchiseScheduleView } from './components/franchise';
 import { ActivityLogView } from './components/ActivityLogView';
+import { MeetingView } from './components/MeetingView';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -30,7 +31,7 @@ import {
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, Bot, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
-  CheckSquare, FileText, History
+  CheckSquare, FileText, History, NotebookPen
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -47,7 +48,7 @@ enum OperationType {
 }
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1338,6 +1339,17 @@ export default function App() {
 
           <div className="mx-2 space-y-0.5">
             <button
+              onClick={() => navigateAndCloseMobile(null, 'meetings')}
+              className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
+                sidebar.section === 'meetings'
+                  ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                  : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+              }`}
+            >
+              <NotebookPen size={14} />
+              {(!sidebarCollapsed || isMobile) && '회의록'}
+            </button>
+            <button
               onClick={() => navigateAndCloseMobile(null, 'database')}
               className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
                 sidebar.section === 'database' && sidebar.brandId === null
@@ -1491,6 +1503,11 @@ export default function App() {
 
           {/* 에이전트 팀 */}
           {sidebar.section === 'agents' && <AgentsDashboard />}
+
+          {/* 회의록 */}
+          {sidebar.section === 'meetings' && (
+            <MeetingView currentUserName={currentUser.name} />
+          )}
 
           {/* 브랜드별 콘텐츠 */}
           {sidebar.brandId !== null && currentBrand && (

@@ -10,7 +10,7 @@ export enum OperationType {
 }
 
 export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-export type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'history';
+export type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'history' | 'meetings';
 
 export interface SidebarState {
   brandId: BrandId | null;
@@ -44,7 +44,7 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
-  'home', 'cost', 'sales', 'database', 'franchise', 'stores', 'marketing', 'review', 'agents', 'admin'
+  'home', 'cost', 'sales', 'database', 'franchise', 'stores', 'marketing', 'review', 'agents', 'meetings', 'admin'
 ] as const;
 export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
@@ -58,6 +58,7 @@ export const SECTION_LABELS: Record<PermissionSection, string> = {
   marketing: '마케팅',
   review: '가맹점 관제',
   agents: '에이전트',
+  meetings: '회의록',
   admin: '관리자 패널',
 };
 
