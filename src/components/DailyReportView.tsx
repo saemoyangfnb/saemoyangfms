@@ -4,13 +4,27 @@ import {
   collection, getDocs, doc, setDoc, updateDoc,
   query, where, orderBy
 } from 'firebase/firestore';
-import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task } from '../types';
+import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem } from '../types';
 import { useToast } from './Toast';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight } from 'lucide-react';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3 } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => d.toISOString().slice(0, 10);
 const today = () => toYMD(new Date());
+
+const getWeekBounds = (d: Date = new Date()) => {
+  const day = d.getDay(); // 0=일
+  const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+  return { weekStart: toYMD(mon), weekEnd: toYMD(fri) };
+};
+
+const WEEK_STATUS_LABELS = { planned: '예정', in_progress: '진행 중', done: '완료' } as const;
+const WEEK_STATUS_CLS = {
+  planned: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
+  in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  done: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+};
 const fmtDate = (ymd: string) => {
   const d = new Date(ymd + 'T00:00:00');
   const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -203,8 +217,14 @@ export function DailyReportView({ currentUser }: Props) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
+  const [myWeekly, setMyWeekly] = useState<WeeklyReport | null>(null);
+  const [weeklyForm, setWeeklyForm] = useState<WeeklyReportItem[]>([
+    { title: '', status: 'planned' }, { title: '', status: 'planned' },
+    { title: '', status: 'planned' }, { title: '', status: 'planned' },
+  ]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'my' | 'team'>('my');
+  const [tab, setTab] = useState<'my' | 'weekly' | 'team'>('my');
 
   /* 오늘 내 보고서 */
   const myMorning = reports.find(r => r.employeeId === myEmployee?.id && r.date === date && r.type === 'morning');
@@ -223,12 +243,25 @@ export function DailyReportView({ currentUser }: Props) {
     setReports(reportSnap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
     const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
     setMyEmployee(me);
-    // 내 업무 태스크 (담당자 = 나, 미완료)
+
+    // 이번 주 주간보고
+    const { weekStart, weekEnd } = getWeekBounds();
+    const weekSnap = await getDocs(query(collection(salesDb, 'weekly_reports'), where('weekStart', '==', weekStart)));
+    const wReports = weekSnap.docs.map(d => ({ id: d.id, ...d.data() } as WeeklyReport));
+    setWeeklyReports(wReports);
+    const myW = me ? wReports.find(r => r.employeeId === me.id) ?? null : null;
+    setMyWeekly(myW);
+    if (myW) setWeeklyForm(myW.items.length >= 4 ? myW.items : [...myW.items, ...Array(4 - myW.items.length).fill({ title: '', status: 'planned' })]);
+
+    // 내 업무 태스크 (담당자 = 나) — 단일 where로 복합 인덱스 불필요, 클라이언트 필터링
     if (me) {
       const taskSnap = await getDocs(
-        query(collection(salesDb, 'tasks'), where('assigneeId', '==', me.id), where('status', '==', 'pending'), orderBy('createdAt', 'desc'))
+        query(collection(salesDb, 'tasks'), where('assigneeId', '==', me.id))
       );
-      setMyTasks(taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
+      const tasks = taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
+        .filter(t => t.status === 'pending' || t.status === 'in_progress')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      setMyTasks(tasks);
     }
     setLoading(false);
   }, [date, currentUser.uid]);
@@ -285,6 +318,25 @@ export function DailyReportView({ currentUser }: Props) {
     fetchData();
   };
 
+  /* 주간보고 제출/수정 */
+  const submitWeekly = async () => {
+    const filled = weeklyForm.filter(it => it.title.trim());
+    if (filled.length === 0) { toast.error('업무 항목을 최소 1건 입력해주세요'); return; }
+    const { weekStart, weekEnd } = getWeekBounds();
+    const now = new Date().toISOString();
+    const id = myWeekly?.id ?? `wr_${Date.now()}`;
+    const report: WeeklyReport = {
+      id, employeeId: myEmployee?.id ?? currentUser.uid,
+      employeeName: currentUser.name,
+      departmentId: myEmployee?.departmentId ?? '',
+      weekStart, weekEnd, items: filled,
+      submittedAt: myWeekly?.submittedAt ?? now, updatedAt: now,
+    };
+    await setDoc(doc(salesDb, 'weekly_reports', id), report);
+    toast.success(myWeekly ? '주간보고가 수정되었습니다' : '주간보고가 제출되었습니다');
+    fetchData();
+  };
+
   const prevDate = () => {
     const d = new Date(date + 'T00:00:00');
     d.setDate(d.getDate() - 1);
@@ -328,19 +380,93 @@ export function DailyReportView({ currentUser }: Props) {
       </div>
 
       {/* 탭 */}
-      {isAdmin && (
-        <div className="flex gap-1 mb-5 border-b border-stone-200 dark:border-stone-700">
-          {(['my', 'team'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tab === t ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-              {t === 'my' ? '내 보고' : '팀 현황'}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-1 mb-5 border-b border-stone-200 dark:border-stone-700">
+        {([
+          { key: 'my',     label: '일일 보고' },
+          { key: 'weekly', label: '주간 보고' },
+          ...(isAdmin ? [{ key: 'team', label: '팀 현황' }] : []),
+        ] as { key: 'my' | 'weekly' | 'team'; label: string }[]).map(({ key, label }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="text-center py-20 text-stone-400 text-sm">불러오는 중...</div>
+      ) : tab === 'weekly' ? (
+        /* ── 주간보고 탭 ── */
+        <div className="max-w-xl">
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden mb-4">
+            <div className="px-6 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">주간 업무보고</p>
+                <p className="text-xs text-stone-500 mt-0.5">{getWeekBounds().weekStart} ~ {getWeekBounds().weekEnd}</p>
+              </div>
+              {myWeekly && <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">제출 완료</span>}
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {weeklyForm.map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-[11px] font-black text-stone-500 shrink-0 mt-1">{i + 1}</span>
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      value={item.title}
+                      onChange={e => setWeeklyForm(p => p.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x))}
+                      placeholder={`굵직한 업무 ${i + 1}`}
+                      className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={item.detail ?? ''}
+                        onChange={e => setWeeklyForm(p => p.map((x, idx) => idx === i ? { ...x, detail: e.target.value } : x))}
+                        placeholder="상세 내용 (선택)"
+                        className="flex-1 px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500"
+                      />
+                      <select
+                        value={item.status}
+                        onChange={e => setWeeklyForm(p => p.map((x, idx) => idx === i ? { ...x, status: e.target.value as WeeklyReportItem['status'] } : x))}
+                        className="px-2 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 shrink-0"
+                      >
+                        {Object.entries(WEEK_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-stone-100 dark:border-stone-800 flex justify-end">
+              <button onClick={submitWeekly} className="flex items-center gap-2 px-5 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
+                <Send size={13} /> {myWeekly ? '수정 저장' : '주간보고 제출'}
+              </button>
+            </div>
+          </div>
+
+          {/* 팀 주간보고 목록 (관리자) */}
+          {isAdmin && weeklyReports.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-stone-500 dark:text-stone-400 mb-2">이번 주 팀 제출 현황 ({weeklyReports.length}명)</p>
+              {weeklyReports.map(wr => (
+                <div key={wr.id} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-stone-900 dark:text-stone-100">{wr.employeeName}</span>
+                    <span className="text-[11px] text-stone-400">{wr.updatedAt.slice(0, 10)}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {wr.items.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span className="text-stone-400 font-bold w-4">{i + 1}.</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${WEEK_STATUS_CLS[it.status]}`}>{WEEK_STATUS_LABELS[it.status]}</span>
+                        <span className="text-stone-700 dark:text-stone-300 truncate">{it.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : tab === 'my' ? (
         /* ── 내 보고 탭 ── */
         <div className="max-w-xl space-y-4">

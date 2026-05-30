@@ -1169,9 +1169,41 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto py-2">
 
+          {/* ── 인트라넷 (최상단) ── */}
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="px-3 mb-1 mt-1">
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">인트라넷</p>
+            </div>
+          )}
+          <div className="mx-2 space-y-0.5 mb-1">
+            {([
+              { section: 'daily',      icon: <FileText size={14} />,      label: '일일 업무보고' },
+              { section: 'calendar',   icon: <Calendar size={14} />,      label: '캘린더' },
+              { section: 'notice',     icon: <Megaphone size={14} />,     label: '공지사항' },
+              { section: 'meetings',   icon: <NotebookPen size={14} />,   label: '회의록' },
+              { section: 'reports',    icon: <ClipboardList size={14} />, label: '보고서' },
+              { section: 'employees',  icon: <Users size={14} />,         label: '직원 명부' },
+            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[]).map(({ section, icon, label }) => (
+              <button
+                key={section}
+                onClick={() => navigateAndCloseMobile(null, section)}
+                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
+                  sidebar.section === section
+                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                }`}
+              >
+                {icon}
+                {(!sidebarCollapsed || isMobile) && label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── 운영 브랜드 ── */}
+          <div className="my-2 mx-4 border-t border-stone-300 dark:border-stone-700" />
           {(!sidebarCollapsed || isMobile) && (
             <div className="px-3 mb-1">
-            <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-2 mt-2">운영 브랜드</p>
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">운영 브랜드</p>
             </div>
           )}
 
@@ -1299,37 +1331,6 @@ export default function App() {
               )}
             </div>
           )}
-
-          {/* ── 인트라넷 ── */}
-          <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 mb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">인트라넷</p>
-            </div>
-          )}
-          <div className="mx-2 space-y-0.5">
-            {([
-              { section: 'daily',      icon: <FileText size={14} />,     label: '일일 업무보고' },
-              { section: 'calendar',   icon: <Calendar size={14} />,     label: '캘린더' },
-              { section: 'notice',     icon: <Megaphone size={14} />,    label: '공지사항' },
-              { section: 'meetings',   icon: <NotebookPen size={14} />,  label: '회의록' },
-              { section: 'reports',    icon: <ClipboardList size={14} />, label: '보고서' },
-              { section: 'employees',  icon: <Users size={14} />,        label: '직원 명부' },
-            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[]).map(({ section, icon, label }) => (
-              <button
-                key={section}
-                onClick={() => navigateAndCloseMobile(null, section)}
-                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                  sidebar.section === section
-                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-                }`}
-              >
-                {icon}
-                {(!sidebarCollapsed || isMobile) && label}
-              </button>
-            ))}
-          </div>
 
           {/* ── 운영 도구 ── */}
           <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />

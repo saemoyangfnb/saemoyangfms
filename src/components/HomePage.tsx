@@ -5,7 +5,8 @@ import { reviewDb, salesDb } from '../firebase';
 import { collection, onSnapshot, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
 import {
   Store, ShieldAlert, AlertTriangle, Eye, LayoutDashboard, Database, BarChart2,
-  ArrowRight, CalendarDays, Bell, Sparkles, TriangleAlert, FileText
+  ArrowRight, CalendarDays, Bell, Sparkles, TriangleAlert, FileText,
+  ClipboardList, CheckCircle, XCircle, Clock, Briefcase, NotebookPen, Users
 } from 'lucide-react';
 
 const REVIEW_ENABLED_BRANDS = ['dalbitgo'];
@@ -39,6 +40,13 @@ export function HomePage({
   const [competitorChangesCount, setCompetitorChangesCount] = useState<number>(0);
   const [missingScheduleStores, setMissingScheduleStores] = useState<{name: string, number: string}[]>([]);
   const [missingDrawingStores, setMissingDrawingStores] = useState<{name: string, number: string}[]>([]);
+
+  // 인트라넷 대시보드 데이터
+  const [todayMorning, setTodayMorning] = useState<boolean | null>(null);
+  const [todayEvening, setTodayEvening] = useState<boolean | null>(null);
+  const [pendingTaskCount, setPendingTaskCount] = useState(0);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
+  const [recentMeetingTitle, setRecentMeetingTitle] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubSch = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
@@ -116,6 +124,22 @@ export function HomePage({
       setCompetitorChangesCount(changes);
     }).catch(() => setCompetitorChangesCount(0));
 
+    // 인트라넷 데이터 1회 조회
+    const todayStr = new Date().toISOString().slice(0, 10);
+    Promise.all([
+      getDocs(query(collection(salesDb, 'daily_reports'), where('date', '==', todayStr))),
+      getDocs(query(collection(salesDb, 'tasks'), where('status', '==', 'pending'))),
+      getDocs(query(collection(salesDb, 'leave_requests'), where('status', '==', 'pending'))),
+      getDocs(query(collection(salesDb, 'meetings'), orderBy('date', 'desc'), limit(1))),
+    ]).then(([dailySnap, taskSnap, leaveSnap, meetingSnap]) => {
+      const reports = dailySnap.docs.map(d => d.data());
+      setTodayMorning(reports.some(r => r.type === 'morning'));
+      setTodayEvening(reports.some(r => r.type === 'evening'));
+      setPendingTaskCount(taskSnap.size);
+      setPendingLeaveCount(leaveSnap.size);
+      if (!meetingSnap.empty) setRecentMeetingTitle(meetingSnap.docs[0].data().title);
+    }).catch(() => {});
+
     return () => { unsubSch(); };
   }, []);
 
@@ -170,8 +194,73 @@ export function HomePage({
     { label: '매출 현황', icon: <BarChart2 size={18} />, onClick: () => onNavigate('dalbitgo', 'sales') },
   ];
 
+  const todayStr = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300 pb-12">
+
+      {/* ── 인트라넷 현황 바 ── */}
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-xs font-black text-stone-800 dark:text-stone-200">
+              {greeting()}, <span className="underline decoration-2 underline-offset-4 decoration-stone-300">{currentUser.name}</span>님
+            </p>
+            <p className="text-[11px] text-stone-400 mt-0.5">{todayStr}</p>
+          </div>
+          <button onClick={() => onNavigate(null, 'daily')} className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-lg hover:opacity-80">
+            <ClipboardList size={12} /> 업무보고
+          </button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            {
+              label: '오전 업무보고',
+              status: todayMorning === null ? '-' : todayMorning ? '제출 완료' : '미제출',
+              icon: todayMorning ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-amber-500" />,
+              cls: todayMorning ? 'border-emerald-200 dark:border-emerald-800' : 'border-amber-200 dark:border-amber-800',
+              onClick: () => onNavigate(null, 'daily'),
+            },
+            {
+              label: '퇴근 보고',
+              status: todayEvening === null ? '-' : todayEvening ? '제출 완료' : '미제출',
+              icon: todayEvening ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-stone-400" />,
+              cls: todayEvening ? 'border-emerald-200 dark:border-emerald-800' : 'border-stone-200 dark:border-stone-700',
+              onClick: () => onNavigate(null, 'daily'),
+            },
+            {
+              label: '대기 중 업무',
+              status: `${pendingTaskCount}건`,
+              icon: <Briefcase size={14} className={pendingTaskCount > 0 ? 'text-blue-500' : 'text-stone-400'} />,
+              cls: pendingTaskCount > 0 ? 'border-blue-200 dark:border-blue-800' : 'border-stone-200 dark:border-stone-700',
+              onClick: () => onNavigate(null, 'daily'),
+            },
+            {
+              label: '최근 회의록',
+              status: recentMeetingTitle ? recentMeetingTitle.slice(0, 12) + (recentMeetingTitle.length > 12 ? '…' : '') : '-',
+              icon: <NotebookPen size={14} className="text-stone-500" />,
+              cls: 'border-stone-200 dark:border-stone-700',
+              onClick: () => onNavigate(null, 'meetings'),
+            },
+          ].map(card => (
+            <button key={card.label} onClick={card.onClick}
+              className={`flex items-center gap-2 p-3 border rounded-lg bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left ${card.cls}`}>
+              {card.icon}
+              <div className="min-w-0">
+                <p className="text-[10px] text-stone-400 font-bold truncate">{card.label}</p>
+                <p className="text-xs font-black text-stone-800 dark:text-stone-200 truncate">{card.status}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        {currentUser.role === 'admin' && pendingLeaveCount > 0 && (
+          <div className="mt-3 pt-3 border-t border-stone-100 dark:border-stone-800">
+            <button onClick={() => onNavigate(null, 'calendar')} className="text-xs text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1 hover:underline">
+              <Clock size={11} /> 연차 결재 대기 {pendingLeaveCount}건
+            </button>
+          </div>
+        )}
+      </div>
 
       {missingScheduleStores.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">

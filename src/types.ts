@@ -467,6 +467,28 @@ export interface LeaveRequest {
 }
 
 // ==========================================
+// 주간 업무보고 (salesDb: weekly_reports)
+// 매주 월/화 작성, 굵직한 업무 4건
+// ==========================================
+export interface WeeklyReportItem {
+  title: string;       // 업무 제목
+  detail?: string;     // 상세 내용
+  status: 'planned' | 'in_progress' | 'done';
+}
+
+export interface WeeklyReport {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  departmentId: string;
+  weekStart: string;   // 월요일 YYYY-MM-DD
+  weekEnd: string;     // 금요일 YYYY-MM-DD
+  items: WeeklyReportItem[];
+  submittedAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
 // 공지사항 (salesDb: notices)
 // ==========================================
 export type NoticeCategory = '전체공지' | '부서공지' | '긴급' | '이벤트';

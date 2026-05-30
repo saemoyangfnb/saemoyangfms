@@ -4,7 +4,7 @@ import { collection, getDocs, doc, setDoc, updateDoc, query, orderBy } from 'fir
 import { Employee, EmployeePosition, Department, User } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { Plus, Edit2, Trash2, X, Check, Link, UserCheck, UserX, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, X, Check, Link, UserCheck, UserX, ChevronDown, GitBranch } from 'lucide-react';
 
 const POSITIONS: EmployeePosition[] = ['대표', '전무', '이사', '부장', '차장', '과장', '대리', '사원', '인턴', '슈퍼바이저', '기타'];
 
@@ -13,6 +13,82 @@ const positionOrder: Record<EmployeePosition, number> = {
 };
 
 const genId = () => `emp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+/* ── 조직도 컴포넌트 ──────────────────────────────────── */
+function OrgNode({ emp, children, deptName }: { emp: Employee; children?: React.ReactNode; deptName: string }) {
+  const [open, setOpen] = useState(true);
+  const hasChildren = React.Children.count(children) > 0;
+  return (
+    <div className="flex flex-col items-center">
+      <div
+        onClick={() => hasChildren && setOpen(p => !p)}
+        className={`relative flex flex-col items-center bg-white dark:bg-stone-900 border-2 border-stone-200 dark:border-stone-700 rounded-xl px-4 py-3 min-w-28 text-center shadow-sm ${hasChildren ? 'cursor-pointer hover:border-stone-400 dark:hover:border-stone-500' : ''} transition-colors`}
+      >
+        <div className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-sm font-black text-stone-700 dark:text-stone-300 mb-1.5">
+          {emp.name.slice(0, 1)}
+        </div>
+        <p className="text-xs font-black text-stone-900 dark:text-stone-100 whitespace-nowrap">{emp.name}</p>
+        <p className="text-[10px] text-stone-500 dark:text-stone-400">{emp.position}</p>
+        <p className="text-[9px] text-stone-400 dark:text-stone-500 mt-0.5 max-w-20 truncate">{deptName}</p>
+        {hasChildren && (
+          <span className="absolute -bottom-2.5 text-stone-400 text-[10px]">{open ? '▲' : '▼'}</span>
+        )}
+      </div>
+      {hasChildren && open && (
+        <div className="relative mt-5">
+          <div className="absolute top-0 left-1/2 w-px h-4 -translate-x-1/2 bg-stone-300 dark:bg-stone-600 -mt-5" />
+          <div className="flex gap-6 relative">
+            {React.Children.count(children) > 1 && (
+              <div className="absolute top-0 left-0 right-0 h-px bg-stone-300 dark:bg-stone-600" />
+            )}
+            {React.Children.map(children, child => (
+              <div className="flex flex-col items-center relative">
+                <div className="w-px h-4 bg-stone-300 dark:bg-stone-600 mb-0" />
+                {child}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrgChart({ employees, departments }: { employees: Employee[]; departments: Department[] }) {
+  const getDeptName = (id: string) => departments.find(d => d.id === id)?.name ?? '';
+
+  const renderTree = (managerId?: string): React.ReactNode[] => {
+    const children = employees
+      .filter(e => e.managerId === managerId || (!managerId && !e.managerId))
+      .sort((a, b) => (positionOrder[a.position] ?? 99) - (positionOrder[b.position] ?? 99));
+
+    return children.map(emp => (
+      <OrgNode key={emp.id} emp={emp} deptName={getDeptName(emp.departmentId)}>
+        {renderTree(emp.id)}
+      </OrgNode>
+    ));
+  };
+
+  const roots = renderTree(undefined);
+
+  if (employees.length === 0) {
+    return (
+      <div className="text-center py-20 text-stone-400 text-sm">
+        <GitBranch size={40} className="mx-auto mb-3 opacity-30" />
+        <p>등록된 직원이 없습니다</p>
+        <p className="text-xs mt-1">직원을 추가하고 결재 상급자를 지정하면 조직도가 자동으로 그려집니다</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto pb-8">
+      <div className="flex gap-8 justify-center min-w-max pt-4 px-8">
+        {roots}
+      </div>
+    </div>
+  );
+}
 
 interface FormState {
   name: string;
@@ -49,6 +125,7 @@ export function EmployeeDirectory({ currentUser }: Props) {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [filterDeptId, setFilterDeptId] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'org'>('list');
 
   const fetch = async () => {
     setLoading(true);
@@ -126,12 +203,30 @@ export function EmployeeDirectory({ currentUser }: Props) {
           <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">직원 명부</h1>
           <p className="text-sm text-stone-400 mt-0.5">재직 {activeCount}명 · 전체 {employees.length}명</p>
         </div>
-        {isAdmin && (
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
-            <Plus size={15} /> 직원 추가
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex border border-stone-200 dark:border-stone-700 rounded-lg overflow-hidden">
+            {(['list', 'org'] as const).map(m => (
+              <button key={m} onClick={() => setViewMode(m)}
+                className={`px-3 py-1.5 text-xs font-bold flex items-center gap-1 transition-colors ${viewMode === m ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>
+                {m === 'list' ? '목록' : <><GitBranch size={12} /> 조직도</>}
+              </button>
+            ))}
+          </div>
+          {isAdmin && (
+            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
+              <Plus size={15} /> 직원 추가
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* 조직도 뷰 */}
+      {viewMode === 'org' && (
+        <OrgChart employees={employees.filter(e => e.isActive)} departments={departments} />
+      )}
+
+      {/* 목록 뷰 */}
+      {viewMode === 'list' && <>
 
       {/* 부서 필터 */}
       <div className="flex gap-2 flex-wrap mb-5">
@@ -223,6 +318,8 @@ export function EmployeeDirectory({ currentUser }: Props) {
           })}
         </div>
       )}
+
+      </> /* 목록 뷰 끝 */}
 
       {/* 직원 추가/수정 모달 */}
       {showForm && (
