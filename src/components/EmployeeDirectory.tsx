@@ -228,6 +228,22 @@ export function EmployeeDirectory({ currentUser }: Props) {
       {/* 목록 뷰 */}
       {viewMode === 'list' && <>
 
+      {/* 초기 세팅 가이드 (관리자, 직원 0명일 때) */}
+      {isAdmin && employees.length === 0 && !loading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6 mb-5">
+          <h3 className="text-sm font-black text-blue-800 dark:text-blue-300 mb-3">직원 명부 초기 설정 가이드</h3>
+          <ol className="space-y-2 text-xs text-blue-700 dark:text-blue-400 font-semibold list-decimal list-inside">
+            <li>먼저 <strong>관리자 패널 → 부서 관리</strong>에서 부서를 만드세요 (예: 가맹관리부, 경영지원부)</li>
+            <li>위 <strong>직원 추가</strong> 버튼으로 직원을 등록하세요</li>
+            <li>직원 등록 시 <strong>결재 상급자</strong>를 지정하면 조직도가 자동으로 그려집니다</li>
+            <li>직원 카드에서 <strong>인트라넷 계정 연결</strong>을 하면 일일보고, 연차, 업무요청이 활성화됩니다</li>
+          </ol>
+          <p className="text-[11px] text-blue-500 dark:text-blue-500 mt-3">
+            ※ 계정 연결이 없어도 일일보고는 사용 가능하지만, 팀 현황 집계와 업무 요청 연동은 연결 후 정상 작동합니다
+          </p>
+        </div>
+      )}
+
       {/* 부서 필터 */}
       <div className="flex gap-2 flex-wrap mb-5">
         <button

@@ -26,6 +26,7 @@ import { MeetingView } from './components/MeetingView';
 import { EmployeeDirectory } from './components/EmployeeDirectory';
 import { CompanyCalendar } from './components/CompanyCalendar';
 import { ReportView } from './components/ReportView';
+import { NoticeBoard } from './components/NoticeBoard';
 import { DailyReportView } from './components/DailyReportView';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -1500,10 +1501,7 @@ export default function App() {
 
           {/* 공지사항 */}
           {sidebar.section === 'notice' && (
-            <div className="flex flex-col items-center justify-center py-32 text-stone-400">
-              <Megaphone size={40} className="mb-3 opacity-30" />
-              <p className="text-sm font-semibold">공지사항 — 준비 중</p>
-            </div>
+            <NoticeBoard currentUser={currentUser} />
           )}
 
           {/* 보고서 */}

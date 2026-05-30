@@ -39,9 +39,42 @@ const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactN
 };
 
 /* ── 개인 오전 보고 폼 ─────────────────────────────────── */
-function MorningForm({ onSubmit }: { onSubmit: (items: string[]) => void }) {
+function MorningForm({
+  onSubmit,
+  myId,
+}: {
+  onSubmit: (items: string[]) => void;
+  myId: string;
+}) {
   const [items, setItems] = useState<string[]>(['', '']);
+  const [carryItems, setCarryItems] = useState<DailyReportItem[]>([]);
+  const [selectedCarry, setSelectedCarry] = useState<Set<number>>(new Set());
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // 어제 미완료 항목 로드 (읽기 전용 — 기존 데이터 수정 없음)
+  useEffect(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const ymd = toYMD(yesterday);
+    getDocs(query(collection(salesDb, 'daily_reports'), where('date', '==', ymd), where('employeeId', '==', myId)))
+      .then(snap => {
+        const reports = snap.docs.map(d => d.data() as DailyReport);
+        const evening = reports.find(r => r.type === 'evening');
+        if (evening) {
+          const incomplete = evening.items.filter(it => it.status === 'incomplete');
+          setCarryItems(incomplete);
+          // 기본으로 전체 선택
+          setSelectedCarry(new Set(incomplete.map((_, i) => i)));
+        }
+      }).catch(() => {});
+  }, [myId]);
+
+  const toggleCarry = (i: number) =>
+    setSelectedCarry(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
 
   const update = (i: number, v: string) => setItems(p => p.map((x, idx) => idx === i ? v : x));
 
@@ -63,24 +96,58 @@ function MorningForm({ onSubmit }: { onSubmit: (items: string[]) => void }) {
   };
 
   const handleSubmit = () => {
-    const filled = items.map(s => s.trim()).filter(Boolean);
-    if (filled.length === 0) return;
-    onSubmit(filled);
+    // 선택된 이월 항목 + 직접 입력 항목 합산
+    const carried = carryItems.filter((_, i) => selectedCarry.has(i)).map(it => `[이월] ${it.text}`);
+    const manual = items.map(s => s.trim()).filter(Boolean);
+    const all = [...carried, ...manual];
+    if (all.length === 0) return;
+    onSubmit(all);
   };
 
   return (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-6">
       <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-4">오전 업무보고</p>
+
+      {/* 어제 미완료 이월 섹션 */}
+      {carryItems.length > 0 && (
+        <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+              <XCircle size={11} /> 어제 미완료 항목 — 이월할 항목을 선택하세요
+            </p>
+            <button onClick={() => setSelectedCarry(selectedCarry.size === carryItems.length ? new Set() : new Set(carryItems.map((_, i) => i)))}
+              className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline">
+              {selectedCarry.size === carryItems.length ? '전체 해제' : '전체 선택'}
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {carryItems.map((it, i) => (
+              <label key={i} className="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" checked={selectedCarry.has(i)} onChange={() => toggleCarry(i)}
+                  className="accent-amber-600 w-3.5 h-3.5 shrink-0" />
+                <span className={`text-xs font-semibold flex-1 ${selectedCarry.has(i) ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400 line-through'}`}>
+                  {it.text}
+                </span>
+                {it.note && <span className="text-[10px] text-stone-400 truncate max-w-32">{it.note}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 새 업무 입력 */}
       <div className="space-y-2 mb-4">
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-2">
-            <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">{i + 1}.</span>
+            <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">
+              {selectedCarry.size + i + 1}.
+            </span>
             <input
               ref={el => { inputRefs.current[i] = el; }}
               value={item}
               onChange={e => update(i, e.target.value)}
               onKeyDown={e => handleKeyDown(e, i)}
-              placeholder={`업무 내용 입력`}
+              placeholder="업무 내용 입력"
               className="flex-1 px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
             />
             {items.length > 1 && (
@@ -91,6 +158,7 @@ function MorningForm({ onSubmit }: { onSubmit: (items: string[]) => void }) {
           </div>
         ))}
       </div>
+
       <div className="flex items-center justify-between">
         <button onClick={() => setItems(p => [...p, ''])} className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 font-semibold">
           <Plus size={13} /> 항목 추가 <span className="text-stone-300">(Enter)</span>
@@ -533,7 +601,7 @@ export function DailyReportView({ currentUser }: Props) {
 
           {/* 오전 보고 */}
           {!myMorning ? (
-            isToday ? <MorningForm onSubmit={submitMorning} /> : (
+            isToday ? <MorningForm onSubmit={submitMorning} myId={myId} /> : (
               <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
             )
           ) : (

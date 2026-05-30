@@ -26,6 +26,34 @@
 
 ---
 
+## 2026-05-31 — Claude Code
+
+### 작업 순서 (데이터 보존 최우선)
+- 기존 컬렉션 변경/삭제 없음, 신규 컬렉션 추가만
+- 각 단계 빌드 통과 확인 후 커밋
+
+### 완료
+- 1단계: 공지사항 (NoticeBoard) 구현
+- 2단계: 일일보고 미완료 항목 자동 이월
+- (직원 명부 세팅 가이드는 UI 안내로 처리)
+
+### Firestore 현황 (salesDb 컬렉션)
+- meetings ← 기존, 데이터 있음
+- departments ← 기존, 데이터 있음
+- employees ← 신규, 비어있을 수 있음
+- calendar_events ← 신규
+- leave_requests ← 신규
+- daily_reports ← 신규
+- weekly_reports ← 신규
+- tasks ← 신규
+- notices ← 이번에 추가 (신규, 안전)
+
+### 다음에 이어할 것
+- 공지사항 작성/수정/삭제
+- 미완료 이월 UX 개선
+
+---
+
 ## 2026-05-30 오후 — Claude Code
 
 ### 완료
