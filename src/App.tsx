@@ -26,6 +26,7 @@ import { MeetingView } from './components/MeetingView';
 import { EmployeeDirectory } from './components/EmployeeDirectory';
 import { CompanyCalendar } from './components/CompanyCalendar';
 import { ReportView } from './components/ReportView';
+import { DailyReportView } from './components/DailyReportView';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -1308,6 +1309,7 @@ export default function App() {
           )}
           <div className="mx-2 space-y-0.5">
             {([
+              { section: 'daily',      icon: <FileText size={14} />,     label: '일일 업무보고' },
               { section: 'calendar',   icon: <Calendar size={14} />,     label: '캘린더' },
               { section: 'notice',     icon: <Megaphone size={14} />,    label: '공지사항' },
               { section: 'meetings',   icon: <NotebookPen size={14} />,  label: '회의록' },
@@ -1483,6 +1485,11 @@ export default function App() {
           {/* 회의록 */}
           {sidebar.section === 'meetings' && (
             <MeetingView currentUserName={currentUser.name} />
+          )}
+
+          {/* 일일 업무보고 */}
+          {sidebar.section === 'daily' && (
+            <DailyReportView currentUser={currentUser} />
           )}
 
           {/* 캘린더 */}

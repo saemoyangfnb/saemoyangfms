@@ -13,7 +13,7 @@ export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사
 export type SidebarSection =
   | 'home'
   // 인트라넷
-  | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees'
+  | 'daily' | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees'
   // 브랜드별
   | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'marketing'
   // 운영 도구
@@ -54,7 +54,7 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
   'home',
-  'calendar', 'notice', 'meetings', 'reports', 'employees',
+  'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees',
   'cost', 'sales', 'franchise', 'stores', 'marketing', 'review',
   'database', 'history', 'admin',
 ] as const;
@@ -62,6 +62,7 @@ export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
 export const SECTION_LABELS: Record<PermissionSection, string> = {
   home: '홈',
+  daily: '일일 업무보고',
   calendar: '캘린더',
   notice: '공지사항',
   meetings: '회의록',
@@ -491,6 +492,29 @@ export interface Notice {
 export type ReportType = '일반' | '테스트' | '제안' | '회의록';
 export type ReportStatus = '진행' | '긴급' | '완료' | '초안';
 export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+
+// ==========================================
+// 일일 업무보고 (salesDb: daily_reports)
+// ==========================================
+export type DailyItemStatus = 'pending' | 'done' | 'incomplete';
+
+export interface DailyReportItem {
+  text: string;
+  status: DailyItemStatus;
+  note?: string; // 미완료 사유
+}
+
+export interface DailyReport {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  departmentId: string;
+  date: string;           // YYYY-MM-DD
+  type: 'morning' | 'evening';
+  items: DailyReportItem[];
+  submittedAt: string;
+  updatedAt: string;
+}
 
 export interface Report {
   id: string;
