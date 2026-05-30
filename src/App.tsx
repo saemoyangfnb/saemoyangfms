@@ -25,6 +25,7 @@ import { ActivityLogView } from './components/ActivityLogView';
 import { MeetingView } from './components/MeetingView';
 import { EmployeeDirectory } from './components/EmployeeDirectory';
 import { CompanyCalendar } from './components/CompanyCalendar';
+import { ReportView } from './components/ReportView';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -1499,10 +1500,7 @@ export default function App() {
 
           {/* 보고서 */}
           {sidebar.section === 'reports' && (
-            <div className="flex flex-col items-center justify-center py-32 text-stone-400">
-              <ClipboardList size={40} className="mb-3 opacity-30" />
-              <p className="text-sm font-semibold">보고서 — 준비 중</p>
-            </div>
+            <ReportView currentUser={currentUser} />
           )}
 
           {/* 직원 명부 */}
