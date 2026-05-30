@@ -4,13 +4,33 @@ import {
   collection, getDocs, doc, setDoc, updateDoc,
   query, where, orderBy
 } from 'firebase/firestore';
-import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem } from '../types';
+import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3 } from 'lucide-react';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => d.toISOString().slice(0, 10);
 const today = () => toYMD(new Date());
+
+/* 오픈 일정 주요 날짜 정의 */
+interface ScheduleEvent {
+  storeName: string;
+  storeNumber: string;
+  label: string;
+  date: string;       // YYYY-MM-DD
+  daysLeft: number;   // 양수=미래, 음수=지남
+}
+
+const FRANCHISE_DATE_FIELDS: { key: keyof FranchiseSchedule; label: string }[] = [
+  { key: 'openDate',          label: '🏪 오픈' },
+  { key: 'trainingStart',     label: '📚 매장교육 시작' },
+  { key: 'preTrainingStart',  label: '📝 사전교육 시작' },
+  { key: 'constructionStart', label: '🔨 공사 시작' },
+  { key: 'constructionEnd',   label: '✅ 공사 완료' },
+  { key: 'equipmentIn',       label: '📦 화구류 입고' },
+  { key: 'ovenIn',            label: '🔥 화덕 입고' },
+  { key: 'initialStockIn',    label: '🛒 초도물품 입고' },
+];
 
 const getWeekBounds = (d: Date = new Date()) => {
   const day = d.getDay(); // 0=일
@@ -285,6 +305,8 @@ export function DailyReportView({ currentUser }: Props) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
+  const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([]);
+  const [myStores, setMyStores] = useState<FranchiseSchedule[]>([]);
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [myWeekly, setMyWeekly] = useState<WeeklyReport | null>(null);
   const [weeklyForm, setWeeklyForm] = useState<WeeklyReportItem[]>([
@@ -336,6 +358,31 @@ export function DailyReportView({ currentUser }: Props) {
       setMyTasks(taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
         .filter(t => t.status === 'pending' || t.status === 'in_progress')
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+
+      // 오픈 일정 — supervisor 이름으로 매칭
+      if (me?.name) {
+        const schSnap = await getDocs(collection(salesDb, 'franchise_schedules'));
+        const mySchedules = schSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as FranchiseSchedule))
+          .filter(s => !s.archived && s.supervisor === me.name);
+        setMyStores(mySchedules);
+
+        const todayYMD = toYMD(new Date());
+        const rangeStart = toYMD(new Date(Date.now() - 3 * 86400000));  // 3일 전
+        const rangeEnd   = toYMD(new Date(Date.now() + 30 * 86400000)); // 30일 후
+        const events: ScheduleEvent[] = [];
+        mySchedules.forEach(sch => {
+          FRANCHISE_DATE_FIELDS.forEach(({ key, label }) => {
+            const val = sch[key] as string | undefined;
+            if (!val || typeof val !== 'string') return;
+            if (val < rangeStart || val > rangeEnd) return;
+            const diff = Math.round((new Date(val + 'T00:00:00').getTime() - new Date(todayYMD + 'T00:00:00').getTime()) / 86400000);
+            events.push({ storeName: sch.storeName, storeNumber: sch.storeNumber, label, date: val, daysLeft: diff });
+          });
+        });
+        events.sort((a, b) => a.date.localeCompare(b.date));
+        setScheduleEvents(events);
+      }
     } catch (e) {
       console.error('DailyReportView fetchData error:', e);
     } finally {
@@ -520,6 +567,28 @@ export function DailyReportView({ currentUser }: Props) {
             </div>
           </div>
 
+          {/* 담당 매장 현황 (SV용) */}
+          {myStores.length > 0 && (
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4">
+              <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-3">담당 매장 현황</p>
+              <div className="space-y-2">
+                {myStores.map(s => (
+                  <div key={s.id} className="flex items-start gap-3 text-xs">
+                    <Store size={13} className="text-orange-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-stone-900 dark:text-stone-100">{s.storeName} {s.storeNumber && `(${s.storeNumber}호)`}</p>
+                      <p className="text-stone-400 mt-0.5 flex flex-wrap gap-2">
+                        {s.openDate && <span>오픈 {s.openDate}</span>}
+                        {s.trainingStart && <span>교육 {s.trainingStart}</span>}
+                        {s.constructionEnd && <span>공사완료 {s.constructionEnd}</span>}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 팀 주간보고 목록 (관리자) */}
           {isAdmin && weeklyReports.length > 0 && (
             <div className="space-y-2">
@@ -547,6 +616,45 @@ export function DailyReportView({ currentUser }: Props) {
       ) : tab === 'my' ? (
         /* ── 내 보고 탭 ── */
         <div className="max-w-xl space-y-4">
+          {/* 오픈 일정 섹션 */}
+          {scheduleEvents.length > 0 && (
+            <div className="bg-white dark:bg-stone-900 border border-orange-200 dark:border-orange-800/50 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-orange-100 dark:border-orange-900/30">
+                <Store size={13} className="text-orange-500" />
+                <span className="text-xs font-black text-stone-800 dark:text-stone-200">담당 오픈 일정</span>
+                <span className="ml-auto text-[11px] font-bold text-stone-400">{myStores.length}개 매장</span>
+              </div>
+              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                {scheduleEvents.map((evt, i) => {
+                  const isToday = evt.daysLeft === 0;
+                  const isPast  = evt.daysLeft < 0;
+                  const isUrgent = evt.daysLeft >= 0 && evt.daysLeft <= 3;
+                  return (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3">
+                      <CalendarDays size={13} className={isToday ? 'text-red-500' : isUrgent ? 'text-amber-500' : 'text-stone-400'} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
+                          {evt.storeName} {evt.storeNumber && `(${evt.storeNumber}호)`} {evt.label}
+                        </p>
+                        <p className={`text-[10px] font-semibold ${isToday ? 'text-red-500' : isPast ? 'text-stone-400' : isUrgent ? 'text-amber-600' : 'text-stone-400'}`}>
+                          {evt.date}
+                          {isToday ? ' · 오늘' : isPast ? ` · ${Math.abs(evt.daysLeft)}일 전` : ` · D-${evt.daysLeft}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => addTaskToDaily({ id: `sch_${i}`, title: `${evt.storeName} ${evt.label} (${evt.date})`, status: 'pending', sourceType: 'manual', assigneeId: myId, assigneeName: currentUser.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Task)}
+                        disabled={!isToday || !myMorning}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-orange-500 text-white rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
+                      >
+                        <ArrowRight size={10} /> 추가
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 업무 인박스 */}
           {myTasks.length > 0 && (
             <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
