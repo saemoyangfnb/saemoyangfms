@@ -9,6 +9,7 @@ interface Props {
   agendaTitle: string;
   meetingId: string;
   currentUser: User;
+  defaultToOther?: boolean; // true면 자기 자신 외 첫 번째 직원을 기본 선택
   onClose: () => void;
   onDone: () => void;
 }
@@ -16,7 +17,7 @@ interface Props {
 const genId = () => `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function TaskRequestModal({ agendaTitle, meetingId, currentUser, onClose, onDone }: Props) {
+export function TaskRequestModal({ agendaTitle, meetingId, currentUser, defaultToOther = false, onClose, onDone }: Props) {
   const toast = useToast();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [myEmployee, setMyEmployee] = useState<Employee | null>(null);
@@ -32,7 +33,13 @@ export function TaskRequestModal({ agendaTitle, meetingId, currentUser, onClose,
       setEmployees(emps);
       const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
       setMyEmployee(me);
-      if (me) setAssigneeId(me.id); // 기본값: 본인
+      if (defaultToOther) {
+        // 요청 모드: 자기 자신이 아닌 첫 번째 직원을 기본 선택
+        const other = emps.find(e => e.linkedUid !== currentUser.uid);
+        if (other) setAssigneeId(other.id);
+      } else {
+        if (me) setAssigneeId(me.id);
+      }
       setLoading(false);
     });
   }, [currentUser.uid]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { salesDb as db } from '../firebase';
+import { salesDb as db, salesDb } from '../firebase';
 import {
-  collection, getDocs, doc, setDoc, deleteDoc, orderBy, query
+  collection, getDocs, doc, setDoc, deleteDoc, orderBy, query, where
 } from 'firebase/firestore';
 import {
   Plus, ArrowLeft, Printer, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle, ChevronRight, Briefcase, Send
@@ -377,7 +377,34 @@ function MeetingDetail({
 }) {
   const ags = meeting.agendas || [];
   const avgP = ags.length ? Math.round(ags.reduce((s, a) => s + calcProg(a), 0) / ags.length) : 0;
-  const [taskModal, setTaskModal] = useState<{ agendaTitle: string } | null>(null);
+  const [taskModal, setTaskModal] = useState<{ agendaTitle: string; mode: 'request' } | null>(null);
+  const toast = useToast();
+
+  /* 내 업무로 즉시 추가 */
+  const handleSelfTask = async (agendaTitle: string) => {
+    // 내 employee 조회
+    const empSnap = await getDocs(
+      query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid))
+    );
+    const me = empSnap.docs[0] ? { id: empSnap.docs[0].id, ...empSnap.docs[0].data() } as { id: string; name: string } : null;
+
+    const now = new Date().toISOString();
+    const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    await setDoc(doc(salesDb, 'tasks', id), {
+      id, title: agendaTitle,
+      sourceType: 'meeting',
+      sourceMeetingId: meeting.id,
+      sourceAgendaTitle: agendaTitle,
+      assigneeId: me?.id ?? currentUser.uid,
+      assigneeName: me?.name ?? currentUser.name,
+      requesterId: me?.id ?? currentUser.uid,
+      requesterName: currentUser.name,
+      collaboratorIds: [], collaboratorNames: [],
+      status: 'pending',
+      createdAt: now, updatedAt: now,
+    });
+    toast.success(`"${agendaTitle.slice(0, 15)}..." 내 업무에 추가됐습니다`);
+  };
 
   return (
     <div>
@@ -484,14 +511,16 @@ function MeetingDetail({
                     <td className="px-4 py-3 align-middle" style={{ width: '12%' }}>
                       <div className="flex flex-col gap-1.5">
                         <button
-                          onClick={() => setTaskModal({ agendaTitle: a.title })}
-                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap"
+                          onClick={() => handleSelfTask(a.title)}
+                          disabled={!a.title}
+                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap disabled:opacity-30"
                         >
                           <Briefcase size={10} /> 내 업무
                         </button>
                         <button
-                          onClick={() => setTaskModal({ agendaTitle: a.title })}
-                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap"
+                          onClick={() => a.title && setTaskModal({ agendaTitle: a.title, mode: 'request' })}
+                          disabled={!a.title}
+                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap disabled:opacity-30"
                         >
                           <Send size={10} /> 요청
                         </button>
@@ -511,8 +540,9 @@ function MeetingDetail({
           agendaTitle={taskModal.agendaTitle}
           meetingId={meeting.id}
           currentUser={currentUser}
+          defaultToOther={true}
           onClose={() => setTaskModal(null)}
-          onDone={() => setTaskModal(null)}
+          onDone={() => { setTaskModal(null); toast.success('업무 요청이 전송되었습니다'); }}
         />
       )}
     </div>

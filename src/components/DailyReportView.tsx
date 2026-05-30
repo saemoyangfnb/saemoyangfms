@@ -226,44 +226,53 @@ export function DailyReportView({ currentUser }: Props) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'my' | 'weekly' | 'team'>('my');
 
-  /* 오늘 내 보고서 */
-  const myMorning = reports.find(r => r.employeeId === myEmployee?.id && r.date === date && r.type === 'morning');
-  const myEvening = reports.find(r => r.employeeId === myEmployee?.id && r.date === date && r.type === 'evening');
+  /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
+  const myId = myEmployee?.id ?? currentUser.uid;
+  const myMorning = reports.find(r => r.employeeId === myId && r.date === date && r.type === 'morning');
+  const myEvening = reports.find(r => r.employeeId === myId && r.date === date && r.type === 'evening');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [empSnap, deptSnap, reportSnap] = await Promise.all([
-      getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
-      getDocs(query(collection(salesDb, 'departments'), orderBy('order'))),
-      getDocs(query(collection(salesDb, 'daily_reports'), where('date', '==', date), orderBy('submittedAt'))),
-    ]);
-    const emps = empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
-    setEmployees(emps);
-    setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
-    setReports(reportSnap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
-    const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
-    setMyEmployee(me);
+    try {
+      // orderBy 없이 where만 사용 → 복합 인덱스 불필요
+      const [empSnap, deptSnap, reportSnap] = await Promise.all([
+        getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
+        getDocs(query(collection(salesDb, 'departments'), orderBy('order'))),
+        getDocs(query(collection(salesDb, 'daily_reports'), where('date', '==', date))),
+      ]);
+      const emps = empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+      setEmployees(emps);
+      setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
+      // 클라이언트에서 정렬
+      setReports(reportSnap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport))
+        .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)));
+      const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
+      setMyEmployee(me);
 
-    // 이번 주 주간보고
-    const { weekStart, weekEnd } = getWeekBounds();
-    const weekSnap = await getDocs(query(collection(salesDb, 'weekly_reports'), where('weekStart', '==', weekStart)));
-    const wReports = weekSnap.docs.map(d => ({ id: d.id, ...d.data() } as WeeklyReport));
-    setWeeklyReports(wReports);
-    const myW = me ? wReports.find(r => r.employeeId === me.id) ?? null : null;
-    setMyWeekly(myW);
-    if (myW) setWeeklyForm(myW.items.length >= 4 ? myW.items : [...myW.items, ...Array(4 - myW.items.length).fill({ title: '', status: 'planned' })]);
-
-    // 내 업무 태스크 (담당자 = 나) — 단일 where로 복합 인덱스 불필요, 클라이언트 필터링
-    if (me) {
-      const taskSnap = await getDocs(
-        query(collection(salesDb, 'tasks'), where('assigneeId', '==', me.id))
+      // 주간보고 — orderBy 없이 where만
+      const { weekStart } = getWeekBounds();
+      const weekSnap = await getDocs(
+        query(collection(salesDb, 'weekly_reports'), where('weekStart', '==', weekStart))
       );
-      const tasks = taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
+      const wReports = weekSnap.docs.map(d => ({ id: d.id, ...d.data() } as WeeklyReport));
+      setWeeklyReports(wReports);
+      const myW = me ? wReports.find(r => r.employeeId === me.id) ?? null : null;
+      setMyWeekly(myW);
+      if (myW) setWeeklyForm(myW.items.length >= 4 ? myW.items : [...myW.items, ...Array(4 - myW.items.length).fill({ title: '', status: 'planned' })]);
+
+      // 내 업무 태스크
+      const myId = me?.id ?? currentUser.uid;
+      const taskSnap = await getDocs(
+        query(collection(salesDb, 'tasks'), where('assigneeId', '==', myId))
+      );
+      setMyTasks(taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
         .filter(t => t.status === 'pending' || t.status === 'in_progress')
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      setMyTasks(tasks);
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    } catch (e) {
+      console.error('DailyReportView fetchData error:', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [date, currentUser.uid]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
