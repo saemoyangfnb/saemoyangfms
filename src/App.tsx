@@ -23,6 +23,7 @@ import { SalesDashboard } from './components/sales/SalesDashboard';
 import { FranchiseScheduleView } from './components/franchise';
 import { ActivityLogView } from './components/ActivityLogView';
 import { MeetingView } from './components/MeetingView';
+import { HomePage } from './components/HomePage';
 import { EmployeeDirectory } from './components/EmployeeDirectory';
 import { CompanyCalendar } from './components/CompanyCalendar';
 import { ReportView } from './components/ReportView';
