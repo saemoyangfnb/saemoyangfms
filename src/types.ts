@@ -494,6 +494,33 @@ export type ReportStatus = '진행' | '긴급' | '완료' | '초안';
 export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
 // ==========================================
+// 업무 태스크 (salesDb: tasks)
+// 회의 안건 → 개인/협업 업무로 전환
+// ==========================================
+export type TaskStatus = 'pending' | 'in_progress' | 'done';
+export type TaskSourceType = 'meeting' | 'request' | 'manual';
+
+export interface Task {
+  id: string;
+  title: string;
+  note?: string;
+  sourceType: TaskSourceType;
+  sourceMeetingId?: string;
+  sourceAgendaTitle?: string;   // 원본 회의 안건 제목
+  assigneeId: string;           // 담당자 employee ID
+  assigneeName: string;
+  requesterId?: string;         // 요청자 employee ID
+  requesterName?: string;
+  collaboratorIds?: string[];   // @태그된 협업자 IDs
+  collaboratorNames?: string[];
+  dueDate?: string;             // YYYY-MM-DD
+  status: TaskStatus;
+  addedToDailyDate?: string;    // 일일 보고에 추가된 날짜
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
 // 일일 업무보고 (salesDb: daily_reports)
 // ==========================================
 export type DailyItemStatus = 'pending' | 'done' | 'incomplete';

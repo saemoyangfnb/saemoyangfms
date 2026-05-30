@@ -4,10 +4,12 @@ import {
   collection, getDocs, doc, setDoc, deleteDoc, orderBy, query
 } from 'firebase/firestore';
 import {
-  Plus, ArrowLeft, Printer, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle, ChevronRight
+  Plus, ArrowLeft, Printer, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle, ChevronRight, Briefcase, Send
 } from 'lucide-react';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
+import { User } from '../types';
+import { TaskRequestModal } from './TaskRequestModal';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface CheckItem { text: string; done: boolean; assignee?: string }
@@ -364,16 +366,18 @@ function MeetingForm({
 
 /* ─── Detail view ────────────────────────────────────────────────────────── */
 function MeetingDetail({
-  meeting, onBack, onEdit, onDelete, onToggleCheck,
+  meeting, onBack, onEdit, onDelete, onToggleCheck, currentUser,
 }: {
   meeting: Meeting;
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onToggleCheck: (agIdx: number, checkIdx: number) => void;
+  currentUser: User;
 }) {
   const ags = meeting.agendas || [];
   const avgP = ags.length ? Math.round(ags.reduce((s, a) => s + calcProg(a), 0) / ags.length) : 0;
+  const [taskModal, setTaskModal] = useState<{ agendaTitle: string } | null>(null);
 
   return (
     <div>
@@ -430,7 +434,7 @@ function MeetingDetail({
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-stone-50 dark:bg-stone-800 border-b-2 border-stone-200 dark:border-stone-700">
-                {['안건 제목 / 체크리스트', '담당 / 참조 / 기한', '긴급도', '진행율'].map(h => (
+                {['안건 제목 / 체크리스트', '담당 / 참조 / 기한', '긴급도', '진행율', '업무'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-left">{h}</th>
                 ))}
               </tr>
@@ -472,10 +476,26 @@ function MeetingDetail({
                     <td className="px-4 py-3 align-middle text-center" style={{ width: '13%' }}>
                       <Badge urgency={a.urgency} />
                     </td>
-                    <td className="px-4 py-3 align-top" style={{ width: '21%' }}>
+                    <td className="px-4 py-3 align-top" style={{ width: '17%' }}>
                       <div className="text-xl font-bold mb-1.5" style={{ color: progColor(p) }}>{p}%</div>
                       <ProgressBar value={p} height={8} />
                       {cl.length > 0 && <p className="text-[10px] text-stone-400 mt-1">{cl.filter(c => c.done).length}/{cl.length} 완료</p>}
+                    </td>
+                    <td className="px-4 py-3 align-middle" style={{ width: '12%' }}>
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          onClick={() => setTaskModal({ agendaTitle: a.title })}
+                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap"
+                        >
+                          <Briefcase size={10} /> 내 업무
+                        </button>
+                        <button
+                          onClick={() => setTaskModal({ agendaTitle: a.title })}
+                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap"
+                        >
+                          <Send size={10} /> 요청
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -484,12 +504,23 @@ function MeetingDetail({
           </table>
         </div>
       )}
+
+      {/* 업무 요청 모달 */}
+      {taskModal && (
+        <TaskRequestModal
+          agendaTitle={taskModal.agendaTitle}
+          meetingId={meeting.id}
+          currentUser={currentUser}
+          onClose={() => setTaskModal(null)}
+          onDone={() => setTaskModal(null)}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── Main component ─────────────────────────────────────────────────────── */
-export function MeetingView({ currentUserName }: { currentUserName: string }) {
+export function MeetingView({ currentUserName, currentUser }: { currentUserName: string; currentUser: User }) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'detail' | 'form'>('list');
@@ -596,6 +627,7 @@ export function MeetingView({ currentUserName }: { currentUserName: string }) {
         onEdit={() => { setEditingId(selected.id); setView('form'); }}
         onDelete={() => deleteMeeting(selected.id)}
         onToggleCheck={(agIdx, checkIdx) => toggleCheck(selected, agIdx, checkIdx)}
+        currentUser={currentUser}
       />
     </div>
   );

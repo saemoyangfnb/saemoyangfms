@@ -4,9 +4,9 @@ import {
   collection, getDocs, doc, setDoc, updateDoc,
   query, where, orderBy
 } from 'firebase/firestore';
-import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department } from '../types';
+import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task } from '../types';
 import { useToast } from './Toast';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send } from 'lucide-react';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => d.toISOString().slice(0, 10);
@@ -202,6 +202,7 @@ export function DailyReportView({ currentUser }: Props) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
+  const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'my' | 'team'>('my');
 
@@ -220,7 +221,15 @@ export function DailyReportView({ currentUser }: Props) {
     setEmployees(emps);
     setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
     setReports(reportSnap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
-    setMyEmployee(emps.find(e => e.linkedUid === currentUser.uid) ?? null);
+    const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
+    setMyEmployee(me);
+    // 내 업무 태스크 (담당자 = 나, 미완료)
+    if (me) {
+      const taskSnap = await getDocs(
+        query(collection(salesDb, 'tasks'), where('assigneeId', '==', me.id), where('status', '==', 'pending'), orderBy('createdAt', 'desc'))
+      );
+      setMyTasks(taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
+    }
     setLoading(false);
   }, [date, currentUser.uid]);
 
@@ -258,6 +267,21 @@ export function DailyReportView({ currentUser }: Props) {
       items, updatedAt: new Date().toISOString(),
     });
     toast.success('퇴근 보고 완료');
+    fetchData();
+  };
+
+  /* 업무 태스크 → 오전 보고에 추가 */
+  const addTaskToDaily = async (task: Task) => {
+    if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
+    if (!myMorning) { toast.error('먼저 오전 업무보고를 제출해주세요'); return; }
+    const updatedItems = [...myMorning.items, { text: task.title, status: 'pending' as DailyItemStatus }];
+    await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+      items: updatedItems, updatedAt: new Date().toISOString(),
+    });
+    await updateDoc(doc(salesDb, 'tasks', task.id), {
+      addedToDailyDate: date, status: 'in_progress', updatedAt: new Date().toISOString(),
+    });
+    toast.success('오늘 업무보고에 추가되었습니다');
     fetchData();
   };
 
@@ -320,6 +344,51 @@ export function DailyReportView({ currentUser }: Props) {
       ) : tab === 'my' ? (
         /* ── 내 보고 탭 ── */
         <div className="max-w-xl space-y-4">
+          {/* 업무 인박스 */}
+          {myTasks.length > 0 && (
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+                <Briefcase size={13} className="text-stone-600 dark:text-stone-400" />
+                <span className="text-xs font-black text-stone-800 dark:text-stone-200">받은 업무 요청</span>
+                <span className="ml-auto text-[11px] font-bold text-stone-400">{myTasks.length}건 대기 중</span>
+              </div>
+              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                {myTasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{task.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {task.sourceAgendaTitle && (
+                          <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                            <Briefcase size={9} /> 회의 안건
+                          </span>
+                        )}
+                        {task.requesterName && task.requesterName !== task.assigneeName && (
+                          <span className="text-[10px] text-stone-400">from {task.requesterName}</span>
+                        )}
+                        {(task.collaboratorNames ?? []).length > 0 && (
+                          <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
+                            <AtSign size={9} /> {task.collaboratorNames!.join(', ')}
+                          </span>
+                        )}
+                        {task.dueDate && (
+                          <span className="text-[10px] text-red-400">~{task.dueDate}</span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => addTaskToDaily(task)}
+                      disabled={!isToday || !myMorning}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
+                    >
+                      <ArrowRight size={10} /> 오늘 추가
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {!myEmployee && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
               <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">직원 명부에 계정이 연결되어 있지 않습니다. 관리자에게 문의하세요.</p>

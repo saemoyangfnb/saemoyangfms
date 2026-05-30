@@ -1484,7 +1484,7 @@ export default function App() {
 
           {/* 회의록 */}
           {sidebar.section === 'meetings' && (
-            <MeetingView currentUserName={currentUser.name} />
+            <MeetingView currentUserName={currentUser.name} currentUser={currentUser} />
           )}
 
           {/* 일일 업무보고 */}
