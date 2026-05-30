@@ -570,9 +570,9 @@ export interface Report {
   title: string;
   type: ReportType;
   status: ReportStatus;
-  authorId: string;    // employee ID
+  authorId: string;
   authorName: string;
-  storageKey: string;  // Firebase Storage 경로
+  storageKey: string;
   approvalStatus: ApprovalStatus;
   approverId?: string;
   approverName?: string;
@@ -583,4 +583,7 @@ export interface Report {
   linkedTaskId?: string;
   createdAt: string;
   updatedAt: string;
+  htmlContent?: string;  // 이미지 제거 후 저장된 본문
+  activeTab?: string;    // tab1~4
+  docDate?: string;      // 보관함 표시 날짜
 }

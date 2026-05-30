@@ -786,7 +786,8 @@
             window.addEventListener('message', function(event) {
                 const msg = event.data;
                 if (!msg || !msg.type) return;
-                // React에서 보고서 내용 로드 (결재함에서 열기)
+
+                // React에서 보고서 내용 로드 (결재함/내 보고서에서 열기)
                 if (msg.type === 'LOAD_REPORT') {
                     document.getElementById('report-container').innerHTML = msg.content;
                     currentEditId = msg.reportId;
@@ -794,12 +795,34 @@
                     switchView(msg.activeTab || 'tab1');
                     showToast('보고서를 불러왔습니다.');
                 }
+
+                // Firestore에서 불러온 내 보고서 목록 — localStorage에 병합
+                if (msg.type === 'REPORTS_LIST') {
+                    try {
+                        const local = loadReports();
+                        const cloud = msg.reports || [];
+                        const merged = [...local];
+                        cloud.forEach(function(r) {
+                            if (!merged.find(function(lr) { return lr.id === r.id; })) {
+                                merged.unshift(r);
+                            }
+                        });
+                        saveReports(merged);
+                        document.getElementById('saved-count').innerText = merged.length;
+                        if (currentView === 'dashboard') renderDashboard();
+                        if (document.getElementById('storage-sidebar') && !document.getElementById('storage-sidebar').classList.contains('translate-x-full')) renderSidebarList();
+                    } catch(e) {}
+                }
+
                 // 결재 결과 반영
                 if (msg.type === 'APPROVAL_UPDATE') {
                     if (currentView === 'editor') updateApprovalPanel();
                     showToast(msg.approved ? '✅ 승인 처리되었습니다.' : '🔴 반려 처리되었습니다.');
                 }
             });
+
+            // iframe 준비 완료 알림 → React에서 REPORTS_LIST 전송 트리거
+            window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
 
             switchView('dashboard');
             document.getElementById('saved-count').innerText = loadReports().length;
@@ -1322,12 +1345,18 @@
                 docType: getDocTypeName(currentTab)
             };
             
-            reports.unshift(newReport); 
-            currentEditId = newReport.id; 
-            isDirty = false; // 저장 완료
-            
+            reports.unshift(newReport);
+            currentEditId = newReport.id;
+            isDirty = false;
+
             saveReports(reports);
             closeSaveModal();
+
+            // Firestore 동기화
+            window.parent.postMessage({
+                type: 'SAVE_REPORT',
+                report: { id: newReport.id, title: newReport.title, status: newReport.status, docType: newReport.docType, activeTab: newReport.activeTab, content: newReport.content, date: newReport.date }
+            }, '*');
             
             document.getElementById('saved-count').innerText = reports.length;
             if(!document.getElementById('dashboard-view').classList.contains('hidden')) renderDashboard();
@@ -1357,13 +1386,22 @@
                 reports.unshift(updatedReport);
                 
                 saveReports(reports);
-                isDirty = false; // 저장 완료
-                
-                if(document.getElementById('storage-sidebar').classList.contains('translate-x-full') === false) {
-                    renderSidebarList(); 
-                }
-                
+                isDirty = false;
+
+                if (!document.getElementById('storage-sidebar').classList.contains('translate-x-full')) renderSidebarList();
                 showToast('저장이 완료되었습니다.');
+
+                // Firestore 동기화
+                window.parent.postMessage({
+                    type: 'UPDATE_REPORT',
+                    reportId: currentEditId,
+                    content: htmlContent,
+                    status: reports[0]?.status ?? '진행',
+                    title: reports[0]?.title ?? '',
+                    docType: reports[0]?.docType ?? '일반',
+                    activeTab: reports[0]?.activeTab ?? currentTab,
+                    date: nowDate
+                }, '*');
 
                 // 저장 후 펜딩 된 탭 이동 처리
                 if (pendingNav) {
@@ -1520,8 +1558,9 @@
                 }
                 
                 renderSidebarList();
-                if(!document.getElementById('dashboard-view').classList.contains('hidden')) renderDashboard();
+                if (!document.getElementById('dashboard-view').classList.contains('hidden')) renderDashboard();
                 showToast('삭제 완료되었습니다.');
+                window.parent.postMessage({ type: 'DELETE_REPORT', reportId: id }, '*');
             }
         }
 
