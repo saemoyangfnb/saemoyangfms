@@ -99,7 +99,8 @@ function HomePage({
   const [missingDrawingStores, setMissingDrawingStores] = useState<{name: string, number: string}[]>([]);
 
   useEffect(() => {
-    const unsubSch = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
+    // franchise_schedules — 1회 조회로 변경 (onSnapshot 제거, 할당량 절감)
+    getDocs(collection(salesDb, 'franchise_schedules')).then(snap => {
       let count = 0;
       const missing: {name: string, number: string}[] = [];
       const missingDrawings: {name: string, number: string}[] = [];
@@ -107,7 +108,6 @@ function HomePage({
         const data = d.data();
         if (!data.archived) {
           count++;
-          // 사전교육을 제외한 핵심 세부일정이 하나도 없는지 체크
           const hasDetails = data.constructionStart || data.openDate || data.equipmentIn || data.ovenIn || data.initialStockIn || data.trainingStart || data.ownerGuideStart;
           if (data.storeName && !hasDetails) {
             missing.push({ name: data.storeName, number: data.storeNumber || '호수미정' });
@@ -120,7 +120,7 @@ function HomePage({
       setActiveSchedulesCount(count);
       setMissingScheduleStores(missing);
       setMissingDrawingStores(missingDrawings);
-    }, (error) => onFirestoreError(error, OperationType.GET, 'franchise_schedules'));
+    }).catch(error => onFirestoreError(error, OperationType.GET, 'franchise_schedules'));
 
     // 미조치 부정리뷰 수 — 실시간 불필요, 1회 조회
     Promise.all([
@@ -180,7 +180,7 @@ function HomePage({
       setCompetitorChangesCount(changes);
     }).catch(() => setCompetitorChangesCount(0));
 
-    return () => { unsubSch(); };
+    return () => {};
   }, []);
 
   const alertMenus = menus.filter(m => (m.hasAlert || checkMenuAlert(m, ingredients, menus)) && !m.isArchived).length;

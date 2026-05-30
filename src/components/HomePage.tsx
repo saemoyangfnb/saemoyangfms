@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Brand, Menu, Ingredient, IngredientChange, BrandId, SidebarSection, CostTabType, OperationType } from '../types';
 import { checkMenuAlert } from '../utils';
 import { reviewDb, salesDb } from '../firebase';
-import { collection, onSnapshot, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import {
   Store, ShieldAlert, AlertTriangle, Eye, LayoutDashboard, Database, BarChart2,
   ArrowRight, CalendarDays, Bell, Sparkles, TriangleAlert, FileText,
@@ -49,7 +49,8 @@ export function HomePage({
   const [recentMeetingTitle, setRecentMeetingTitle] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubSch = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
+    // franchise_schedules — 1회 조회 (onSnapshot → getDocs, 할당량 절감)
+    getDocs(collection(salesDb, 'franchise_schedules')).then(snap => {
       let count = 0;
       const missing: {name: string, number: string}[] = [];
       const missingDrawings: {name: string, number: string}[] = [];
@@ -69,7 +70,7 @@ export function HomePage({
       setActiveSchedulesCount(count);
       setMissingScheduleStores(missing);
       setMissingDrawingStores(missingDrawings);
-    }, (error) => onFirestoreError(error, OperationType.GET, 'franchise_schedules'));
+    }).catch(error => onFirestoreError(error, OperationType.GET, 'franchise_schedules'));
 
     // 미조치 부정리뷰 수 — 1회 조회
     Promise.all([
@@ -140,7 +141,7 @@ export function HomePage({
       if (!meetingSnap.empty) setRecentMeetingTitle(meetingSnap.docs[0].data().title);
     }).catch(() => {});
 
-    return () => { unsubSch(); };
+    return () => {};
   }, []);
 
   const alertMenus = menus.filter(m => (m.hasAlert || checkMenuAlert(m, ingredients, menus)) && !m.isArchived).length;
