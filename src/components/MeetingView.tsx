@@ -228,9 +228,9 @@ function MeetingForm({
   };
 
   return (
-    <div className="flex h-[calc(100vh-120px)] gap-0 -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden">
-      {/* 왼쪽: 이전 회의록 */}
-      <div className="w-1/2 border-r border-stone-200 dark:border-stone-700 flex flex-col overflow-hidden bg-stone-50 dark:bg-stone-900/50">
+    <div className="flex flex-col lg:flex-row h-auto lg:h-[calc(100vh-120px)] gap-0 -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden">
+      {/* 이전 회의록 (모바일: 접힘, 데스크탑: 좌측) */}
+      <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-stone-200 dark:border-stone-700 flex flex-col overflow-hidden bg-stone-50 dark:bg-stone-900/50 max-h-64 lg:max-h-none">
         <div className="px-4 py-3 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 flex items-center justify-between shrink-0">
           <div>
             <p className="text-sm font-bold text-stone-800 dark:text-stone-200">직전 회의록</p>
@@ -288,8 +288,8 @@ function MeetingForm({
         </div>
       </div>
 
-      {/* 오른쪽: 새 회의록 */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
+      {/* 새 회의록 (모바일: 아래, 데스크탑: 우측) */}
+      <div className="w-full lg:w-1/2 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 flex items-center justify-between shrink-0">
           <div>
             <p className="text-sm font-bold text-stone-800 dark:text-stone-200">{initial ? '회의록 수정' : '새 회의록 작성'}</p>
@@ -457,8 +457,8 @@ function MeetingDetail({
           <p className="text-sm">안건이 없습니다</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
-          <table className="w-full border-collapse">
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden overflow-x-auto">
+          <table className="w-full border-collapse min-w-[640px]">
             <thead>
               <tr className="bg-stone-50 dark:bg-stone-800 border-b-2 border-stone-200 dark:border-stone-700">
                 {['안건 제목 / 체크리스트', '담당 / 참조 / 기한', '긴급도', '진행율', '업무'].map(h => (

@@ -371,11 +371,13 @@ export function CompanyCalendar({ currentUser }: Props) {
                           const isReadOnly = evt.type === 'meeting' || evt.type === 'franchise' || evt.type === 'leave';
                           return (
                             <div key={evt.id}
-                              className={`text-[10px] text-white rounded px-1 py-0.5 truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
+                              className={`text-white rounded truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
                               onClick={e => { e.stopPropagation(); if (!isReadOnly) deleteEvent(evt); }}
                               title={evt.title}
                             >
-                              {evt.title}
+                              {/* 모바일: 점, 데스크탑: 텍스트 */}
+                              <span className="block sm:hidden w-2 h-2 rounded-full mx-auto mt-0.5" />
+                              <span className="hidden sm:block text-[10px] px-1 py-0.5">{evt.title}</span>
                             </div>
                           );
                         })}
