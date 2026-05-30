@@ -1079,7 +1079,7 @@ export default function App() {
     { id: 'sales' as SidebarSection, label: '매출 현황', icon: <BarChart2 size={14} /> },
     { id: 'review' as SidebarSection, label: '가맹점 관제', icon: <ShieldAlert size={14} /> },
     { id: 'franchise' as SidebarSection, label: '오픈 일정', icon: <CalendarDays size={14} /> },
-    { id: 'marketing' as SidebarSection, label: '마케팅 봇', icon: <Bot size={14} /> },
+    { id: 'marketing' as SidebarSection, label: '마케팅 봇', icon: <Sparkles size={14} /> },
   ].filter(m => getSectionPermission(m.id) !== 'none');
 
   const getBrandSubMenus = (_brandId: BrandId) => {
@@ -1651,7 +1651,7 @@ export default function App() {
                 { label: '매출 현황', icon: <BarChart2 size={20}/>, action: () => navigateAndCloseMobile('dalbitgo', 'sales') },
                 { label: '가맹 관제', icon: <ShieldAlert size={20}/>, action: () => navigateAndCloseMobile('dalbitgo', 'review') },
                 { label: '오픈 일정', icon: <CalendarDays size={20}/>, action: () => navigateAndCloseMobile('dalbitgo', 'franchise') },
-                { label: '마케팅 봇', icon: <Bot size={20}/>, action: () => navigateAndCloseMobile('dalbitgo', 'marketing') },
+                { label: '마케팅 봇', icon: <Sparkles size={20}/>, action: () => navigateAndCloseMobile('dalbitgo', 'marketing') },
                 { label: '식재료 DB', icon: <Database size={20}/>, action: () => navigateAndCloseMobile(null, 'database') },
               ].map(q => (
                 <button key={q.label} onClick={() => { q.action(); setShowMobileQuickMenu(false); }} className="flex flex-col items-center justify-center p-3 bg-white dark:bg-stone-800 rounded-sm shadow-sm border border-stone-300 dark:border-stone-700 hover:border-stone-800 transition-colors">
