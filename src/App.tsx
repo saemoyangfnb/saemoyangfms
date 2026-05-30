@@ -65,10 +65,8 @@ interface SidebarState {
 // 가맹점 관제 데이터가 있는 브랜드 (크롤러 연동 완료)
 const REVIEW_ENABLED_BRANDS = ['dalbitgo'];
 
-// ==========================================
-// 랜딩 페이지 컴포넌트
-// ==========================================
-function HomePage({
+// HomePage는 src/components/HomePage.tsx 참고
+function _OldHomePage_UNUSED({
   currentUser,
   brands,
   menus,
