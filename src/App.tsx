@@ -23,6 +23,8 @@ import { SalesDashboard } from './components/sales/SalesDashboard';
 import { FranchiseScheduleView } from './components/franchise';
 import { ActivityLogView } from './components/ActivityLogView';
 import { MeetingView } from './components/MeetingView';
+import { EmployeeDirectory } from './components/EmployeeDirectory';
+import { CompanyCalendar } from './components/CompanyCalendar';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -30,8 +32,8 @@ import {
   Archive, AlertTriangle, Trash2, X, ChevronLeft, ChevronRight,
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
-  ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, Bot, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
-  CheckSquare, FileText, History, NotebookPen
+  ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
+  CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -1296,26 +1298,44 @@ export default function App() {
             </div>
           )}
 
-          <div className="my-4 mx-4 border-t border-stone-300 dark:border-stone-700" />
-
+          {/* ── 인트라넷 ── */}
+          <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />
           {(!sidebarCollapsed || isMobile) && (
             <div className="px-3 mb-1">
-            <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-2">시스템 메뉴</p>
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">인트라넷</p>
             </div>
           )}
-
           <div className="mx-2 space-y-0.5">
-            <button
-              onClick={() => navigateAndCloseMobile(null, 'meetings')}
-              className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                sidebar.section === 'meetings'
-                  ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                  : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-              }`}
-            >
-              <NotebookPen size={14} />
-              {(!sidebarCollapsed || isMobile) && '회의록'}
-            </button>
+            {([
+              { section: 'calendar',   icon: <Calendar size={14} />,     label: '캘린더' },
+              { section: 'notice',     icon: <Megaphone size={14} />,    label: '공지사항' },
+              { section: 'meetings',   icon: <NotebookPen size={14} />,  label: '회의록' },
+              { section: 'reports',    icon: <ClipboardList size={14} />, label: '보고서' },
+              { section: 'employees',  icon: <Users size={14} />,        label: '직원 명부' },
+            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[]).map(({ section, icon, label }) => (
+              <button
+                key={section}
+                onClick={() => navigateAndCloseMobile(null, section)}
+                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
+                  sidebar.section === section
+                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                }`}
+              >
+                {icon}
+                {(!sidebarCollapsed || isMobile) && label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── 운영 도구 ── */}
+          <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="px-3 mb-1">
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">운영 도구</p>
+            </div>
+          )}
+          <div className="mx-2 space-y-0.5">
             <button
               onClick={() => navigateAndCloseMobile(null, 'database')}
               className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
@@ -1325,20 +1345,8 @@ export default function App() {
               }`}
             >
               <Database size={14} />
-              {(!sidebarCollapsed || isMobile) && '식재료 데이터베이스'}
+              {(!sidebarCollapsed || isMobile) && '식재료 DB'}
             </button>
-            <button
-              onClick={() => navigateAndCloseMobile(null, 'agents')}
-              className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                sidebar.section === 'agents'
-                  ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                  : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-              }`}
-            >
-              <Bot size={15} />
-              {(!sidebarCollapsed || isMobile) && '에이전트 팀'}
-            </button>
-            {/* 변경 이력 — 관리자 또는 부서장에게만 표시 */}
             {(currentUser.role === 'admin' || (currentUser.departmentHeadOf?.length ?? 0) > 0) && (
               <button
                 onClick={() => navigateAndCloseMobile(null, 'history')}
@@ -1474,6 +1482,32 @@ export default function App() {
           {/* 회의록 */}
           {sidebar.section === 'meetings' && (
             <MeetingView currentUserName={currentUser.name} />
+          )}
+
+          {/* 캘린더 */}
+          {sidebar.section === 'calendar' && (
+            <CompanyCalendar currentUser={currentUser} />
+          )}
+
+          {/* 공지사항 */}
+          {sidebar.section === 'notice' && (
+            <div className="flex flex-col items-center justify-center py-32 text-stone-400">
+              <Megaphone size={40} className="mb-3 opacity-30" />
+              <p className="text-sm font-semibold">공지사항 — 준비 중</p>
+            </div>
+          )}
+
+          {/* 보고서 */}
+          {sidebar.section === 'reports' && (
+            <div className="flex flex-col items-center justify-center py-32 text-stone-400">
+              <ClipboardList size={40} className="mb-3 opacity-30" />
+              <p className="text-sm font-semibold">보고서 — 준비 중</p>
+            </div>
+          )}
+
+          {/* 직원 명부 */}
+          {sidebar.section === 'employees' && (
+            <EmployeeDirectory currentUser={currentUser} />
           )}
 
           {/* 브랜드별 콘텐츠 */}

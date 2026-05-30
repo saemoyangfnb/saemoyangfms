@@ -10,7 +10,16 @@ export enum OperationType {
 }
 
 export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-export type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'history' | 'meetings';
+export type SidebarSection =
+  | 'home'
+  // 인트라넷
+  | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees'
+  // 브랜드별
+  | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'marketing'
+  // 운영 도구
+  | 'database' | 'history' | 'admin'
+  // (레거시, UI에 미노출)
+  | 'agents';
 
 export interface SidebarState {
   brandId: BrandId | null;
@@ -44,21 +53,28 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
-  'home', 'cost', 'sales', 'database', 'franchise', 'stores', 'marketing', 'review', 'agents', 'meetings', 'admin'
+  'home',
+  'calendar', 'notice', 'meetings', 'reports', 'employees',
+  'cost', 'sales', 'franchise', 'stores', 'marketing', 'review',
+  'database', 'history', 'admin',
 ] as const;
 export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
 export const SECTION_LABELS: Record<PermissionSection, string> = {
   home: '홈',
+  calendar: '캘린더',
+  notice: '공지사항',
+  meetings: '회의록',
+  reports: '보고서',
+  employees: '직원 명부',
   cost: '원가 계산',
   sales: '매출 현황',
-  database: '데이터베이스',
   franchise: '가맹 일정',
   stores: '매장 관리',
   marketing: '마케팅',
   review: '가맹점 관제',
-  agents: '에이전트',
-  meetings: '회의록',
+  database: '식재료 데이터베이스',
+  history: '변경 이력',
   admin: '관리자 패널',
 };
 
@@ -379,4 +395,119 @@ export interface SystemConfig {
   kitchenVendors: string[];
   preTrainingLocations: string[];
   gasTypes: string[];
+}
+
+// ==========================================
+// 직원 명부 (salesDb: employees)
+// ==========================================
+export type EmployeePosition =
+  | '대표' | '전무' | '이사'
+  | '부장' | '차장' | '과장' | '대리' | '사원' | '인턴'
+  | '슈퍼바이저' | '기타';
+
+export interface Employee {
+  id: string;
+  name: string;
+  position: EmployeePosition;
+  departmentId: string;
+  managerId?: string;       // 결재 1차 상급자 employee ID
+  phone?: string;
+  email?: string;
+  hireDate?: string;        // YYYY-MM-DD
+  annualLeaveBalance: number; // 잔여 연차 (일)
+  linkedUid?: string;       // Firebase Auth UID (없으면 계정 미연결)
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 캘린더 이벤트 (salesDb: calendar_events)
+// ==========================================
+export type CalendarEventType = 'personal' | 'company' | 'holiday' | 'leave';
+
+export interface CalendarEvent {
+  id: string;
+  type: CalendarEventType;
+  title: string;
+  startDate: string;   // YYYY-MM-DD
+  endDate: string;     // YYYY-MM-DD
+  allDay: boolean;
+  startTime?: string;  // HH:MM
+  endTime?: string;
+  color?: string;
+  employeeId?: string; // 작성자/소유자 employee ID (company/holiday는 없어도 됨)
+  visibility: 'private' | 'team' | 'all';
+  linkedId?: string;   // 연결된 meeting/task/franchise ID
+  linkedType?: 'meeting' | 'task' | 'franchise';
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 연차 신청 (salesDb: leave_requests)
+// ==========================================
+export type LeaveType = 'annual' | 'half_am' | 'half_pm' | 'sick' | 'special';
+export type LeaveStatus = 'pending' | 'approved' | 'rejected';
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  type: LeaveType;
+  startDate: string;   // YYYY-MM-DD
+  endDate: string;     // YYYY-MM-DD
+  days: number;
+  reason?: string;
+  status: LeaveStatus;
+  approverId?: string; // 결재자 employee ID
+  approverComment?: string;
+  submittedAt: string;
+  approvedAt?: string;
+}
+
+// ==========================================
+// 공지사항 (salesDb: notices)
+// ==========================================
+export type NoticeCategory = '전체공지' | '부서공지' | '긴급' | '이벤트';
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  category: NoticeCategory;
+  authorId: string;    // employee ID
+  authorName: string;
+  isPinned: boolean;
+  targetDeptIds?: string[]; // 비어있으면 전체
+  attachments?: { name: string; url: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 보고서 메타 (salesDb: reports)
+// ※ 실제 내용(HTML)은 Firebase Storage에 저장
+// ==========================================
+export type ReportType = '일반' | '테스트' | '제안' | '회의록';
+export type ReportStatus = '진행' | '긴급' | '완료' | '초안';
+export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+
+export interface Report {
+  id: string;
+  title: string;
+  type: ReportType;
+  status: ReportStatus;
+  authorId: string;    // employee ID
+  authorName: string;
+  storageKey: string;  // Firebase Storage 경로
+  approvalStatus: ApprovalStatus;
+  approverId?: string;
+  approverName?: string;
+  approverComment?: string;
+  approvedAt?: string;
+  submittedAt?: string;
+  linkedMeetingId?: string;
+  linkedTaskId?: string;
+  createdAt: string;
+  updatedAt: string;
 }

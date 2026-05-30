@@ -26,6 +26,67 @@
 
 ---
 
+## 2026-05-30 오후 — Claude Code
+
+### 완료
+- 사이드바 3구역 재편: 인트라넷(캘린더/공지/회의록/보고서/직원 명부) / 브랜드 업무 / 운영도구
+- 에이전트 팀 메뉴 제거, 식재료 DB 운영도구로 이동
+- types.ts: Employee, CalendarEvent, LeaveRequest, Notice, Report 타입 추가
+- SidebarSection에 calendar/notice/reports/employees 추가
+- EmployeeDirectory.tsx 구현: 부서 필터, 직원 카드, 계정 연결 (salesDb: employees)
+- CompanyCalendar.tsx 구현: 월 달력, 개인/회사/공휴일/연차 이벤트, 연차 신청/결재 (salesDb: calendar_events, leave_requests)
+
+### 미완 / 진행 중
+- 공지사항 (notice) — 준비 중 플레이스홀더
+- 보고서 (reports) — 준비 중 플레이스홀더 (HTML 파일 통합 필요)
+- 연차 결재 반려 모달에서 window.prompt 사용 중 → useConfirm으로 교체 필요
+
+### 다음에 이어할 것
+- 공지사항(NoticeBoard) 컴포넌트 구현
+- 보고서 툴 연동 (HTML → React 포팅 or Firebase Storage 방식 결정)
+- 회의록 안건 → 업무 카드 연결
+
+### 주의 / 메모
+- salesDb Firestore 규칙에 employees, calendar_events, leave_requests 컬렉션 추가 필요
+- 직원 명부 첫 사용 전: 관리자가 각 직원 등록 + linkedUid 연결 작업 필요
+
+---
+
+## 2026-05-30 — Claude Code
+
+### 완료
+- MeetingView.tsx 버그 3종 수정: salesDb → db(메인 DB), alert/confirm → useToast/useConfirm, onSnapshot → getDocs
+- 저장/삭제 후 목록 자동 갱신(fetchMeetings 호출) 추가
+
+### 다음에 이어할 것
+- 없음
+
+---
+
+## 2026-05-05 — Claude Code
+
+### 완료
+- 캘린더 매장 바 팝오버 위치 버그 수정 (fixed 포지셔닝에 scrollY 제거, 뷰포트 하단 넘침 시 위로 반전)
+- A3 인쇄 일정 짤림 수정 (주 단위 break-inside avoid, print-color-adjust 추가)
+- 부서별 권한 시스템 구현 (수정/열람/접근제한), 부서장 지정 UI — 관리자 패널 → 권한 관리 탭
+- 변경 이력 전용 페이지 신규 구현 (30건 페이지네이션, 유형/사용자 필터, before/after 값 시각화)
+- 일정 수정 로그 상세화 (변경 항목명, 변경 전/후 날짜 값 기록)
+
+### 미완 / 진행 중
+- 5번(SOP 등록), 6번(노션형 생산성) 피드백 미구현 — 장기 과제
+- 2번(리뷰 탭 외부 링크) 미구현 — 외부 URL 결정 후 진행
+
+### 다음에 이어할 것
+- 5번: SOP/매뉴얼 등록 기능 (Firebase Storage + 카테고리 관리)
+- 2번: 가맹점 관제 리뷰 탭 외부 링크 분리 (어느 URL로 연결할지 확인 필요)
+- 부서장 필터링 개선: 현재 본인 수행 이력만 보임 → storeName 기준 부서 연동 고려
+
+### 주의 / 메모
+- 깃푸시는 사용자 권한 (명시적 요청 시에만 수행)
+- activity_logs 컬렉션에 section, storeName, before, after 필드 추가됨 (신규 로그부터 적용)
+
+---
+
 ## 2026-04-30 새벽3 — Claude Code
 
 ### 완료

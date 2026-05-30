@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { salesDb as db } from '../firebase';
 import {
-  collection, onSnapshot, doc, setDoc, deleteDoc, orderBy, query
+  collection, getDocs, doc, setDoc, deleteDoc, orderBy, query
 } from 'firebase/firestore';
 import {
   Plus, ArrowLeft, Printer, Edit2, Trash2, Check, X, RefreshCw, AlertTriangle, ChevronRight
 } from 'lucide-react';
+import { useToast } from './Toast';
+import { useConfirm } from './ConfirmModal';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface CheckItem { text: string; done: boolean; assignee?: string }
@@ -168,13 +170,14 @@ function AgendaBlock({
 
 /* ─── Form (split layout) ────────────────────────────────────────────────── */
 function MeetingForm({
-  initial, prevMeeting, onSave, onCancel, currentUserName,
+  initial, prevMeeting, onSave, onCancel, currentUserName, onValidationError,
 }: {
   initial?: Meeting;
   prevMeeting?: Meeting | null;
   onSave: (m: Meeting) => void;
   onCancel: () => void;
   currentUserName: string;
+  onValidationError: (msg: string) => void;
 }) {
   const [title, setTitle] = useState(initial?.title || '');
   const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
@@ -211,8 +214,8 @@ function MeetingForm({
   };
 
   const handleSave = () => {
-    if (!title.trim()) { alert('회의 제목을 입력해주세요'); return; }
-    if (!date) { alert('회의 일자를 선택해주세요'); return; }
+    if (!title.trim()) { onValidationError('회의 제목을 입력해주세요'); return; }
+    if (!date) { onValidationError('회의 일자를 선택해주세요'); return; }
     const m: Meeting = {
       id: initial?.id || genId(), title: title.trim(), date, author: author.trim(),
       location: location.trim(), attendees, agendas,
@@ -492,36 +495,45 @@ export function MeetingView({ currentUserName }: { currentUserName: string }) {
   const [view, setView] = useState<'list' | 'detail' | 'form'>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  useEffect(() => {
+  const fetchMeetings = async () => {
+    setLoading(true);
     const q = query(collection(db, 'meetings'), orderBy('date', 'desc'));
-    const unsub = onSnapshot(q, snap => {
-      setMeetings(snap.docs.map(d => d.data() as Meeting));
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
+    const snap = await getDocs(q);
+    setMeetings(snap.docs.map(d => d.data() as Meeting));
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchMeetings(); }, []);
 
   const seedData = async () => {
     const data: Meeting[] = [{"id":"1780023462820","title":"5월 5주차 바이저 회의","date":"2026-05-29","author":"조영준","location":"신사옥 2층 회의실","attendees":["최병재","김성중","이현채","김구수","임현민","조영준","이병인","장종규","강장혁"],"agendas":[{"title":"초도물품 수량 및 기물 변경","checklist":[{"text":"풀바트: 수량 축소- 하트바트: 수량 확대","done":false,"assignee":""},{"text":"인덕션 그릇: 황토색 도자기접시(무겁고 담는 양이 적어 효율성 저하) > 신항아리 14경으로 검토","done":false,"assignee":""},{"text":"누룽지 그릇 변경: 이더멜라민 한쪽 손잡이 제품으로 변경 검토(수량 확대 필요)-","done":false,"assignee":""},{"text":"반마리 접시 수량 조절 필요 언급: 현행 유지 의견 다수","done":false,"assignee":""},{"text":"고객 앞접시 제공: 새우장 그릇으로 임시 제공 중이나, 방안 검토 필요-","done":false,"assignee":""},{"text":"하얀색 접시 vs 검은색 접시 1가지만 진행 제안 [사유: 비율과 품목이 너무 많음]","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"가맹관리부,경영지원부","deadline":"2026-06-03","urgency":"low","note":""},{"title":"매출 하위 매장 집중 케어","checklist":[{"text":"메뉴 개발 진행은 각 담당자 진행중","done":false,"assignee":""},{"text":"담당자 재점검 후 밀착 관리 진행","done":false,"assignee":""},{"text":"갈치조림 또는 오징어 볶음 빠르게 개발하여 최우선 보급","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"가맹관리부,경영지원부,마케팅부","deadline":"2026-06-03","urgency":"high","note":""},{"title":"간택기 업무 과중 해결 방안","checklist":[{"text":"현재 매장 내 간택기 업무가 포화 상태, 조리 인력 피로도 매우 높음생선 비중은 점점 줄어들고 있음.","done":false,"assignee":""},{"text":"대안 마련 필요: 간택기 사용 줄이는 메뉴, 화덕 활용 메뉴 검토","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"가맹관리부","deadline":"2026-06-03","urgency":"mid","note":""},{"title":"신규 매장 오픈 진행 현황","checklist":[{"text":"강동 천호점 한울 나물 단가 협의 후 천호점부터 시행 예정","done":false,"assignee":"이현채"},{"text":"강동 천호점: 사전 안내 시작","done":false,"assignee":""},{"text":"창원 명곡점: 장종규 과장[조영준 과장 백업]","done":false,"assignee":""},{"text":"창원 명곡점 사전교육: 진해점 또는 명지점에서 2-3시간 정도 진행하도록 독려","done":false,"assignee":""},{"text":"구인현황 지속 관리 및 보고 진행","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"가맹관리부, 경영지원부","deadline":"2026-05-29","urgency":"mid","note":""},{"title":"제조실 메뉴 개발 및 과제","checklist":[{"text":"복장 규정(모자, 유니폼) 확인 - 체크리스트 작성하여 관리","done":false,"assignee":""},{"text":"2. 신규 인원(제조실+메뉴 개발) 출근 예정- 30년 경력","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"제조실","deadline":"2026-06-03","urgency":"mid","note":""},{"title":"메뉴 테스트 진행 사항","checklist":[{"text":"삼치구이: 구운 후 간장 활용방식(바르기/뿌리기) 확정 및 소스 테스트","done":false,"assignee":""},{"text":"백김치: 유자청 소스(교반기 활용) + 절임배추(중국산) 테스트","done":false,"assignee":""},{"text":"청국장: 파주 업체에서 샘플 도착, 고등어 비빔밥 메뉴 개발 연계","done":false,"assignee":""},{"text":"잡채/불고기: 소뚝불고기 및 잡채 소스 합본 테스트 진행중","done":false,"assignee":""},{"text":"원가 계산: 훈제 오리(최종 단계), 강된장(원가 계산 및 영상 촬영 후 고성권 차장 공유)","done":false,"assignee":""},{"text":"이관 품목: 도토리묵 양념장, 반찬류(조림) > 제조실 품목으로 고안중","done":false,"assignee":""},{"text":"아랍/예맨 갈치 및 서대 테스트 진행 예정","done":false,"assignee":""},{"text":"오징어 양념장 + 목초액 활용 술안주개발 > 영상 촬영 후 고성권 차장 공유","done":false,"assignee":""},{"text":"목함 수저통 제작 및 샘플 테스트","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"고성권","deadline":"2026-06-03","urgency":"mid","note":""},{"title":"어린이 메뉴 구성 기획","checklist":[{"text":"국내산 필렛 활용: 고등어 필렛+ @ 메뉴 고안4.","done":false,"assignee":""},{"text":"어린이 요금 따로 받는 방안","done":false,"assignee":""},{"text":"국내산 필렛 + 함박스테이크 1개","done":false,"assignee":""},{"text":"함박스테이크는 포장재까지 OEM 진행 예정[6월중 생산 예정]","done":false,"assignee":""},{"text":"국내산 필렛과 함박스테이크 메뉴 가격을 맞추고, 메뉴 가격 인하도 염두에 둘것.","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"","deadline":"","urgency":"mid","note":""},{"title":"매장 공지 사항","checklist":[{"text":"국내산 필렛 고등어 [ 소바 / 솥밥] 사용 공지","done":false,"assignee":""},{"text":"솥밥 진행 매장은 액자 발송까지 (정읍점 발송완료)","done":false,"assignee":""},{"text":"전란액 피드백 조사: 장종규 과장 > 신속 처리 필요","done":false,"assignee":""},{"text":"생선 초벌 작업 중요성 강조 > FC다움 체크리스트 등록, 교육 자료 작성","done":false,"assignee":""},{"text":"식용유+ 마가린 혼합 사용 안내","done":false,"assignee":""}],"progress":0,"assignee":"","ref":"","deadline":"2026-06-03","urgency":"mid","note":""}],"createdAt":"2026-05-29T02:57:42.820Z","updatedAt":"2026-05-29T03:53:02.391Z"}];
     for (const m of data) {
       await setDoc(doc(db, 'meetings', m.id), m);
     }
-    alert('데이터 복구 완료!');
+    toast.success('데이터 복구 완료');
+    fetchMeetings();
   };
 
   const saveMeeting = async (m: Meeting) => {
     await setDoc(doc(db, 'meetings', m.id), m);
+    await fetchMeetings();
     setSelectedId(m.id);
     setEditingId(null);
     setView('detail');
+    toast.success('회의록이 저장되었습니다');
   };
 
   const deleteMeeting = async (id: string) => {
-    if (!confirm('이 회의록을 삭제할까요?')) return;
+    const ok = await confirm({ title: '회의록 삭제', message: '이 회의록을 삭제할까요? 되돌릴 수 없습니다.', confirmLabel: '삭제', variant: 'danger' });
+    if (!ok) return;
     await deleteDoc(doc(db, 'meetings', id));
+    await fetchMeetings();
     setView('list');
     setSelectedId(null);
+    toast.success('삭제되었습니다');
   };
 
   const toggleCheck = async (meeting: Meeting, agIdx: number, checkIdx: number) => {
@@ -565,6 +577,7 @@ export function MeetingView({ currentUserName }: { currentUserName: string }) {
         onSave={saveMeeting}
         onCancel={() => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); }}
         currentUserName={currentUserName}
+        onValidationError={msg => toast.error(msg)}
       />
     </div>
   );
