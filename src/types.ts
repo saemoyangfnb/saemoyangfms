@@ -425,7 +425,7 @@ export interface Employee {
 // ==========================================
 // 캘린더 이벤트 (salesDb: calendar_events)
 // ==========================================
-export type CalendarEventType = 'personal' | 'company' | 'holiday' | 'leave';
+export type CalendarEventType = 'personal' | 'company' | 'holiday' | 'leave' | 'meeting' | 'franchise';
 
 export interface CalendarEvent {
   id: string;

@@ -11,16 +11,20 @@ const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
 const EVENT_COLORS: Record<CalendarEventType, string> = {
-  personal: 'bg-blue-500',
-  company:  'bg-emerald-500',
-  holiday:  'bg-red-400',
-  leave:    'bg-amber-400',
+  personal:  'bg-blue-500',
+  company:   'bg-emerald-500',
+  holiday:   'bg-red-400',
+  leave:     'bg-amber-400',
+  meeting:   'bg-purple-500',
+  franchise: 'bg-orange-400',
 };
 const EVENT_TEXT: Record<CalendarEventType, string> = {
-  personal: '개인',
-  company:  '회사',
-  holiday:  '공휴일',
-  leave:    '연차',
+  personal:  '개인',
+  company:   '회사',
+  holiday:   '공휴일',
+  leave:     '연차',
+  meeting:   '회의',
+  franchise: '오픈',
 };
 const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   annual:   '연차',
@@ -98,30 +102,81 @@ export function CompanyCalendar({ currentUser }: Props) {
   /* 데이터 불러오기 */
   const fetchData = async () => {
     setLoading(true);
-    const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const endDate = new Date(year, month + 1, 0);
-    const endStr = toYMD(endDate);
+    try {
+      const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDate = new Date(year, month + 1, 0);
+      const endStr = toYMD(endDate);
 
-    const [evtSnap, leaveSnap, empSnap] = await Promise.all([
-      getDocs(query(collection(salesDb, 'calendar_events'),
-        where('startDate', '<=', endStr),
-        orderBy('startDate'))),
-      getDocs(query(collection(salesDb, 'leave_requests'), orderBy('startDate', 'desc'))),
-      getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
-    ]);
+      const [evtSnap, leaveSnap, empSnap, meetingSnap, franchiseSnap] = await Promise.all([
+        getDocs(query(collection(salesDb, 'calendar_events'),
+          where('startDate', '<=', endStr), orderBy('startDate'))),
+        getDocs(query(collection(salesDb, 'leave_requests'), orderBy('startDate', 'desc'))),
+        getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
+        // 회의록 — 이 달 범위 내 (읽기 전용)
+        getDocs(collection(salesDb, 'meetings')),
+        // 오픈 일정 — 전체 읽어서 클라이언트 필터 (읽기 전용)
+        getDocs(query(collection(salesDb, 'franchise_schedules'))),
+      ]);
 
-    const allEvents = evtSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent))
-      .filter(e => e.endDate >= startStr);
-    setEvents(allEvents);
+      /* 캘린더 이벤트 */
+      const calEvents = evtSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent))
+        .filter(e => e.endDate >= startStr);
 
-    const allLeave = leaveSnap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest));
-    setLeaveRequests(allLeave);
+      /* 회의록 → 가상 이벤트 (저장 안 함, 표시만) */
+      const meetingEvents: CalendarEvent[] = meetingSnap.docs
+        .map(d => d.data() as { id: string; title: string; date: string })
+        .filter(m => m.date >= startStr && m.date <= endStr)
+        .map(m => ({
+          id: `meeting_${m.id}`,
+          type: 'meeting' as CalendarEventType,
+          title: `📋 ${m.title}`,
+          startDate: m.date, endDate: m.date,
+          allDay: true,
+          visibility: 'all',
+          createdAt: '', updatedAt: '',
+        }));
 
-    const emps = empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
-    setEmployees(emps);
-    const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
-    setMyEmployee(me);
-    setLoading(false);
+      /* 오픈 일정 주요 날짜 → 가상 이벤트 (저장 안 함, 표시만) */
+      const franchiseEvents: CalendarEvent[] = [];
+      franchiseSnap.docs.forEach(d => {
+        const s = d.data() as Record<string, string>;
+        if (s.archived) return;
+        const name = s.storeName || s.storeNumber || '매장';
+        const dateFields: { key: string; label: string }[] = [
+          { key: 'openDate',        label: `🏪 ${name} 오픈` },
+          { key: 'trainingStart',   label: `📚 ${name} 교육시작` },
+          { key: 'constructionStart', label: `🔨 ${name} 공사시작` },
+          { key: 'constructionEnd', label: `✅ ${name} 공사완료` },
+        ];
+        dateFields.forEach(({ key, label }) => {
+          const dateVal = s[key];
+          if (dateVal && dateVal >= startStr && dateVal <= endStr) {
+            franchiseEvents.push({
+              id: `franchise_${d.id}_${key}`,
+              type: 'franchise' as CalendarEventType,
+              title: label,
+              startDate: dateVal, endDate: dateVal,
+              allDay: true,
+              visibility: 'all',
+              createdAt: '', updatedAt: '',
+            });
+          }
+        });
+      });
+
+      setEvents([...calEvents, ...meetingEvents, ...franchiseEvents]);
+
+      const allLeave = leaveSnap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest));
+      setLeaveRequests(allLeave);
+
+      const emps = empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+      setEmployees(emps);
+      setMyEmployee(emps.find(e => e.linkedUid === currentUser.uid) ?? null);
+    } catch (e) {
+      console.error('Calendar fetchData error:', e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [year, month]);
@@ -312,13 +367,18 @@ export function CompanyCalendar({ currentUser }: Props) {
                         {day}
                       </div>
                       <div className="space-y-0.5">
-                        {dayEvts.slice(0, 3).map(evt => (
-                          <div key={evt.id}
-                            className={`text-[10px] text-white rounded px-1 py-0.5 truncate ${EVENT_COLORS[evt.type]} cursor-pointer hover:opacity-80`}
-                            onClick={e => { e.stopPropagation(); if (evt.type !== 'leave') deleteEvent(evt); }}>
-                            {evt.title}
-                          </div>
-                        ))}
+                        {dayEvts.slice(0, 3).map(evt => {
+                          const isReadOnly = evt.type === 'meeting' || evt.type === 'franchise' || evt.type === 'leave';
+                          return (
+                            <div key={evt.id}
+                              className={`text-[10px] text-white rounded px-1 py-0.5 truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
+                              onClick={e => { e.stopPropagation(); if (!isReadOnly) deleteEvent(evt); }}
+                              title={evt.title}
+                            >
+                              {evt.title}
+                            </div>
+                          );
+                        })}
                         {dayEvts.length > 3 && (
                           <div className="text-[10px] text-stone-400 pl-1">+{dayEvts.length - 3}개</div>
                         )}
