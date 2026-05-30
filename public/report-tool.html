@@ -15,16 +15,25 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
     <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        
+        @font-face {
+            font-family: 'Chosunilbo_myungjo';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Chosunilbo_myungjo.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        * {
+            font-family: 'Chosunilbo_myungjo', serif !important;
+        }
+
         :root {
-            --brand-main: #2a5c54; /* 메인 컬러 (청록) */
-            --brand-green: #3f6636; /* 포인트 컬러 (초록) */
-            --bg-light: #f4f5f7;
+            --brand-main: #1c1917;   /* stone-900 */
+            --brand-green: #44403c;  /* stone-700 */
+            --bg-light: #FDFBF7;     /* 크림 배경 */
         }
 
         body {
-            font-family: 'Pretendard', sans-serif;
+            font-family: 'Chosunilbo_myungjo', serif;
             background-color: var(--bg-light);
             overflow-x: hidden;
         }
@@ -63,10 +72,10 @@
 
         /* --- 워터마크 --- */
         .watermark-corner {
-            position: absolute; bottom: 0; right: 0; width: 250px; height: 150px; background-color: #585858; 
-            border-top-left-radius: 100%; display: flex; align-items: flex-end; justify-content: flex-end; 
-            padding: 20px 30px; color: rgba(255, 255, 255, 0.9); font-weight: 800; font-size: 1.1rem; 
-            letter-spacing: 0.05em; z-index: 1; pointer-events: none; 
+            position: absolute; bottom: 0; right: 0; width: 250px; height: 150px; background-color: #1c1917;
+            border-top-left-radius: 100%; display: flex; align-items: flex-end; justify-content: flex-end;
+            padding: 20px 30px; color: rgba(253, 251, 247, 0.9); font-weight: 800; font-size: 1.1rem;
+            letter-spacing: 0.05em; z-index: 1; pointer-events: none;
         }
 
         /* --- 인쇄 최적화 --- */
@@ -142,7 +151,7 @@
 
         /* --- 로그인 오버레이 --- */
         #login-overlay {
-            position: fixed; inset: 0; background: linear-gradient(135deg, #1e3a35 0%, #2a5c54 60%, #3f6636 100%);
+            position: fixed; inset: 0; background: linear-gradient(135deg, #0c0a09 0%, #1c1917 60%, #292524 100%);
             z-index: 9999; display: flex; align-items: center; justify-content: center;
         }
         #login-overlay.hidden { display: none; }
@@ -192,7 +201,7 @@
     <!-- 상단 툴바 (인쇄 시 숨김) -->
     <div class="no-print fixed top-0 left-0 w-full bg-white border-b border-gray-200 shadow-sm z-40">
         <!-- 타이틀 바 -->
-        <div class="bg-[#2a5c54] text-white px-6 py-2 flex justify-between items-center">
+        <div class="bg-[#1c1917] text-white px-6 py-2 flex justify-between items-center">
             <div class="font-bold text-sm tracking-wider"><i class="fas fa-seedling mr-1 text-green-300"></i> 새모양 F&B - 통합 보고서 작성 툴 <span class="text-green-300 text-xs ml-1">v9</span></div>
             <div class="flex items-center space-x-4 text-xs opacity-90 font-medium">
                 <span id="current-time"></span>
@@ -220,7 +229,7 @@
             <div class="flex items-center space-x-3 shrink-0">
                 <!-- 보관함 검색 -->
                 <div class="relative">
-                    <input type="text" id="search-input" oninput="handleSearchInput(this.value)" placeholder="보관함 검색..." class="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded bg-gray-50 focus:outline-none focus:border-[#2a5c54] w-44 transition-all focus:w-56">
+                    <input type="text" id="search-input" oninput="handleSearchInput(this.value)" placeholder="보관함 검색..." class="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded bg-gray-50 focus:outline-none focus:border-[#1c1917] w-44 transition-all focus:w-56">
                     <i class="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
                     <!-- 검색 드롭다운 -->
                     <div id="search-dropdown" class="hidden absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 w-72 max-h-64 overflow-y-auto">
@@ -228,7 +237,7 @@
                     </div>
                 </div>
                 <button onclick="toggleSidebar()" class="px-4 py-1.5 bg-gray-100 text-gray-800 border border-gray-300 rounded text-sm font-bold hover:bg-gray-200 transition-colors flex items-center">
-                    <i class="fas fa-folder-open mr-2 text-[#2a5c54]"></i> 보관함 열기 (<span id="saved-count">0</span>)
+                    <i class="fas fa-folder-open mr-2 text-[#1c1917]"></i> 보관함 열기 (<span id="saved-count">0</span>)
                 </button>
             </div>
         </div>
@@ -260,7 +269,7 @@
                     <div class="w-px h-4 bg-gray-300 mx-1"></div>
 
                     <input type="file" id="image-upload" class="hidden" accept="image/*">
-                    <button onclick="triggerImageUpload()" class="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 shadow-sm hover:bg-gray-50 rounded transition-all"><i class="fas fa-crop-alt text-[#2a5c54] mr-1"></i> 사진 자르기</button>
+                    <button onclick="triggerImageUpload()" class="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 shadow-sm hover:bg-gray-50 rounded transition-all"><i class="fas fa-crop-alt text-[#1c1917] mr-1"></i> 사진 자르기</button>
                     
                     <div class="w-px h-4 bg-gray-300 mx-1"></div>
                     
@@ -269,11 +278,11 @@
                         <button id="btn-resize-mode" onclick="toggleResizeMode()" class="px-3 py-1 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded transition-all border border-gray-300"><i class="fas fa-arrows-alt-h mr-1"></i> 표 크기 조절</button>
                         <div class="w-px h-3 bg-gray-300 mx-1"></div>
                         <span class="text-[10px] text-gray-400 font-bold px-1">행(가로)</span>
-                        <button onmousedown="event.preventDefault(); addRow()" class="px-2 py-1 text-xs font-bold text-[#3f6636] hover:bg-gray-50 rounded transition-all">➕</button>
+                        <button onmousedown="event.preventDefault(); addRow()" class="px-2 py-1 text-xs font-bold text-[#44403c] hover:bg-gray-50 rounded transition-all">➕</button>
                         <button onmousedown="event.preventDefault(); deleteRow()" class="px-2 py-1 text-xs font-bold text-red-600 hover:bg-gray-50 rounded transition-all">➖</button>
                         <div class="w-px h-3 bg-gray-300 mx-1"></div>
                         <span class="text-[10px] text-gray-400 font-bold px-1">열(세로)</span>
-                        <button onmousedown="event.preventDefault(); addCol()" class="px-2 py-1 text-xs font-bold text-[#3f6636] hover:bg-gray-50 rounded transition-all">➕</button>
+                        <button onmousedown="event.preventDefault(); addCol()" class="px-2 py-1 text-xs font-bold text-[#44403c] hover:bg-gray-50 rounded transition-all">➕</button>
                         <button onmousedown="event.preventDefault(); deleteCol()" class="px-2 py-1 text-xs font-bold text-red-600 hover:bg-gray-50 rounded transition-all">➖</button>
                     </div>
                 </div>
@@ -281,7 +290,7 @@
                 <div class="flex space-x-2 mt-2 sm:mt-0">
                     <button onclick="openAiModal()" class="px-4 py-1.5 bg-purple-600 text-white rounded text-sm font-bold shadow-sm hover:bg-purple-700 transition-colors"><i class="fas fa-robot mr-1"></i> AI 초안 작성</button>
                     <button onclick="exportToExcel()" class="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm font-bold shadow-sm hover:bg-emerald-700 transition-colors"><i class="fas fa-file-excel mr-1"></i> Excel 저장</button>
-                    <button onclick="handleSaveClick()" class="px-4 py-1.5 bg-[#2a5c54] text-white rounded text-sm font-bold shadow-sm hover:bg-[#1e443e] transition-colors"><i class="fas fa-save mr-1"></i> 현재 문서 저장</button>
+                    <button onclick="handleSaveClick()" class="px-4 py-1.5 bg-[#1c1917] text-white rounded text-sm font-bold shadow-sm hover:bg-[#0c0a09] transition-colors"><i class="fas fa-save mr-1"></i> 현재 문서 저장</button>
                     <button id="btn-submit-approval" onclick="handleSubmitApproval()" class="hidden px-4 py-1.5 bg-amber-500 text-white rounded text-sm font-bold shadow-sm hover:bg-amber-600 transition-colors"><i class="fas fa-paper-plane mr-1"></i> 결재 상신</button>
                     <button onclick="window.print()" class="px-4 py-1.5 bg-gray-800 text-white rounded text-sm font-bold shadow-sm hover:bg-gray-700 transition-colors"><i class="fas fa-print mr-1"></i> PDF 인쇄</button>
                 </div>
@@ -291,14 +300,14 @@
 
     <!-- ==================== 보관함 (사이드바) ==================== -->
     <div id="storage-sidebar" class="no-print fixed right-0 top-0 h-full w-96 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 flex flex-col border-l border-gray-200">
-        <div class="bg-[#2a5c54] text-white p-4 flex justify-between items-center shadow-md">
+        <div class="bg-[#1c1917] text-white p-4 flex justify-between items-center shadow-md">
             <h2 class="font-bold text-lg"><i class="fas fa-folder-open mr-2"></i> 저장된 문서 보관함</h2>
             <button onclick="toggleSidebar()" class="text-white hover:text-gray-200 text-xl"><i class="fas fa-times"></i></button>
         </div>
         <!-- 정렬 컨트롤 -->
         <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center space-x-2">
             <span class="text-xs text-gray-500 font-bold mr-1">정렬:</span>
-            <button onclick="setSidebarSort('date-desc')" id="sort-date-desc" class="sort-btn active px-2 py-1 text-xs rounded border border-gray-300 font-bold bg-[#2a5c54] text-white transition-colors">최신순</button>
+            <button onclick="setSidebarSort('date-desc')" id="sort-date-desc" class="sort-btn active px-2 py-1 text-xs rounded border border-gray-300 font-bold bg-[#1c1917] text-white transition-colors">최신순</button>
             <button onclick="setSidebarSort('date-asc')" id="sort-date-asc" class="sort-btn px-2 py-1 text-xs rounded border border-gray-300 font-bold bg-white text-gray-600 hover:bg-gray-100 transition-colors">오래된순</button>
             <button onclick="setSidebarSort('status')" id="sort-status" class="sort-btn px-2 py-1 text-xs rounded border border-gray-300 font-bold bg-white text-gray-600 hover:bg-gray-100 transition-colors">상태순</button>
         </div>
@@ -312,13 +321,13 @@
         
         <!-- 대시보드 뷰 -->
         <div id="dashboard-view" class="max-w-6xl mx-auto p-6 block">
-            <div class="flex justify-between items-end mb-6 border-b-2 border-[#3f6636] pb-2">
-                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-chart-line text-[#2a5c54] mr-2"></i> 내 업무 현황판</h2>
+            <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-2">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-chart-line text-[#1c1917] mr-2"></i> 내 업무 현황판</h2>
                 <span class="text-sm text-gray-500 font-bold">카드를 클릭하면 상태별로 리스트가 정렬됩니다.</span>
             </div>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="stat-card bg-white rounded-lg shadow p-5 border-l-4 border-gray-400 ring-4 ring-[#2a5c54] transform -translate-y-2" id="card-all" onclick="setDashboardFilter('all')">
+                <div class="stat-card bg-white rounded-lg shadow p-5 border-l-4 border-gray-400 ring-4 ring-[#1c1917] transform -translate-y-2" id="card-all" onclick="setDashboardFilter('all')">
                     <div class="text-gray-500 text-sm font-bold mb-1">총 등록 업무</div>
                     <div class="text-3xl font-extrabold text-gray-800" id="dash-total">0</div>
                 </div>
@@ -338,7 +347,7 @@
 
             <div class="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
                 <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                    <h3 class="font-bold text-gray-700 flex items-center"><i class="fas fa-list-alt text-[#2a5c54] mr-2"></i> <span id="dash-list-title">전체 문서 리스트</span></h3>
+                    <h3 class="font-bold text-gray-700 flex items-center"><i class="fas fa-list-alt text-[#1c1917] mr-2"></i> <span id="dash-list-title">전체 문서 리스트</span></h3>
                 </div>
                 <div class="p-0">
                     <table class="w-full text-sm text-left border-collapse">
@@ -370,9 +379,9 @@
 
                 <!-- 탭 1: 일반 보고서 -->
                 <div id="tab1" class="report-content block">
-                    <div class="flex justify-between items-end mb-6 border-b-2 border-gray-300 pb-4">
+                    <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-4">
                         <div>
-                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#3f6636]">업무<br>보고서</h1>
+                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#44403c]">업무<br>보고서</h1>
                             <div contenteditable="true" class="report-subtitle text-lg font-bold text-gray-700 mt-3 inline-block min-w-[200px]" placeholder="여기에 소제목을 입력하세요 (예: 전주점 도면 건)"></div>
                         </div>
                         <table class="doc-info-table">
@@ -393,9 +402,9 @@
 
                 <!-- 탭 2: 테스트 보고서 -->
                 <div id="tab2" class="report-content hidden">
-                    <div class="flex justify-between items-end mb-6 border-b-2 border-gray-300 pb-4">
+                    <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-4">
                         <div>
-                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#3f6636]">테스트<br>보고서</h1>
+                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#44403c]">테스트<br>보고서</h1>
                             <div contenteditable="true" class="report-subtitle text-lg font-bold text-gray-700 mt-3 inline-block min-w-[200px]" placeholder="여기에 소제목을 입력하세요 (예: 함박스테이크 샘플)"></div>
                         </div>
                         <table class="doc-info-table">
@@ -419,9 +428,9 @@
 
                 <!-- 탭 3: 제안 보고서 -->
                 <div id="tab3" class="report-content hidden">
-                    <div class="flex justify-between items-end mb-6 border-b-2 border-gray-300 pb-4">
+                    <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-4">
                         <div>
-                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#3f6636]">제안<br>보고서</h1>
+                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#44403c]">제안<br>보고서</h1>
                             <div contenteditable="true" class="report-subtitle text-lg font-bold text-gray-700 mt-3 inline-block min-w-[200px]" placeholder="여기에 소제목을 입력하세요 (예: 발주 시스템 개선)"></div>
                         </div>
                         <table class="doc-info-table">
@@ -442,9 +451,9 @@
 
                 <!-- 탭 4: 회의록 -->
                 <div id="tab4" class="report-content hidden">
-                    <div class="flex justify-between items-end mb-6 border-b-2 border-gray-300 pb-4">
+                    <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-4">
                         <div>
-                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#3f6636]">주간<br>회의록</h1>
+                            <h1 contenteditable="true" class="text-[2.5rem] font-extrabold leading-tight text-[#44403c]">주간<br>회의록</h1>
                             <div contenteditable="true" class="report-subtitle text-lg font-bold text-gray-700 mt-3 inline-block min-w-[200px]" placeholder="여기에 소제목을 입력하세요 (예: 3월 4주차 팀회의)"></div>
                         </div>
                         <table class="doc-info-table">
@@ -477,7 +486,7 @@
             <h3 class="text-lg font-bold text-gray-900 mb-2">저장하지 않은 내용이 있습니다</h3>
             <p class="text-gray-600 text-sm mb-6">다른 화면으로 이동하기 전에<br>현재 작성 중인 내용을 저장할까요?</p>
             <div class="flex flex-col gap-2">
-                <button onclick="confirmUnsaved('save')" class="w-full py-2 bg-[#2a5c54] hover:bg-[#1e443e] text-white rounded-lg font-bold shadow-sm transition-colors">저장하고 이동</button>
+                <button onclick="confirmUnsaved('save')" class="w-full py-2 bg-[#1c1917] hover:bg-[#0c0a09] text-white rounded-lg font-bold shadow-sm transition-colors">저장하고 이동</button>
                 <button onclick="confirmUnsaved('discard')" class="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold transition-colors">저장하지 않고 이동</button>
                 <button onclick="confirmUnsaved('cancel')" class="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold transition-colors">취소 (현재 화면 머무르기)</button>
             </div>
@@ -487,14 +496,14 @@
     <!-- 문서 저장 모달 (새 문서 작성 시에만 호출됨) -->
     <div id="save-modal" class="no-print fixed inset-0 bg-black/50 z-[60] hidden items-center justify-center">
         <div class="bg-white rounded-xl w-96 p-6 shadow-xl">
-            <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-save text-[#2a5c54] mr-2"></i> 새 문서 저장</h3>
+            <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-save text-[#1c1917] mr-2"></i> 새 문서 저장</h3>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">문서 제목 입력</label>
-                <input type="text" id="save-title" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#2a5c54]" placeholder="예: 전주점 신규 오픈 관련">
+                <input type="text" id="save-title" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#1c1917]" placeholder="예: 전주점 신규 오픈 관련">
             </div>
             <div class="mb-6">
                 <label class="block text-sm font-medium text-gray-700 mb-1">진행 상태</label>
-                <select id="save-status" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#2a5c54]">
+                <select id="save-status" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#1c1917]">
                     <option value="진행">⏳ 진행 중</option>
                     <option value="긴급">🚨 긴급</option>
                     <option value="완료">✅ 완료</option>
@@ -502,7 +511,7 @@
             </div>
             <div class="flex justify-end space-x-2">
                 <button onclick="closeSaveModal()" class="px-4 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 font-bold">취소</button>
-                <button onclick="executeNewSave()" class="px-4 py-2 bg-[#2a5c54] text-white rounded hover:bg-[#1e443e] font-bold shadow-sm">저장하기</button>
+                <button onclick="executeNewSave()" class="px-4 py-2 bg-[#1c1917] text-white rounded hover:bg-[#0c0a09] font-bold shadow-sm">저장하기</button>
             </div>
         </div>
     </div>
@@ -525,7 +534,7 @@
             </div>
             <div class="p-4 border-t border-gray-200 flex justify-end space-x-2 bg-gray-50 rounded-b-lg">
                 <button onclick="closeCropModal()" class="px-4 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 bg-white font-bold">취소</button>
-                <button onclick="insertCroppedImage()" class="px-6 py-2 bg-[#2a5c54] text-white rounded hover:bg-[#1e443e] font-bold shadow-sm">영역 자르기 및 삽입</button>
+                <button onclick="insertCroppedImage()" class="px-6 py-2 bg-[#1c1917] text-white rounded hover:bg-[#0c0a09] font-bold shadow-sm">영역 자르기 및 삽입</button>
             </div>
         </div>
     </div>
@@ -534,7 +543,7 @@
     <div id="login-overlay">
         <div class="login-card">
             <div class="text-center mb-6">
-                <div class="inline-flex items-center justify-center w-14 h-14 bg-[#2a5c54] rounded-full mb-3">
+                <div class="inline-flex items-center justify-center w-14 h-14 bg-[#1c1917] rounded-full mb-3">
                     <i class="fas fa-seedling text-white text-2xl"></i>
                 </div>
                 <h1 class="text-xl font-extrabold text-gray-900">새모양 F&B</h1>
@@ -542,18 +551,18 @@
             </div>
             <div class="mb-3">
                 <label class="block text-xs font-bold text-gray-600 mb-1">이름</label>
-                <input type="text" id="login-name" placeholder="이름 입력 (예: 조영준)" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#2a5c54] focus:ring-1 focus:ring-[#2a5c54]">
+                <input type="text" id="login-name" placeholder="이름 입력 (예: 조영준)" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1c1917] focus:ring-1 focus:ring-[#1c1917]">
             </div>
             <div class="mb-5">
                 <label class="block text-xs font-bold text-gray-600 mb-1">직급 / 역할</label>
-                <select id="login-role" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#2a5c54]">
+                <select id="login-role" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1c1917]">
                     <option value="staff">일반 직원 (보고서 작성)</option>
                     <option value="supervisor">슈퍼바이저 / 과장</option>
                     <option value="manager">팀장 / 부장</option>
                     <option value="clevel">C레벨 (결재 권한)</option>
                 </select>
             </div>
-            <button onclick="handleLogin()" class="w-full py-3 bg-[#2a5c54] hover:bg-[#1e443e] text-white rounded-lg font-bold text-sm transition-colors shadow-sm">
+            <button onclick="handleLogin()" class="w-full py-3 bg-[#1c1917] hover:bg-[#0c0a09] text-white rounded-lg font-bold text-sm transition-colors shadow-sm">
                 <i class="fas fa-sign-in-alt mr-2"></i> 입장하기
             </button>
             <p class="text-center text-xs text-gray-400 mt-4">※ 실제 배포 시 SSO 인증으로 대체됩니다</p>
@@ -562,7 +571,7 @@
 
     <!-- ==================== 결재함 뷰 (C레벨/팀장) ==================== -->
     <div id="review-view" class="max-w-6xl mx-auto p-6 hidden">
-        <div class="flex justify-between items-end mb-6 border-b-2 border-amber-400 pb-2">
+        <div class="flex justify-between items-end mb-6 border-b-[3px] border-double border-stone-800 pb-2">
             <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-stamp text-amber-500 mr-2"></i> 결재함</h2>
             <span class="text-sm text-gray-500 font-bold">상신된 보고서를 검토하고 승인 또는 반려하세요.</span>
         </div>
@@ -588,7 +597,7 @@
             <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                 <h3 class="font-bold text-gray-700"><i class="fas fa-list-alt text-amber-500 mr-2"></i> 상신된 보고서 목록</h3>
                 <div class="flex gap-2">
-                    <button onclick="setReviewFilter('all')" id="rf-all" class="rf-btn px-3 py-1 text-xs font-bold rounded border border-gray-300 bg-[#2a5c54] text-white">전체</button>
+                    <button onclick="setReviewFilter('all')" id="rf-all" class="rf-btn px-3 py-1 text-xs font-bold rounded border border-gray-300 bg-[#1c1917] text-white">전체</button>
                     <button onclick="setReviewFilter('pending')" id="rf-pending" class="rf-btn px-3 py-1 text-xs font-bold rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50">대기</button>
                     <button onclick="setReviewFilter('approved')" id="rf-approved" class="rf-btn px-3 py-1 text-xs font-bold rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50">승인</button>
                     <button onclick="setReviewFilter('rejected')" id="rf-rejected" class="rf-btn px-3 py-1 text-xs font-bold rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50">반려</button>
@@ -613,7 +622,7 @@
     <!-- ==================== 결재 액션 패널 (에디터 뷰 플로팅) ==================== -->
     <div id="approval-panel" class="hidden no-print">
         <div class="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <i class="fas fa-file-signature text-[#2a5c54]"></i> 결재 현황
+            <i class="fas fa-file-signature text-[#1c1917]"></i> 결재 현황
         </div>
         <div id="approval-status-display" class="mb-3"></div>
         <div id="approval-action-area"></div>
@@ -678,7 +687,7 @@
             </div>
             <div class="flex justify-end space-x-2">
                 <button onclick="closeAiModal()" class="px-4 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 font-bold text-sm">취소</button>
-                <button id="ai-insert-btn" onclick="insertAiDraft()" class="hidden px-4 py-2 bg-[#2a5c54] text-white rounded font-bold text-sm hover:bg-[#1e443e]"><i class="fas fa-file-import mr-1"></i> 문서에 삽입</button>
+                <button id="ai-insert-btn" onclick="insertAiDraft()" class="hidden px-4 py-2 bg-[#1c1917] text-white rounded font-bold text-sm hover:bg-[#0c0a09]"><i class="fas fa-file-import mr-1"></i> 문서에 삽입</button>
                 <button id="ai-generate-btn" onclick="generateAiDraft()" class="px-5 py-2 bg-purple-600 text-white rounded font-bold text-sm hover:bg-purple-700 transition-colors">
                     <span id="ai-btn-text"><i class="fas fa-magic mr-1"></i> 초안 생성</span>
                     <span id="ai-btn-loading" class="hidden"><i class="fas fa-circle-notch ai-spinner mr-1"></i> 생성 중...</span>
@@ -932,14 +941,14 @@
 
         function switchView(viewId) {
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-[#2a5c54]', 'text-white', 'border-[#2a5c54]');
+                btn.classList.remove('active', 'bg-[#1c1917]', 'text-white', 'border-[#1c1917]');
                 btn.classList.add('bg-white', 'text-gray-600', 'border-gray-300');
             });
             
             const activeBtn = document.getElementById('btn-' + viewId);
             if(activeBtn) {
                 activeBtn.classList.remove('bg-white', 'text-gray-600', 'border-gray-300');
-                activeBtn.classList.add('active', 'bg-[#2a5c54]', 'text-white', 'border-[#2a5c54]');
+                activeBtn.classList.add('active', 'bg-[#1c1917]', 'text-white', 'border-[#1c1917]');
             }
 
             // 모든 뷰 숨기기
@@ -1020,7 +1029,7 @@
             if (isResizeMode) {
                 // 리사이즈 모드 ON
                 table.classList.add('resize-enabled');
-                btn.classList.add('bg-[#2a5c54]', 'text-white');
+                btn.classList.add('bg-[#1c1917]', 'text-white');
                 btn.classList.remove('bg-white', 'text-gray-700');
                 btn.innerHTML = '<i class="fas fa-check mr-1"></i> 크기 조절 종료';
                 
@@ -1031,7 +1040,7 @@
             } else {
                 // 리사이즈 모드 OFF
                 table.classList.remove('resize-enabled');
-                btn.classList.remove('bg-[#2a5c54]', 'text-white');
+                btn.classList.remove('bg-[#1c1917]', 'text-white');
                 btn.classList.add('bg-white', 'text-gray-700');
                 btn.innerHTML = '<i class="fas fa-arrows-alt-h mr-1"></i> 표 크기 조절';
                 
@@ -1374,9 +1383,9 @@
             renderDashboard();
             
             document.querySelectorAll('.stat-card').forEach(c => {
-                c.classList.remove('ring-4', 'ring-[#2a5c54]', 'transform', '-translate-y-2');
+                c.classList.remove('ring-4', 'ring-[#1c1917]', 'transform', '-translate-y-2');
             });
-            document.getElementById('card-' + filter).classList.add('ring-4', 'ring-[#2a5c54]', 'transform', '-translate-y-2');
+            document.getElementById('card-' + filter).classList.add('ring-4', 'ring-[#1c1917]', 'transform', '-translate-y-2');
             
             const titleMap = { 
                 'all': '전체 문서 리스트', 
@@ -1410,7 +1419,7 @@
                 <tr class="hover:bg-gray-50 transition-colors cursor-pointer border-b border-gray-100 last:border-0" onclick="requestNavigation('loadDoc', '${r.id}')">
                     <td class="px-6 py-4 whitespace-nowrap w-24">${getStatusTagHtml(r.status)}</td>
                     <td class="px-4 py-4 whitespace-nowrap w-24">${getDocTypeBadge(r.docType || r.activeTab)}</td>
-                    <td class="px-6 py-4 font-bold text-gray-800 hover:text-[#2a5c54] truncate">${r.title}</td>
+                    <td class="px-6 py-4 font-bold text-gray-800 hover:text-[#1c1917] truncate">${r.title}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 text-right">${r.date}</td>
                 </tr>
             `).join('');
@@ -1441,10 +1450,10 @@
         function setSidebarSort(mode) {
             sidebarSort = mode;
             document.querySelectorAll('.sort-btn').forEach(b => {
-                b.classList.remove('bg-[#2a5c54]', 'text-white');
+                b.classList.remove('bg-[#1c1917]', 'text-white');
                 b.classList.add('bg-white', 'text-gray-600');
             });
-            document.getElementById('sort-' + mode).classList.add('bg-[#2a5c54]', 'text-white');
+            document.getElementById('sort-' + mode).classList.add('bg-[#1c1917]', 'text-white');
             document.getElementById('sort-' + mode).classList.remove('bg-white', 'text-gray-600');
             renderSidebarList();
         }
@@ -1468,14 +1477,14 @@
             }
 
             listContainer.innerHTML = reports.map(r => `
-                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:border-[#2a5c54] transition-colors relative">
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:border-[#1c1917] transition-colors relative">
                     <div class="flex justify-between items-start mb-2">
                         <div class="flex items-center gap-1">${getStatusTagHtml(r.status)} ${getDocTypeBadge(r.docType || r.activeTab)}</div>
                         <div class="text-xs text-gray-400 font-medium">${r.date}</div>
                     </div>
                     <div class="font-bold text-gray-800 mb-4 truncate text-[15px]" title="${r.title}">${r.title}</div>
                     <div class="flex justify-between gap-2">
-                        <button onclick="requestNavigation('loadDoc', '${r.id}')" class="flex-1 bg-gray-100 hover:bg-[#eef5f3] hover:text-[#2a5c54] text-gray-700 text-sm py-1.5 rounded font-bold transition-colors border border-gray-200"><i class="fas fa-folder-open mr-1"></i> 문서 열기</button>
+                        <button onclick="requestNavigation('loadDoc', '${r.id}')" class="flex-1 bg-gray-100 hover:bg-[#eef5f3] hover:text-[#1c1917] text-gray-700 text-sm py-1.5 rounded font-bold transition-colors border border-gray-200"><i class="fas fa-folder-open mr-1"></i> 문서 열기</button>
                         <button onclick="deleteReport('${r.id}')" class="bg-white hover:bg-red-50 text-red-500 hover:text-red-700 text-sm px-3 py-1.5 rounded font-bold transition-colors border border-gray-200"><i class="fas fa-trash-alt"></i></button>
                     </div>
                 </div>
@@ -1909,10 +1918,10 @@
         function setReviewFilter(f) {
             reviewFilterCurrent = f;
             document.querySelectorAll('.rf-btn').forEach(b => {
-                b.classList.remove('bg-[#2a5c54]', 'text-white');
+                b.classList.remove('bg-[#1c1917]', 'text-white');
                 b.classList.add('bg-white', 'text-gray-600');
             });
-            document.getElementById('rf-' + f).classList.add('bg-[#2a5c54]', 'text-white');
+            document.getElementById('rf-' + f).classList.add('bg-[#1c1917]', 'text-white');
             document.getElementById('rf-' + f).classList.remove('bg-white', 'text-gray-600');
             renderReviewList();
         }
