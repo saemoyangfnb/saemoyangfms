@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Menu, MenuCategory, Ingredient, Region, RecipeItem, User, IngredientChange, BrandId, Brand, DEFAULT_BRANDS, SalesRecord } from './types';
 import { MenuTable } from './components/MenuTable';
 import { OverviewTable } from './components/OverviewTable';
@@ -12,24 +12,25 @@ import { CategoryManagementModal } from './components/CategoryManagementModal';
 import { RecipeModal } from './components/RecipeModal';
 import { ArchiveView } from './components/ArchiveView';
 import { IngredientChangeView } from './components/IngredientChangeView';
-import { DatabaseView } from './components/DatabaseView';
 import { Auth, ChangePasswordModal } from './components/Auth';
-import { AdminPanel } from './components/AdminPanel';
-import { ReviewDashboard } from './components/ReviewDashboard';
-import { AgentsDashboard } from './components/AgentsDashboard';
-import { StoreManagement } from './components/StoreManagement';
-import { MarketingDashboard } from './components/marketing';
-import { SalesDashboard } from './components/sales/SalesDashboard';
-import { FranchiseScheduleView } from './components/franchise';
-import { ActivityLogView } from './components/ActivityLogView';
-import { MeetingView } from './components/MeetingView';
-import { HomePage } from './components/HomePage';
-import { EmployeeDirectory } from './components/EmployeeDirectory';
-import { CompanyCalendar } from './components/CompanyCalendar';
-import { ReportView } from './components/ReportView';
-import { NoticeBoard } from './components/NoticeBoard';
-import { DailyReportView } from './components/DailyReportView';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+
+const DatabaseView = lazy(() => import('./components/DatabaseView').then(m => ({ default: m.DatabaseView })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const ReviewDashboard = lazy(() => import('./components/ReviewDashboard').then(m => ({ default: m.ReviewDashboard })));
+const AgentsDashboard = lazy(() => import('./components/AgentsDashboard').then(m => ({ default: m.AgentsDashboard })));
+const MarketingDashboard = lazy(() => import('./components/marketing').then(m => ({ default: m.MarketingDashboard })));
+const SalesDashboard = lazy(() => import('./components/sales/SalesDashboard').then(m => ({ default: m.SalesDashboard })));
+const FranchiseScheduleView = lazy(() => import('./components/franchise').then(m => ({ default: m.FranchiseScheduleView })));
+const ActivityLogView = lazy(() => import('./components/ActivityLogView').then(m => ({ default: m.ActivityLogView })));
+const MeetingView = lazy(() => import('./components/MeetingView').then(m => ({ default: m.MeetingView })));
+const HomePage = lazy(() => import('./components/HomePage').then(m => ({ default: m.HomePage })));
+const EmployeeDirectory = lazy(() => import('./components/EmployeeDirectory').then(m => ({ default: m.EmployeeDirectory })));
+const CompanyCalendar = lazy(() => import('./components/CompanyCalendar').then(m => ({ default: m.CompanyCalendar })));
+const ReportView = lazy(() => import('./components/ReportView').then(m => ({ default: m.ReportView })));
+const NoticeBoard = lazy(() => import('./components/NoticeBoard').then(m => ({ default: m.NoticeBoard })));
+const DailyReportView = lazy(() => import('./components/DailyReportView').then(m => ({ default: m.DailyReportView })));
+
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -1436,6 +1437,7 @@ export default function App() {
       {/* 메인 콘텐츠 */}
       <main className={`flex-1 overflow-auto ${isMobile ? 'pt-14 pb-20' : ''} print:p-0 print:overflow-visible print:bg-white`}>
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <Suspense fallback={<div className="flex items-center justify-center py-32"><div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
 
           {/* 접근제한 섹션 진입 차단 */}
           {sidebar.section !== 'home' && sidebar.section !== 'admin' && getSectionPermission(sidebar.section) === 'none' && (
@@ -1672,6 +1674,7 @@ export default function App() {
               )}
             </>
           )}
+        </Suspense>
         </div>
       </main>
 

@@ -98,6 +98,8 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [eventForm, setEventForm] = useState<EventForm>(emptyEventForm());
   const [leaveForm, setLeaveForm] = useState<LeaveForm>(emptyLeaveForm());
   const [activeTab, setActiveTab] = useState<'calendar' | 'leave'>('calendar');
+  const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   /* 데이터 불러오기 */
   const fetchData = async () => {
@@ -577,15 +579,43 @@ export function CompanyCalendar({ currentUser }: Props) {
                     <button onClick={() => handleLeaveApproval(req, 'approved')} className="flex-1 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:opacity-80">
                       승인
                     </button>
-                    <button onClick={async () => {
-                      const reason = window.prompt('반려 사유를 입력하세요 (선택)');
-                      if (reason !== null) await handleLeaveApproval(req, 'rejected', reason);
-                    }} className="flex-1 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:opacity-80">
+                    <button onClick={() => { setPendingReject(req); setRejectReason(''); }} className="flex-1 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:opacity-80">
                       반려
                     </button>
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 반려 사유 모달 */}
+      {pendingReject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150] p-4" onClick={() => setPendingReject(null)}>
+          <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl max-w-sm w-full p-6 border border-stone-200 dark:border-stone-700" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-stone-900 dark:text-white mb-1">연차 반려</h3>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-3">
+              {pendingReject.employeeName} · {pendingReject.startDate === pendingReject.endDate ? pendingReject.startDate : `${pendingReject.startDate} ~ ${pendingReject.endDate}`}
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="반려 사유 (선택)"
+              rows={3}
+              className="w-full text-sm border border-stone-300 dark:border-stone-600 rounded-lg px-3 py-2 bg-white dark:bg-stone-800 text-stone-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-stone-400"
+            />
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => setPendingReject(null)} className="flex-1 py-2 text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 rounded-lg hover:opacity-80">
+                취소
+              </button>
+              <button onClick={async () => {
+                const req = pendingReject;
+                setPendingReject(null);
+                await handleLeaveApproval(req, 'rejected', rejectReason);
+              }} className="flex-1 py-2 text-xs font-bold bg-red-500 text-white rounded-lg hover:opacity-80">
+                반려 확정
+              </button>
             </div>
           </div>
         </div>

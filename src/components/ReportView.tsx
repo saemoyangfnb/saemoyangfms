@@ -66,10 +66,9 @@ function PhotoCarousel({ urls, small }: { urls: string[]; small?: boolean }) {
   const prev = (e?: React.MouseEvent) => { e?.stopPropagation(); setIdx(i => Math.max(0, i - 1)); };
   const next = (e?: React.MouseEvent) => { e?.stopPropagation(); setIdx(i => Math.min(urls.length - 1, i + 1)); };
 
-  // 카드뷰: 16:9 비율로 작게, 상세뷰: 더 크게
   const imgCls = small
-    ? 'w-full aspect-video object-cover'
-    : 'w-full aspect-video sm:max-h-[480px] object-cover';
+    ? 'w-full h-28 object-cover'
+    : 'w-full max-h-52 object-cover';
 
   return (
     <>

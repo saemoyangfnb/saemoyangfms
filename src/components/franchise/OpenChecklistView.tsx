@@ -7,6 +7,7 @@ import { useConfirm } from '../ConfirmModal';
 import { uploadBytes, ref, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage, db, salesDb } from '../../firebase';
 import { doc, getDoc, getDocs, onSnapshot, collection, updateDoc, query, where } from 'firebase/firestore';
+import { computeWorkItemDates } from '../../utils';
 
 interface Props {
   schedules?: FranchiseSchedule[];
@@ -20,21 +21,6 @@ interface Props {
   onUpdateSchedule?: (scheduleId: string, data: Partial<FranchiseSchedule>) => Promise<void>;
   onUpdateMasterList?: (list: any[]) => Promise<void>;
   onOpenForm?: (scheduleId: string) => void;
-}
-
-// 토·일이면 직전 금요일로 스냅 (skipWeekends 적용 시 사용)
-function snapToWeekday(d: Date): Date {
-  const result = new Date(d);
-  const dow = result.getDay();
-  if (dow === 6) result.setDate(result.getDate() - 1);
-  else if (dow === 0) result.setDate(result.getDate() - 2);
-  return result;
-}
-
-function addBusinessDays(startDate: Date, days: number): Date {
-  const d = new Date(startDate);
-  d.setDate(d.getDate() + days);
-  return snapToWeekday(d);
 }
 
 function NoteInput({ itemId, field, initialValue, workItem, onSave, className, placeholder, type = 'text' }: {
@@ -225,58 +211,16 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
       });
     });
 
-    // 3. 태스크 날짜 의존성 체인 계산
-    // anchorField = 'constructionStart' | 'constructionEnd' | 다른 태스크 ID
-    const taskDates: Record<string, string> = {};
-    const taskEndDates: Record<string, string> = {};
-
-    const calcTaskDate = (anchorDate: string, offset: number, skipWeekends?: boolean): string => {
-      if (!anchorDate) return '';
-      const base = new Date(anchorDate);
-      const result = skipWeekends ? addBusinessDays(base, offset) : (() => { const d = new Date(base); d.setDate(d.getDate() + offset); return d; })();
-      return result.toISOString().split('T')[0];
-    };
-
-    // 의존성 순서대로 반복 계산 (최대 50회 — 순환 방지)
-    let changed = true;
-    let pass = 0;
-    while (changed && pass < 50) {
-      changed = false;
-      pass++;
-      activeTaskItems.forEach(wt => {
-        if (taskDates[wt.id] !== undefined) return;
-        const anchor = wt.anchorField || 'constructionStart';
-        let anchorDate = '';
-        if (anchor === 'constructionStart') anchorDate = selectedStore.constructionStart || '';
-        else if (anchor === 'constructionEnd') anchorDate = selectedStore.constructionEnd || '';
-        else anchorDate = taskDates[anchor] || '';
-
-        if (!anchorDate || wt.dDayOffset === undefined) return;
-        taskDates[wt.id] = calcTaskDate(anchorDate, wt.dDayOffset, wt.skipWeekends);
-        if (wt.dDayEndOffset !== undefined) {
-          taskEndDates[wt.id] = calcTaskDate(anchorDate, wt.dDayEndOffset, wt.skipWeekends);
-        }
-        changed = true;
-      });
-    }
+    // 3. 태스크 날짜 계산 — utils.ts computeWorkItemDates 사용 (캘린더와 동일 로직)
+    const allWorkItems = processSettings?.masterItems?.filter(i => !i.isArchived) || [];
+    const computedTaskDates = computeWorkItemDates(allWorkItems, selectedStore);
 
     activeTaskItems.forEach(wt => {
       const realTask = storeTasks.find(t => t.title === wt.text);
       const statusMap: Record<DepartmentTaskStatus, number> = { pending: 0, in_progress: 2, done: 3, blocked: 0 };
-      // anchorLocked=true이면 기준일자 연동 고정 — fixedDate 무시
-      const fixedDate = wt.anchorLocked ? undefined : (selectedStore.checklistData as any)?.[wt.id]?.fixedDate;
-      const calcStart = taskDates[wt.id] || '';
-      const calcEnd = taskEndDates[wt.id] || '';
-      const displayStart = fixedDate || calcStart;
-      let displayEnd = calcEnd;
-      if (fixedDate && calcStart && calcEnd && calcStart !== calcEnd) {
-        const durMs = new Date(calcEnd).getTime() - new Date(calcStart).getTime();
-        const endD = new Date(fixedDate);
-        endD.setTime(endD.getTime() + durMs);
-        displayEnd = endD.toISOString().split('T')[0];
-      } else if (fixedDate) {
-        displayEnd = fixedDate;
-      }
+      const d = computedTaskDates[wt.id];
+      const displayStart = d?.start || '';
+      const displayEnd = d?.end || '';
 
       items.push({
         ...wt,
@@ -285,7 +229,7 @@ export function OpenChecklistView({ schedules, currentUser, processSettings, ini
         uEndDate: displayEnd,
         uStatus: realTask ? statusMap[realTask.status] : ((selectedStore.checklistData as any)?.[wt.id]?.status ?? 0),
         uNote: realTask?.note || '',
-        realTaskId: realTask?.id // 실제 DB 수정을 위해 ID 보관
+        realTaskId: realTask?.id
       });
     });
 

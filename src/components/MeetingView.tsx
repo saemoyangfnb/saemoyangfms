@@ -382,28 +382,32 @@ function MeetingDetail({
 
   /* 내 업무로 즉시 추가 */
   const handleSelfTask = async (agendaTitle: string) => {
-    // 내 employee 조회
-    const empSnap = await getDocs(
-      query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid))
-    );
-    const me = empSnap.docs[0] ? { id: empSnap.docs[0].id, ...empSnap.docs[0].data() } as { id: string; name: string } : null;
+    try {
+      const empSnap = await getDocs(
+        query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid))
+      );
+      const me = empSnap.docs[0] ? { id: empSnap.docs[0].id, ...empSnap.docs[0].data() } as { id: string; name: string } : null;
 
-    const now = new Date().toISOString();
-    const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    await setDoc(doc(salesDb, 'tasks', id), {
-      id, title: agendaTitle,
-      sourceType: 'meeting',
-      sourceMeetingId: meeting.id,
-      sourceAgendaTitle: agendaTitle,
-      assigneeId: me?.id ?? currentUser.uid,
-      assigneeName: me?.name ?? currentUser.name,
-      requesterId: me?.id ?? currentUser.uid,
-      requesterName: currentUser.name,
-      collaboratorIds: [], collaboratorNames: [],
-      status: 'pending',
-      createdAt: now, updatedAt: now,
-    });
-    toast.success(`"${agendaTitle.slice(0, 15)}..." 내 업무에 추가됐습니다`);
+      const now = new Date().toISOString();
+      const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      await setDoc(doc(salesDb, 'tasks', id), {
+        id, title: agendaTitle,
+        sourceType: 'meeting',
+        sourceMeetingId: meeting.id,
+        sourceAgendaTitle: agendaTitle,
+        assigneeId: me?.id ?? currentUser.uid,
+        assigneeName: me?.name ?? currentUser.name,
+        requesterId: me?.id ?? currentUser.uid,
+        requesterName: currentUser.name,
+        collaboratorIds: [], collaboratorNames: [],
+        status: 'pending',
+        createdAt: now, updatedAt: now,
+      });
+      toast.success(`"${agendaTitle.slice(0, 15)}..." 내 업무에 추가됐습니다`);
+    } catch (e: any) {
+      console.error('내 업무 추가 실패:', e);
+      toast.error(`등록 실패: ${e?.code === 'permission-denied' ? 'Firestore 권한 오류 (Firebase Console 규칙 확인 필요)' : e?.message ?? '알 수 없는 오류'}`);
+    }
   };
 
   return (

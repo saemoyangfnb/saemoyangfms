@@ -26,6 +26,47 @@
 
 ---
 
+## 2026-06-01 — Claude Code
+
+### 완료
+- CompanyCalendar.tsx window.prompt(반려 사유) → 인라인 모달 교체 (pendingReject state + 반려 사유 textarea)
+- App.tsx 번들 lazy import 적용: 15개 섹션 컴포넌트 React.lazy() 전환 + Suspense 래퍼
+  - 메인 번들 2,330 KB → 828 KB (64% 감소), gzip 626 KB → 242 KB
+- vite.config.ts manualChunks: vendor-firebase(508 KB), vendor-dnd(58 KB) 분리
+- 미사용 import StoreManagement 제거
+
+### 미완 / 진행 중
+- salesDb Firestore 보안 규칙 업데이트 (신규 컬렉션 명시) — 여전히 미완
+
+### 주의
+- FranchiseScheduleView, MarketingDashboard는 별도 chunk 미분리 (franchise 배럴 import 특성상 main 포함됨, 추후 개선 가능)
+
+---
+
+## 2026-05-31 (9) — Claude Code
+
+### 완료
+- 보고서 사진 크기 축소: 카드뷰 `aspect-video` → `h-28`, 상세뷰 → `max-h-52`
+- 회의록 내 업무 추가 try/catch 추가 — 실패 시 toast.error로 원인 노출 (Firestore 권한 오류 여부 확인 가능)
+
+### 주의
+- 내 업무 등록 실패 원인이 `permission-denied`로 뜨면 → Firebase Console > salesDb > Rules에서 `tasks` 컬렉션 쓰기 허용 필요
+- WORKLOG 기존 미완 사항: salesDb Firestore 보안 규칙 업데이트 (신규 컬렉션 명시) 여전히 미완
+
+---
+
+## 2026-05-31 (8) — Claude Code
+
+### 완료
+- OpenChecklistView 태스크 날짜 계산을 utils.ts `computeWorkItemDates`로 교체 (캘린더와 동일 로직)
+- 기존 인라인 `addBusinessDays` / `snapToWeekday` 로컬 함수 제거
+
+### 주의
+- WORKLOG 2026-04-30 🔴 "computeWorkItemDates 중복 구현" 이슈 중 OpenChecklistView 부분 해결
+- ScheduleTimeline.tsx 로컬 복사본은 아직 미교체 (캘린더에서는 사용 안 함, 우선순위 낮음)
+
+---
+
 ## 2026-05-31 (7) — Claude Code
 
 ### 완료
