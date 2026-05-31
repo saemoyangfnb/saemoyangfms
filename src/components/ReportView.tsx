@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
-const TYPES: ReportType[] = ['일반', '제안', '보고', '회의록', '기타'];
+const TYPES: ReportType[] = ['일반', '제안', '보고', '기타'];
 
 const TYPE_CLS: Record<ReportType, string> = {
   '일반':  'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
@@ -62,40 +62,72 @@ function PhotoCarousel({ urls, small }: { urls: string[]; small?: boolean }) {
   const [idx, setIdx] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   if (!urls.length) return null;
-  const h = small ? 'aspect-[4/3]' : 'aspect-[4/3] sm:aspect-[16/9]';
+
+  const prev = (e?: React.MouseEvent) => { e?.stopPropagation(); setIdx(i => Math.max(0, i - 1)); };
+  const next = (e?: React.MouseEvent) => { e?.stopPropagation(); setIdx(i => Math.min(urls.length - 1, i + 1)); };
+
+  // 카드뷰: 16:9 비율로 작게, 상세뷰: 더 크게
+  const imgCls = small
+    ? 'w-full aspect-video object-cover'
+    : 'w-full aspect-video sm:max-h-[480px] object-cover';
+
   return (
     <>
       <div className="relative overflow-hidden bg-stone-100 dark:bg-stone-800">
-        <div className="flex transition-transform duration-300" style={{ transform: `translateX(-${idx * 100}%)` }}>
-          {urls.map((url, i) => (
-            <img key={i} src={url} alt="" onClick={() => !small && setLightbox(true)}
-              className={`w-full flex-shrink-0 object-cover ${h} ${!small ? 'cursor-zoom-in' : ''}`} />
-          ))}
-        </div>
+        <img
+          src={urls[idx]}
+          alt=""
+          onClick={() => !small && setLightbox(true)}
+          className={`${imgCls} ${!small ? 'cursor-zoom-in' : ''}`}
+        />
         {urls.length > 1 && (
           <>
-            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/30 rounded-full flex items-center justify-center text-white disabled:opacity-0">
-              <ChevronLeft size={16} />
+            <button onClick={prev} disabled={idx === 0}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 rounded-full flex items-center justify-center text-white disabled:opacity-0 transition-opacity">
+              <ChevronLeft size={18} />
             </button>
-            <button onClick={() => setIdx(i => Math.min(urls.length - 1, i + 1))} disabled={idx === urls.length - 1}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/30 rounded-full flex items-center justify-center text-white disabled:opacity-0">
-              <ChevronRight size={16} />
+            <button onClick={next} disabled={idx === urls.length - 1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 rounded-full flex items-center justify-center text-white disabled:opacity-0 transition-opacity">
+              <ChevronRight size={18} />
             </button>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-              {urls.map((_, i) => <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === idx ? 'bg-white' : 'bg-white/40'}`} />)}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+              {urls.map((_, i) => (
+                <button key={i} onClick={e => { e.stopPropagation(); setIdx(i); }}
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${i === idx ? 'bg-white scale-125' : 'bg-white/50'}`} />
+              ))}
             </div>
           </>
         )}
       </div>
+
+      {/* 라이트박스 — 현재 인덱스 이미지만 표시, 좌우 버튼으로 이동 */}
       {lightbox && (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center" onClick={() => setLightbox(false)}>
-          <div className="flex transition-transform duration-300" style={{ transform: `translateX(-${idx * 100}%)` }}>
-            {urls.map((url, i) => (
-              <img key={i} src={url} alt="" className="w-screen max-h-screen object-contain flex-shrink-0" onClick={e => e.stopPropagation()} />
-            ))}
-          </div>
-          <button onClick={() => setLightbox(false)} className="absolute top-4 right-4 text-white/70 hover:text-white"><X size={24} /></button>
+        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center" onClick={() => setLightbox(false)}>
+          <img
+            src={urls[idx]}
+            alt=""
+            className="max-w-[92vw] max-h-[88vh] object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
+          {urls.length > 1 && (
+            <>
+              <button onClick={e => { e.stopPropagation(); prev(); }} disabled={idx === 0}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white disabled:opacity-20">
+                <ChevronLeft size={22} />
+              </button>
+              <button onClick={e => { e.stopPropagation(); next(); }} disabled={idx === urls.length - 1}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white disabled:opacity-20">
+                <ChevronRight size={22} />
+              </button>
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-sm font-semibold">
+                {idx + 1} / {urls.length}
+              </div>
+            </>
+          )}
+          <button onClick={() => setLightbox(false)}
+            className="absolute top-4 right-4 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white">
+            <X size={18} />
+          </button>
         </div>
       )}
     </>
