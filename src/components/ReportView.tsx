@@ -284,7 +284,7 @@ function ReportEditor({
   const [state, setState] = useState<EditorState>({
     title: initial?.title ?? '',
     type: initial?.type ?? '일반',
-    docDate: initial?.docDate ?? new Date().toISOString().slice(0, 10),
+    docDate: initial?.docDate ?? (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(),
     sections: initial?.sections?.length ? initial.sections : [{ title: '', body: '' }],
     photos: [],
     existingUrls: initial?.existingUrls ?? [],
@@ -609,7 +609,7 @@ export function ReportView({ currentUser }: Props) {
               id: detail.id,
               title: detail.title,
               type: detail.type,
-              docDate: detail.docDate ?? new Date().toISOString().slice(0, 10),
+              docDate: detail.docDate ?? (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(),
               sections: detail.sections ?? [],
               existingUrls: detail.photoUrls ?? [],
             });

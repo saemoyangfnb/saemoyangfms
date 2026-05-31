@@ -38,7 +38,7 @@ const LEAVE_DAYS: Record<LeaveType, number> = {
 };
 
 const genId = () => `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const parseYMD = (s: string) => new Date(s + 'T00:00:00');
 const fmtKor = (s: string) => {
   const d = parseYMD(s);

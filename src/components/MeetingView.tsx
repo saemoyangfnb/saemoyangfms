@@ -182,7 +182,7 @@ function MeetingForm({
   onValidationError: (msg: string) => void;
 }) {
   const [title, setTitle] = useState(initial?.title || '');
-  const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(initial?.date || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })());
   const [author, setAuthor] = useState(initial?.author || currentUserName);
   const [location, setLocation] = useState(initial?.location || '');
   const [attendeeInput, setAttendeeInput] = useState('');

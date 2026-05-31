@@ -15,7 +15,8 @@ interface Props {
 }
 
 const genId = () => `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => toYMD(new Date());
 
 export function TaskRequestModal({ agendaTitle, meetingId, currentUser, defaultToOther = false, onClose, onDone }: Props) {
   const toast = useToast();

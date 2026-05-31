@@ -10,7 +10,7 @@ import { FeedView } from './FeedView';
 import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
-const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = () => toYMD(new Date());
 
 /* 오픈 일정 주요 날짜 정의 */

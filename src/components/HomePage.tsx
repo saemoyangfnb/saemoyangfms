@@ -47,7 +47,8 @@ export function HomePage({
   const [recentMeetingTitle, setRecentMeetingTitle] = useState<string | null>(null);
 
   useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     // 가벼운 인트라넷 데이터만 조회
     Promise.all([
       getDocs(query(collection(salesDb, 'daily_reports'), where('date', '==', todayStr))),
