@@ -427,14 +427,26 @@ export function DailyReportView({ currentUser }: Props) {
     fetchData();
   };
 
-  /* 업무 태스크 → 오전 보고에 추가 */
+  /* 업무 태스크 → 오전 보고에 추가 (없으면 자동 생성) */
   const addTaskToDaily = async (task: Task) => {
     if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
-    if (!myMorning) { toast.error('먼저 오전 업무보고를 제출해주세요'); return; }
-    const updatedItems = [...myMorning.items, { text: task.title, status: 'pending' as DailyItemStatus }];
-    await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-      items: updatedItems, updatedAt: new Date().toISOString(),
-    });
+    const newItem = { text: task.title, status: 'pending' as DailyItemStatus };
+    let morningId = myMorning?.id;
+    if (!myMorning) {
+      const id = genId();
+      morningId = id;
+      await setDoc(doc(salesDb, 'daily_reports', id), {
+        id, employeeId: myId, employeeName: currentUser.name,
+        departmentId: myEmployee?.departmentId ?? '',
+        date, type: 'morning',
+        items: [newItem],
+        submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+    } else {
+      await updateDoc(doc(salesDb, 'daily_reports', morningId!), {
+        items: [...myMorning.items, newItem], updatedAt: new Date().toISOString(),
+      });
+    }
     await updateDoc(doc(salesDb, 'tasks', task.id), {
       addedToDailyDate: date, status: 'in_progress', updatedAt: new Date().toISOString(),
     });
@@ -652,7 +664,7 @@ export function DailyReportView({ currentUser }: Props) {
                       </div>
                       <button
                         onClick={() => addTaskToDaily({ id: `sch_${i}`, title: `${evt.storeName} ${evt.label} (${evt.date})`, status: 'pending', sourceType: 'manual', assigneeId: myId, assigneeName: currentUser.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Task)}
-                        disabled={!isToday || !myMorning}
+                        disabled={!isToday}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-orange-500 text-white rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
                       >
                         <ArrowRight size={10} /> 추가
@@ -698,7 +710,7 @@ export function DailyReportView({ currentUser }: Props) {
                     </div>
                     <button
                       onClick={() => addTaskToDaily(task)}
-                      disabled={!isToday || !myMorning}
+                      disabled={!isToday}
                       className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
                     >
                       <ArrowRight size={10} /> 오늘 추가
