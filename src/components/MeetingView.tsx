@@ -494,26 +494,33 @@ function MeetingDetail({
                   <ProgressBar value={p} height={6} />
                   {/* 체크리스트 */}
                   {cl.length > 0 && (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-1.5">
                       {cl.map((c, ci) => (
-                        <div key={ci} className="flex items-start gap-2.5">
+                        <div key={ci} className="flex items-center gap-2">
                           <button onClick={() => onToggleCheck(i, ci)}
-                            className={`w-5 h-5 mt-0.5 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600'}`}>
+                            className={`w-5 h-5 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600'}`}>
                             {c.done && <Check size={11} className="text-white" />}
                           </button>
                           <span className={`flex-1 text-sm leading-snug ${c.done ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'}`}>{c.text}</span>
-                          {c.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full shrink-0">{c.assignee}</span>}
+                          {c.assignee && <span className="text-[10px] text-stone-400 shrink-0">{c.assignee}</span>}
+                          {/* 체크리스트 항목 → 개별 업무 추가 */}
+                          <button
+                            onClick={() => handleSelfTask(c.text)}
+                            title="내 업무로 추가"
+                            className="shrink-0 p-1.5 rounded-lg text-stone-300 hover:text-stone-700 dark:hover:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+                            <Briefcase size={13} />
+                          </button>
                         </div>
                       ))}
                     </div>
                   )}
                   {a.note && <p className="text-xs text-stone-500 mt-3 pl-3 border-l-2 border-stone-200 dark:border-stone-700">{a.note}</p>}
-                  {/* 업무 버튼 */}
+                  {/* 안건 전체 → 업무 버튼 */}
                   {a.title && (
                     <div className="flex gap-2 mt-3 pt-3 border-t border-stone-100 dark:border-stone-800">
                       <button onClick={() => handleSelfTask(a.title)}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-xl">
-                        <Briefcase size={12} /> 내 업무
+                        <Briefcase size={12} /> 안건 전체
                       </button>
                       <button onClick={() => setTaskModal({ agendaTitle: a.title, mode: 'request' })}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-xl">
@@ -550,13 +557,20 @@ function MeetingDetail({
                         {cl.length > 0 && (
                           <div className="space-y-1 ml-7">
                             {cl.map((c, ci) => (
-                              <div key={ci} className={`flex items-start gap-1.5 text-xs ${c.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
+                              <div key={ci} className={`flex items-center gap-1.5 text-xs group/item ${c.done ? 'text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
                                 <button onClick={() => onToggleCheck(i, ci)}
-                                  className={`w-3.5 h-3.5 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                                  className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
                                   {c.done && <Check size={9} className="text-white" />}
                                 </button>
-                                <span className="flex-1">{c.text}</span>
+                                <span className={`flex-1 ${c.done ? 'line-through' : ''}`}>{c.text}</span>
                                 {c.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full shrink-0">{c.assignee}</span>}
+                                {/* 체크리스트 항목 → 개별 업무 추가 버튼 */}
+                                <button
+                                  onClick={() => handleSelfTask(c.text)}
+                                  title="내 업무로 추가"
+                                  className="shrink-0 opacity-0 group-hover/item:opacity-100 p-0.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-all">
+                                  <Briefcase size={11} />
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -580,7 +594,7 @@ function MeetingDetail({
                         <div className="flex flex-col gap-1.5">
                           <button onClick={() => handleSelfTask(a.title)} disabled={!a.title}
                             className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap disabled:opacity-30">
-                            <Briefcase size={10} /> 내 업무
+                            <Briefcase size={10} /> 안건 전체
                           </button>
                           <button onClick={() => a.title && setTaskModal({ agendaTitle: a.title, mode: 'request' })} disabled={!a.title}
                             className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap disabled:opacity-30">
