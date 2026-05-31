@@ -29,6 +29,7 @@ import { CompanyCalendar } from './components/CompanyCalendar';
 import { ReportView } from './components/ReportView';
 import { NoticeBoard } from './components/NoticeBoard';
 import { DailyReportView } from './components/DailyReportView';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
 import {
@@ -453,6 +454,7 @@ export default function App() {
 
   const [brands, setBrands] = useState<Brand[]>(DEFAULT_BRANDS);
   const [expandedBrands, setExpandedBrands] = useState<Set<BrandId>>(new Set(['dalbitgo']));
+  const [showAllIntranet, setShowAllIntranet] = useState(false);
   const [sidebar, setSidebar] = useState<SidebarState>({
     brandId: null,
     section: 'home',
@@ -568,8 +570,14 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser]);
 
+  // 메뉴·식재료 데이터는 실제로 필요한 섹션 진입 시에만 구독
+  // (홈·인트라넷 섹션에서는 Firestore 읽기 발생 안 함)
+  const COST_SECTIONS: SidebarSection[] = ['cost', 'sales', 'database', 'admin', 'history'];
+  const needsCostData = sidebar.brandId !== null || COST_SECTIONS.includes(sidebar.section);
+
   useEffect(() => {
     if (!currentUser || (!currentUser.isApproved && currentUser.role !== 'admin')) return;
+    if (!needsCostData) return;
 
     const unsubscribeMenus = onSnapshot(collection(db, 'menus'), (snapshot) => {
       const data: Menu[] = [];
@@ -605,7 +613,7 @@ export default function App() {
       unsubscribeMenus(); unsubscribeCategories();
       unsubscribeIngredients(); unsubscribeChanges();
     };
-  }, [currentUser]);
+  }, [currentUser, needsCostData]);
 
   useEffect(() => {
     if (currentUser) {
@@ -1068,10 +1076,17 @@ export default function App() {
   const currentBrand = brands.find(b => b.id === activeBrand);
   const costTabs: CostTabType[] = ['지방권', '광역권', '수도권', '전체보기', '메뉴 관리', '변동사항'];
 
-  // 권한 체크 헬퍼 — admin은 항상 'edit', 일반 사용자는 sectionPermissions 우선, 기본값 'edit'
+  // 브랜드 운영 탭은 기본적으로 접근 제한 — 관리자가 명시 허용해야 접근 가능
+  const BRAND_RESTRICTED: SidebarSection[] = ['cost', 'sales', 'review', 'marketing'];
+
+  // 권한 체크 헬퍼 — admin은 항상 'edit', 일반 사용자는 sectionPermissions 우선
   const getSectionPermission = (section: SidebarSection): 'edit' | 'view' | 'none' => {
     if (!currentUser || currentUser.role === 'admin') return 'edit';
-    return (currentUser.sectionPermissions as any)?.[section] ?? 'edit';
+    const stored = (currentUser.sectionPermissions as any)?.[section] as 'edit' | 'view' | 'none' | undefined;
+    if (stored !== undefined) return stored;
+    // 브랜드 운영 탭은 명시적 허용 없으면 기본 차단
+    if (BRAND_RESTRICTED.includes(section)) return 'none';
+    return 'edit';
   };
 
   // 브랜드별 사이드바 서브메뉴 — 사용자 정의 순서 반영, 접근제한 섹션 숨김
@@ -1115,6 +1130,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-stone-100 dark:bg-stone-950 flex text-stone-900 dark:text-stone-100">
       {renderGlobalError()}
+      <PwaInstallBanner />
 
       {/* 모바일 사이드바 오버레이 배경 */}
       {isMobile && mobileSidebarOpen && (
@@ -1169,43 +1185,52 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto py-2">
 
-          {/* ── 인트라넷 (최상단) ── */}
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 mb-1 mt-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">인트라넷</p>
-            </div>
-          )}
-          <div className="mx-2 space-y-0.5 mb-1">
+          {/* ── 인트라넷 ── */}
+          <div className="mx-2 space-y-0.5 mb-1 mt-1">
             {([
-              { section: 'daily',      icon: <FileText size={14} />,      label: '일일 업무보고' },
-              { section: 'calendar',   icon: <Calendar size={14} />,      label: '캘린더' },
-              { section: 'notice',     icon: <Megaphone size={14} />,     label: '공지사항' },
-              { section: 'meetings',   icon: <NotebookPen size={14} />,   label: '회의록' },
-              { section: 'reports',    icon: <ClipboardList size={14} />, label: '보고서' },
-              { section: 'employees',  icon: <Users size={14} />,         label: '직원 명부' },
-            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[]).map(({ section, icon, label }) => (
+              { section: 'daily',     icon: <FileText size={14} />,      label: '일일 업무보고', primary: true },
+              { section: 'notice',    icon: <Megaphone size={14} />,     label: '공지사항',      primary: true },
+              { section: 'calendar',  icon: <Calendar size={14} />,      label: '캘린더',        primary: true },
+              { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록',        primary: true },
+              { section: 'reports',   icon: <ClipboardList size={14} />, label: '보고서',        primary: false },
+              { section: 'employees', icon: <Users size={14} />,         label: '직원 명부',     primary: false },
+            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string; primary: boolean }[])
+              .filter(item => item.primary || showAllIntranet || ['reports','employees'].includes(sidebar.section))
+              .map(({ section, icon, label }) => (
+                <button
+                  key={section}
+                  onClick={() => navigateAndCloseMobile(null, section)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
+                    sidebar.section === section
+                      ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                      : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                  }`}
+                >
+                  {icon}
+                  {(!sidebarCollapsed || isMobile) && label}
+                </button>
+              ))}
+            {/* 더보기 토글 (펼침 모드에서만) */}
+            {(!sidebarCollapsed || isMobile) && !showAllIntranet && !['reports','employees'].includes(sidebar.section) && (
               <button
-                key={section}
-                onClick={() => navigateAndCloseMobile(null, section)}
-                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                  sidebar.section === section
-                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-                }`}
+                onClick={() => setShowAllIntranet(true)}
+                className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 border-l-[3px] border-transparent pl-2"
               >
-                {icon}
-                {(!sidebarCollapsed || isMobile) && label}
+                <ChevronDown size={12} /> 더보기
               </button>
-            ))}
+            )}
+            {(!sidebarCollapsed || isMobile) && showAllIntranet && (
+              <button
+                onClick={() => setShowAllIntranet(false)}
+                className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 border-l-[3px] border-transparent pl-2"
+              >
+                <ChevronDown size={12} className="rotate-180" /> 접기
+              </button>
+            )}
           </div>
 
           {/* ── 운영 브랜드 ── */}
-          <div className="my-2 mx-4 border-t border-stone-300 dark:border-stone-700" />
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 mb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">운영 브랜드</p>
-            </div>
-          )}
+          <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
 
           {[...brands].sort((a, b) => a.order - b.order).map(brand => {
             const isExpanded = expandedBrands.has(brand.id);
@@ -1214,6 +1239,8 @@ export default function App() {
             const hasReview = REVIEW_ENABLED_BRANDS.includes(brand.id);
             const isDragOver = dragOverBrandId === brand.id;
             const menuOrderForUser = currentUser?.menuOrder || DEFAULT_SUB_MENUS.map(m => m.id);
+            // 접근 가능한 서브메뉴가 1개이면 아코디언 없이 바로 이동
+            const directSection = subMenus.length === 1 ? subMenus[0].id : null;
 
             return (
               <div
@@ -1226,7 +1253,7 @@ export default function App() {
                 className={`transition-all ${isDragOver ? 'border-t-2 border-blue-400' : ''}`}
               >
                 <div className={`flex items-center gap-1 mx-2 rounded-none px-1 py-1.5 group ${isActiveBrand ? 'bg-stone-200 dark:bg-stone-800 border-l-[3px] border-stone-800 dark:border-stone-400' : 'hover:bg-stone-100 dark:hover:bg-stone-800/50 border-l-[3px] border-transparent'} ${currentUser.role === 'admin' && !sidebarCollapsed ? 'cursor-grab active:cursor-grabbing' : ''}`}>
-                  {!sidebarCollapsed && (
+                  {!sidebarCollapsed && !directSection && (
                     <button onClick={() => toggleBrandExpand(brand.id)} className="p-0.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 shrink-0" onMouseDown={e => e.stopPropagation()}>
                       <ChevronDown size={13} className={`transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                     </button>
@@ -1244,8 +1271,11 @@ export default function App() {
                     />
                   ) : (
                     <button
-                      onClick={() => navigateTo(brand.id, 'cost')}
-                      className={`flex-1 w-full text-xs truncate text-left pl-1.5 ${sidebarCollapsed ? 'font-bold' : 'font-bold'} ${isActiveBrand ? 'text-stone-900 dark:text-white' : 'text-stone-600 dark:text-stone-400'}`}
+                      onClick={() => directSection
+                        ? navigateAndCloseMobile(brand.id, directSection)
+                        : navigateTo(brand.id, subMenus[0]?.id ?? 'cost')
+                      }
+                      className={`flex-1 w-full text-xs truncate text-left pl-1.5 font-bold ${isActiveBrand ? 'text-stone-900 dark:text-white' : 'text-stone-600 dark:text-stone-400'}`}
                       title={sidebarCollapsed ? brand.name : undefined}
                     >
                       {sidebarCollapsed ? getShortBrandName(brand.name) : brand.name}
@@ -1264,7 +1294,7 @@ export default function App() {
                   )}
                 </div>
 
-                {isExpanded && (!sidebarCollapsed || isMobile) && (
+                {!directSection && isExpanded && (!sidebarCollapsed || isMobile) && (
                   <div className="ml-6 mr-2 mb-1">
                     {subMenus.map(item => {
                       const isReviewMenu = item.id === 'review';
@@ -1434,6 +1464,7 @@ export default function App() {
               ingredientChanges={ingredientChanges}
               onNavigate={navigateTo}
               onFirestoreError={handleFirestoreError}
+              getSectionPermission={getSectionPermission}
             />
           )}
 

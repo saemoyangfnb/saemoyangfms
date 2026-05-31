@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1c1917"/>
+  <text x="256" y="240" font-family="serif" font-size="72" font-weight="900" text-anchor="middle" fill="#fdfbf7" letter-spacing="2">SAE</text>
+  <text x="256" y="330" font-family="serif" font-size="72" font-weight="900" text-anchor="middle" fill="#fdfbf7" letter-spacing="2">MOYANG</text>
+  <text x="256" y="400" font-family="serif" font-size="28" font-weight="400" text-anchor="middle" fill="#a8a29e" letter-spacing="6">F&amp;B</text>
+</svg>

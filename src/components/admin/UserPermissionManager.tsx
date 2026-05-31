@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, salesDb } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { User, Department, PERMISSION_SECTIONS, SECTION_LABELS, SectionPermission, PermissionSection } from '../../types';
-import { Shield, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Shield, ChevronDown, ChevronUp, Check, Lock } from 'lucide-react';
 import { useToast } from '../Toast';
 
 const PERMISSION_OPTIONS: { value: SectionPermission; label: string; color: string }[] = [
@@ -10,6 +10,9 @@ const PERMISSION_OPTIONS: { value: SectionPermission; label: string; color: stri
   { value: 'view',  label: '열람',     color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
   { value: 'none',  label: '접근제한', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 ];
+
+// 기본값이 'none'인 섹션 — 명시적으로 허용해야 접근 가능
+const BRAND_RESTRICTED_SECTIONS: PermissionSection[] = ['cost', 'sales', 'review', 'marketing'];
 
 export function UserPermissionManager() {
   const toast = useToast();
@@ -35,8 +38,12 @@ export function UserPermissionManager() {
 
   const getPermission = (user: User, section: PermissionSection): SectionPermission => {
     if (user.role === 'admin') return 'edit';
-    return user.sectionPermissions?.[section] ?? 'edit';
+    const stored = user.sectionPermissions?.[section];
+    if (stored !== undefined) return stored;
+    return BRAND_RESTRICTED_SECTIONS.includes(section) ? 'none' : 'edit';
   };
+
+  const isDefaultRestricted = (section: PermissionSection) => BRAND_RESTRICTED_SECTIONS.includes(section);
 
   const handlePermissionChange = async (user: User, section: PermissionSection, value: SectionPermission) => {
     setSaving(user.uid);
@@ -142,10 +149,14 @@ export function UserPermissionManager() {
                     <div className="space-y-2">
                       {PERMISSION_SECTIONS.filter(s => s !== 'admin').map(section => {
                         const current = getPermission(user, section);
+                        const isStored = user.sectionPermissions?.[section] !== undefined;
                         return (
                           <div key={section} className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-24 shrink-0">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-24 shrink-0 flex items-center gap-1">
                               {SECTION_LABELS[section]}
+                              {isDefaultRestricted(section) && !isStored && (
+                                <Lock size={10} className="text-red-400 shrink-0" title="기본 접근 제한 섹션" />
+                              )}
                             </span>
                             <div className="flex gap-1.5">
                               {PERMISSION_OPTIONS.map(opt => (

@@ -561,8 +561,20 @@ export interface DailyReport {
   date: string;           // YYYY-MM-DD
   type: 'morning' | 'evening';
   items: DailyReportItem[];
+  photoUrls?: string[];   // Firebase Storage URLs
+  reactions?: string[];   // 확인 누른 employeeId 배열 (arrayUnion/arrayRemove)
+  commentCount?: number;  // 댓글 수 캐시
   submittedAt: string;
   updatedAt: string;
+}
+
+export interface DailyComment {
+  id: string;
+  reportId: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface Report {

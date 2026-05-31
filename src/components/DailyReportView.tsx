@@ -6,7 +6,8 @@ import {
 } from 'firebase/firestore';
 import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays } from 'lucide-react';
+import { FeedView } from './FeedView';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => d.toISOString().slice(0, 10);
@@ -314,7 +315,7 @@ export function DailyReportView({ currentUser }: Props) {
     { title: '', status: 'planned' }, { title: '', status: 'planned' },
   ]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'my' | 'weekly' | 'team'>('my');
+  const [tab, setTab] = useState<'my' | 'weekly' | 'feed' | 'team'>('my');
 
   /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
   const myId = myEmployee?.id ?? currentUser.uid;
@@ -508,8 +509,9 @@ export function DailyReportView({ currentUser }: Props) {
         {([
           { key: 'my',     label: '일일 보고' },
           { key: 'weekly', label: '주간 보고' },
+          { key: 'feed',   label: '팀 피드' },
           ...(isAdmin ? [{ key: 'team', label: '팀 현황' }] : []),
-        ] as { key: 'my' | 'weekly' | 'team'; label: string }[]).map(({ key, label }) => (
+        ] as { key: 'my' | 'weekly' | 'feed' | 'team'; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
             {label}
@@ -519,6 +521,14 @@ export function DailyReportView({ currentUser }: Props) {
 
       {loading ? (
         <div className="text-center py-20 text-stone-400 text-sm">불러오는 중...</div>
+      ) : tab === 'feed' ? (
+        /* ── 팀 피드 탭 ── */
+        <FeedView
+          reports={reports}
+          myId={myId}
+          myName={currentUser.name}
+          onRefresh={fetchData}
+        />
       ) : tab === 'weekly' ? (
         /* ── 주간보고 탭 ── */
         <div className="max-w-xl">

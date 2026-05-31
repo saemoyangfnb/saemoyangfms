@@ -26,6 +26,82 @@
 
 ---
 
+## 2026-05-31 (5) — Claude Code
+
+### 완료
+- Firebase 읽기 최적화: menus/ingredients/categories/changes onSnapshot을 cost·sales·database·admin·history 섹션 진입 시에만 구독 (홈·인트라넷 사용 시 읽기 0)
+- 홈화면 원가 알림 카드 — cost 권한 없는 사용자에게는 미표시
+
+### 다음에 이어할 것 (우선순위 순)
+1. `CompanyCalendar.tsx:581` — window.prompt → useConfirm 교체 (5분)
+2. 회의록 안건 → 업무 카드 연결 (MeetingView.tsx, sourceAgendaTitle 필드 이미 있음)
+3. 보고서 툴 연동 방향 결정 — iframe(A안) vs React 포팅(B안)
+4. salesDb Firestore 보안 규칙 업데이트 (신규 컬렉션 명시)
+5. 번들 lazy import 적용 (2.3MB → 1MB 이하)
+6. iOS 앱 — 동료 맥북 확보 후 React Native(Expo) 전환
+
+### 커밋 안 된 변경 파일 (아직 push 전)
+- src/App.tsx
+- src/components/HomePage.tsx
+- src/components/admin/UserPermissionManager.tsx
+- src/components/FeedView.tsx
+- src/components/PwaInstallBanner.tsx
+- src/components/DailyReportView.tsx
+- public/icon.svg
+- index.html
+- vite.config.ts
+- package.json / package-lock.json
+
+---
+
+## 2026-05-31 (4) — Claude Code
+
+### 완료
+- **브랜드 탭 접근 제한**: cost/sales/review/marketing 기본값 'none' → 관리자가 명시 허용 시만 접근
+  - franchise(오픈일정)는 기본 'edit' 유지 (전체 허용)
+  - UserPermissionManager에 기본 제한 섹션 자물쇠 아이콘 표시
+  - HomePage 브랜드 카드 서브메뉴도 권한 기반 필터링
+- **사이드바 단순화**: 인트라넷 4개 핵심 항목만 기본 표시, 보고서/직원명부는 "더보기" 토글
+  - 브랜드 접근 가능 서브메뉴 1개면 아코디언 없이 바로 이동
+  - "운영 브랜드" 섹션 헤더 제거 (구분선만 유지)
+- **홈화면 전면 재설계**: 다크 배너 헤더, 상태 스트립, 리스트형 빠른 이동, 공지사항 우측 배치
+
+### 주의
+- 기존 sectionPermissions 없는 직원들은 cost/sales/review/marketing 접근 불가 — 관리자 패널 → 권한 관리에서 부여 필요
+
+### 다음에 이어할 것
+- WORKLOG 미완 사항: 연차 반려 window.prompt → useConfirm 교체, 보고서 툴 연동, 회의록 → 업무카드 연결
+
+---
+
+## 2026-05-31 (3) — Claude Code
+
+### 완료
+- PWA 설정 완료 (vite-plugin-pwa 설치, manifest, service worker, 오프라인 캐싱)
+- 아이콘 — public/icon.svg (SAEMOYANG F&B 텍스트형)
+- PwaInstallBanner.tsx — Android 설치 버튼 / iOS 홈 화면 추가 안내 / 세션 닫기
+- App.tsx에 PwaInstallBanner 연결
+
+### 주의
+- 번들 2.3MB → workbox maximumFileSizeToCacheInBytes 4MB로 상향 설정 (임시)
+- 나중에 code-split(lazy import) 적용 시 3MB 이하로 줄어들면 다시 낮출 것
+
+### 다음에 이어할 것
+- (iOS 앱) 동료 맥북으로 React Native/Expo 전환 시 작업 예정
+
+---
+
+## 2026-05-31 (2) — Claude Code
+
+### 완료
+- FeedView.tsx — DailyReportView '팀 피드' 탭으로 연결 (좋아요/댓글 포함 인스타형 피드)
+- 일일보고 탭 구성: 일일 보고 / 주간 보고 / 팀 피드 / 팀 현황(관리자)
+
+### 다음에 이어할 것
+- 앱 개발 (PWA 우선, 이후 iOS 대응)
+
+---
+
 ## 2026-05-31 — Claude Code
 
 ### 작업 순서 (데이터 보존 최우선)
