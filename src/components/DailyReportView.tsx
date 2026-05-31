@@ -213,18 +213,17 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
           <div key={i}>
             <div className="flex items-center gap-3">
               <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">{i + 1}.</span>
-              <button
-                onClick={() => toggleStatus(i)}
-                className={`shrink-0 transition-colors ${STATUS_CONFIG[it.status].cls}`}
-              >
-                {STATUS_CONFIG[it.status].icon}
-              </button>
               <span className={`flex-1 text-sm ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'} font-semibold`}>
                 {it.text}
               </span>
-              <span className={`text-xs font-bold shrink-0 ${STATUS_CONFIG[it.status].cls}`}>
-                {STATUS_CONFIG[it.status].label}
-              </span>
+              <button
+                onClick={() => toggleStatus(i)}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-colors ${STATUS_CONFIG[it.status].cls} bg-current/10`}
+                style={{ background: 'transparent' }}
+              >
+                {STATUS_CONFIG[it.status].icon}
+                <span className="hidden sm:inline">{STATUS_CONFIG[it.status].label}</span>
+              </button>
             </div>
             {it.status === 'incomplete' && (
               <div className="ml-14 mt-1.5">
@@ -551,7 +550,7 @@ export function DailyReportView({ currentUser }: Props) {
                       placeholder={`굵직한 업무 ${i + 1}`}
                       className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500"
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
                         value={item.detail ?? ''}
                         onChange={e => setWeeklyForm(p => p.map((x, idx) => idx === i ? { ...x, detail: e.target.value } : x))}
@@ -561,7 +560,7 @@ export function DailyReportView({ currentUser }: Props) {
                       <select
                         value={item.status}
                         onChange={e => setWeeklyForm(p => p.map((x, idx) => idx === i ? { ...x, status: e.target.value as WeeklyReportItem['status'] } : x))}
-                        className="px-2 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 shrink-0"
+                        className="px-2 py-2 text-xs border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 sm:shrink-0"
                       >
                         {Object.entries(WEEK_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>
@@ -740,7 +739,7 @@ export function DailyReportView({ currentUser }: Props) {
         /* ── 팀 현황 탭 (관리자) ── */
         <div>
           {/* 요약 */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             {[
               { label: '오전 보고 제출', count: teamStatus.filter(s => s.morning).length, total: teamStatus.length, cls: 'text-blue-600 dark:text-blue-400' },
               { label: '퇴근 보고 제출', count: teamStatus.filter(s => s.evening).length, total: teamStatus.length, cls: 'text-stone-700 dark:text-stone-300' },
@@ -777,12 +776,12 @@ export function DailyReportView({ currentUser }: Props) {
                         <span className="text-[11px] text-stone-300 dark:text-stone-600">{getDeptName(emp.departmentId)}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${morning ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
-                        {morning ? '오전 ✓' : '오전 미제출'}
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${morning ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
+                        {morning ? '오전 ✓' : '오전 ✗'}
                       </span>
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${evening ? (doneCount === total ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400') : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
-                        {evening ? `퇴근 ${doneCount}/${total}` : '퇴근 미제출'}
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${evening ? (doneCount === total ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400') : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
+                        {evening ? `퇴근 ${doneCount}/${total}` : '퇴근 ✗'}
                       </span>
                     </div>
                   </div>
