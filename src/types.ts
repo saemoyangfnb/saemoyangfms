@@ -511,7 +511,8 @@ export interface Notice {
 // 보고서 메타 (salesDb: reports)
 // ※ 실제 내용(HTML)은 Firebase Storage에 저장
 // ==========================================
-export type ReportType = '일반' | '테스트' | '제안' | '회의록';
+export type ReportType = '일반' | '제안' | '보고' | '회의록' | '기타';
+export interface ReportSection { title: string; body: string; }
 export type ReportStatus = '진행' | '긴급' | '완료' | '초안';
 export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 
@@ -595,7 +596,9 @@ export interface Report {
   linkedTaskId?: string;
   createdAt: string;
   updatedAt: string;
-  htmlContent?: string;  // 이미지 제거 후 저장된 본문
-  activeTab?: string;    // tab1~4
-  docDate?: string;      // 보관함 표시 날짜
+  sections?: ReportSection[];  // 새 구조화 본문
+  photoUrls?: string[];        // Storage URLs (압축 후 저장)
+  htmlContent?: string;        // 구 버전 호환용
+  activeTab?: string;
+  docDate?: string;
 }

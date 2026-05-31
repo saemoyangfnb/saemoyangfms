@@ -26,6 +26,28 @@
 
 ---
 
+## 2026-05-31 (6) — Claude Code
+
+### 완료
+- **보고서 전면 재작성** — iframe/HTML 방식 제거, 순수 React + 모바일 우선
+  - 인스타그램형 카드 피드 (사진 캐러셀, 작성자 아바타, 상태 뱃지)
+  - 전체화면 에디터: 제목 + 유형 선택 + 섹션 추가형 + 사진 첨부 (최대 5장, 압축 후 Storage 업로드)
+  - 전체화면 상세 뷰: 사진 캐러셀, 섹션 표시, 승인/반려 버튼
+  - 결재 흐름: 임시저장 → 결재 상신 → 승인/반려
+  - 구버전(htmlContent) 하위 호환 유지
+  - getDocs 사용 (onSnapshot 아님, Firestore 읽기 절약)
+  - types.ts: ReportType 업데이트, ReportSection 타입 추가
+
+### 다음에 이어할 것 (우선순위 순)
+1. 회의록 모바일 UI 개선 (MeetingView.tsx)
+2. 일일업무보고 모바일 UI 개선 (DailyReportView.tsx)
+3. 캘린더 모바일 UI 개선 (CompanyCalendar.tsx)
+4. CompanyCalendar.tsx:581 window.prompt → useConfirm
+5. 회의록 안건 → 업무 카드 연결
+6. salesDb Firestore 보안 규칙 업데이트
+
+---
+
 ## 2026-05-31 (5) — Claude Code
 
 ### 완료
