@@ -293,17 +293,17 @@ export function CompanyCalendar({ currentUser }: Props) {
             <p className="text-sm text-stone-400 mt-0.5">잔여 연차 <strong className="text-stone-700 dark:text-stone-300">{myEmployee.annualLeaveBalance}일</strong></p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           {isAdmin && pendingLeaves.length > 0 && (
             <button onClick={() => setShowLeaveListModal(true)} className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 rounded-lg text-xs font-bold hover:opacity-80">
-              연차 결재 대기 {pendingLeaves.length}건
+              <span className="hidden sm:inline">연차 결재 대기 </span>{pendingLeaves.length}건
             </button>
           )}
-          <button onClick={() => { setLeaveForm(emptyLeaveForm()); setShowLeaveModal(true); }} className="flex items-center gap-1.5 px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-lg text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800">
+          <button onClick={() => { setLeaveForm(emptyLeaveForm()); setShowLeaveModal(true); }} className="flex items-center gap-1 px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-lg text-xs font-bold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800">
             연차 신청
           </button>
-          <button onClick={() => { setEventForm(emptyEventForm()); setShowEventModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
-            <Plus size={14} /> 일정 추가
+          <button onClick={() => { setEventForm(emptyEventForm()); setShowEventModal(true); }} className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-xs font-bold hover:opacity-80">
+            <Plus size={14} /><span className="hidden sm:inline">일정 추가</span><span className="sm:hidden">추가</span>
           </button>
         </div>
       </div>
@@ -328,8 +328,8 @@ export function CompanyCalendar({ currentUser }: Props) {
             <button onClick={goToday} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold ml-2">
               <RefreshCw size={11} /> 오늘
             </button>
-            {/* 범례 */}
-            <div className="ml-auto flex items-center gap-3 flex-wrap">
+            {/* 범례 — 데스크탑만 표시 */}
+            <div className="ml-auto hidden sm:flex items-center gap-3 flex-wrap">
               {(Object.entries(EVENT_COLORS) as [CalendarEventType, string][]).map(([type, color]) => (
                 <span key={type} className="flex items-center gap-1 text-[11px] text-stone-500">
                   <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
@@ -354,14 +354,14 @@ export function CompanyCalendar({ currentUser }: Props) {
               {/* 날짜 셀 */}
               <div className="grid grid-cols-7">
                 {calendarDays.map((day, idx) => {
-                  if (!day) return <div key={idx} className="min-h-24 border-b border-r border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 last:border-r-0" />;
+                  if (!day) return <div key={idx} className="min-h-14 sm:min-h-24 border-b border-r border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 last:border-r-0" />;
                   const ymd = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                   const isToday = ymd === toYMD(today);
                   const dayOfWeek = idx % 7;
                   const dayEvts = eventsForDate(ymd);
                   return (
                     <div key={idx}
-                      className={`min-h-24 p-1.5 border-b border-r border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer ${idx % 7 === 6 ? 'border-r-0' : ''}`}
+                      className={`min-h-14 sm:min-h-24 p-1 sm:p-1.5 border-b border-r border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer ${idx % 7 === 6 ? 'border-r-0' : ''}`}
                       onClick={() => { setSelectedDate(ymd); setEventForm(emptyEventForm(ymd)); setShowEventModal(true); }}>
                       <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${isToday ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : dayOfWeek === 0 ? 'text-red-500' : dayOfWeek === 6 ? 'text-blue-500' : 'text-stone-700 dark:text-stone-300'}`}>
                         {day}
