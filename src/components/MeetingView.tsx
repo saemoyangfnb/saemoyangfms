@@ -130,7 +130,7 @@ function AgendaBlock({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
         {[
           { id: 'assignee', label: '담당자', placeholder: '이름', type: 'text' },
           { id: 'ref', label: '참조', placeholder: '부서명', type: 'text' },
@@ -314,7 +314,7 @@ function MeetingForm({
                 placeholder="예) 6월 정기 경영지원 회의"
                 className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500" />
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
               {[
                 { label: '회의 일자 *', type: 'date', value: date, setter: setDate },
                 { label: '작성자', type: 'text', value: author, setter: setAuthor, placeholder: '이름' },
@@ -410,20 +410,21 @@ function MeetingDetail({
     <div>
       {/* 상단바 */}
       <div className="flex items-center gap-3 mb-5 print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-700 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold">
+        <button onClick={onBack} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-700 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold shrink-0">
           <ArrowLeft size={13} /> 목록
         </button>
-        <div className="flex-1">
-          <h2 className="text-lg font-black text-stone-900 dark:text-stone-100">{meeting.title}</h2>
-          <div className="flex items-center gap-3 text-[11px] text-stone-400 mt-0.5">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-base font-black text-stone-900 dark:text-stone-100 truncate">{meeting.title}</h2>
+          <div className="flex items-center gap-2 text-[11px] text-stone-400 mt-0.5 flex-wrap">
             <span>{fmtDate(meeting.date)}</span>
-            <span>{meeting.author || '-'}</span>
-            <span>{meeting.location || '-'}</span>
-            {meeting.attendees?.length ? <span>{meeting.attendees.join(', ')}</span> : null}
+            {meeting.author && <span>{meeting.author}</span>}
+            {meeting.location && <span>{meeting.location}</span>}
+            {meeting.attendees?.length ? <span className="truncate max-w-[160px]">{meeting.attendees.join(', ')}</span> : null}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => window.print()} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg font-semibold hover:opacity-80 print:hidden">
+        {/* 데스크탑 버튼 */}
+        <div className="hidden sm:flex gap-2 shrink-0">
+          <button onClick={() => window.print()} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg font-semibold hover:opacity-80">
             <Printer size={13} /> 인쇄
           </button>
           <button onClick={onEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold">
@@ -433,6 +434,15 @@ function MeetingDetail({
             <Trash2 size={13} /> 삭제
           </button>
         </div>
+      </div>
+      {/* 모바일 하단 액션 바 */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-700 px-4 py-3 flex gap-2 print:hidden">
+        <button onClick={onEdit} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 border border-stone-200 dark:border-stone-600 rounded-xl text-sm font-bold text-stone-700 dark:text-stone-300">
+          <Edit2 size={14} /> 수정
+        </button>
+        <button onClick={onDelete} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm font-bold text-red-600 dark:text-red-400">
+          <Trash2 size={14} /> 삭제
+        </button>
       </div>
 
       {/* 요약 바 */}
@@ -451,87 +461,140 @@ function MeetingDetail({
         </div>
       </div>
 
-      {/* 안건 테이블 */}
+      {/* 안건 목록 */}
       {ags.length === 0 ? (
         <div className="text-center py-16 text-stone-400">
           <p className="text-sm">안건이 없습니다</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden overflow-x-auto">
-          <table className="w-full border-collapse min-w-[640px]">
-            <thead>
-              <tr className="bg-stone-50 dark:bg-stone-800 border-b-2 border-stone-200 dark:border-stone-700">
-                {['안건 제목 / 체크리스트', '담당 / 참조 / 기한', '긴급도', '진행율', '업무'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-left">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {ags.map((a, i) => {
-                const p = calcProg(a);
-                const cl = a.checklist || [];
-                return (
-                  <tr key={i} className="border-b border-stone-100 dark:border-stone-800 last:border-b-0 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
-                    <td className="px-4 py-3 align-top" style={{ width: '44%' }}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center text-[10px] font-bold text-stone-500 shrink-0">{i + 1}</span>
-                        <span className="text-sm font-bold text-stone-900 dark:text-stone-100">{a.title || '(제목 없음)'}</span>
+        <>
+          {/* 모바일: 카드형 */}
+          <div className="sm:hidden space-y-3 pb-24">
+            {ags.map((a, i) => {
+              const p = calcProg(a);
+              const cl = a.checklist || [];
+              return (
+                <div key={i} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-4">
+                  {/* 안건 헤더 */}
+                  <div className="flex items-start gap-2 mb-3">
+                    <span className="w-6 h-6 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-[11px] font-black text-stone-500 shrink-0 mt-0.5">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-stone-900 dark:text-stone-100">{a.title || '(제목 없음)'}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge urgency={a.urgency} />
+                        {a.assignee && <span className="text-[10px] text-stone-500 dark:text-stone-400">담당 {a.assignee}</span>}
+                        {a.deadline && <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">{a.deadline}</span>}
                       </div>
-                      {cl.length > 0 && (
-                        <div className="space-y-1 ml-7">
-                          {cl.map((c, ci) => (
-                            <div key={ci} className={`flex items-start gap-1.5 text-xs ${c.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
-                              <button onClick={() => onToggleCheck(i, ci)}
-                                className={`w-3.5 h-3.5 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
-                                {c.done && <Check size={9} className="text-white" />}
-                              </button>
-                              <span className="flex-1">{c.text}</span>
-                              {c.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full shrink-0">{c.assignee}</span>}
-                            </div>
-                          ))}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-lg font-black" style={{ color: progColor(p) }}>{p}%</span>
+                    </div>
+                  </div>
+                  {/* 진행바 */}
+                  <ProgressBar value={p} height={6} />
+                  {/* 체크리스트 */}
+                  {cl.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {cl.map((c, ci) => (
+                        <div key={ci} className="flex items-start gap-2.5">
+                          <button onClick={() => onToggleCheck(i, ci)}
+                            className={`w-5 h-5 mt-0.5 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600'}`}>
+                            {c.done && <Check size={11} className="text-white" />}
+                          </button>
+                          <span className={`flex-1 text-sm leading-snug ${c.done ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'}`}>{c.text}</span>
+                          {c.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full shrink-0">{c.assignee}</span>}
                         </div>
-                      )}
-                      {a.note && <p className="text-[11px] text-stone-500 mt-2 ml-7 pl-2 border-l-2 border-stone-200 dark:border-stone-700">{a.note}</p>}
-                    </td>
-                    <td className="px-4 py-3 align-top text-xs" style={{ width: '22%' }}>
-                      <div className="space-y-1.5">
-                        <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">담당</span><strong className="text-stone-800 dark:text-stone-200">{a.assignee || '-'}</strong></div>
-                        <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">참조</span><span className="text-stone-600 dark:text-stone-300">{a.ref || '-'}</span></div>
-                        <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">기한</span><span className={a.deadline ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-stone-400'}>{a.deadline || '-'}</span></div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 align-middle text-center" style={{ width: '13%' }}>
-                      <Badge urgency={a.urgency} />
-                    </td>
-                    <td className="px-4 py-3 align-top" style={{ width: '17%' }}>
-                      <div className="text-xl font-bold mb-1.5" style={{ color: progColor(p) }}>{p}%</div>
-                      <ProgressBar value={p} height={8} />
-                      {cl.length > 0 && <p className="text-[10px] text-stone-400 mt-1">{cl.filter(c => c.done).length}/{cl.length} 완료</p>}
-                    </td>
-                    <td className="px-4 py-3 align-middle" style={{ width: '12%' }}>
-                      <div className="flex flex-col gap-1.5">
-                        <button
-                          onClick={() => handleSelfTask(a.title)}
-                          disabled={!a.title}
-                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap disabled:opacity-30"
-                        >
-                          <Briefcase size={10} /> 내 업무
-                        </button>
-                        <button
-                          onClick={() => a.title && setTaskModal({ agendaTitle: a.title, mode: 'request' })}
-                          disabled={!a.title}
-                          className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap disabled:opacity-30"
-                        >
-                          <Send size={10} /> 요청
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      ))}
+                    </div>
+                  )}
+                  {a.note && <p className="text-xs text-stone-500 mt-3 pl-3 border-l-2 border-stone-200 dark:border-stone-700">{a.note}</p>}
+                  {/* 업무 버튼 */}
+                  {a.title && (
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-stone-100 dark:border-stone-800">
+                      <button onClick={() => handleSelfTask(a.title)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-xl">
+                        <Briefcase size={12} /> 내 업무
+                      </button>
+                      <button onClick={() => setTaskModal({ agendaTitle: a.title, mode: 'request' })}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-xl">
+                        <Send size={12} /> 요청
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 데스크탑: 테이블 */}
+          <div className="hidden sm:block bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden overflow-x-auto">
+            <table className="w-full border-collapse min-w-[640px]">
+              <thead>
+                <tr className="bg-stone-50 dark:bg-stone-800 border-b-2 border-stone-200 dark:border-stone-700">
+                  {['안건 제목 / 체크리스트', '담당 / 참조 / 기한', '긴급도', '진행율', '업무'].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-[11px] font-bold text-stone-400 uppercase tracking-wider text-left">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ags.map((a, i) => {
+                  const p = calcProg(a);
+                  const cl = a.checklist || [];
+                  return (
+                    <tr key={i} className="border-b border-stone-100 dark:border-stone-800 last:border-b-0 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                      <td className="px-4 py-3 align-top" style={{ width: '44%' }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center text-[10px] font-bold text-stone-500 shrink-0">{i + 1}</span>
+                          <span className="text-sm font-bold text-stone-900 dark:text-stone-100">{a.title || '(제목 없음)'}</span>
+                        </div>
+                        {cl.length > 0 && (
+                          <div className="space-y-1 ml-7">
+                            {cl.map((c, ci) => (
+                              <div key={ci} className={`flex items-start gap-1.5 text-xs ${c.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
+                                <button onClick={() => onToggleCheck(i, ci)}
+                                  className={`w-3.5 h-3.5 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-colors ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                                  {c.done && <Check size={9} className="text-white" />}
+                                </button>
+                                <span className="flex-1">{c.text}</span>
+                                {c.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full shrink-0">{c.assignee}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {a.note && <p className="text-[11px] text-stone-500 mt-2 ml-7 pl-2 border-l-2 border-stone-200 dark:border-stone-700">{a.note}</p>}
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs" style={{ width: '22%' }}>
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">담당</span><strong className="text-stone-800 dark:text-stone-200">{a.assignee || '-'}</strong></div>
+                          <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">참조</span><span className="text-stone-600 dark:text-stone-300">{a.ref || '-'}</span></div>
+                          <div className="flex gap-1.5"><span className="text-stone-400 font-bold uppercase text-[10px] w-6">기한</span><span className={a.deadline ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-stone-400'}>{a.deadline || '-'}</span></div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-middle text-center" style={{ width: '13%' }}><Badge urgency={a.urgency} /></td>
+                      <td className="px-4 py-3 align-top" style={{ width: '17%' }}>
+                        <div className="text-xl font-bold mb-1.5" style={{ color: progColor(p) }}>{p}%</div>
+                        <ProgressBar value={p} height={8} />
+                        {cl.length > 0 && <p className="text-[10px] text-stone-400 mt-1">{cl.filter(c => c.done).length}/{cl.length} 완료</p>}
+                      </td>
+                      <td className="px-4 py-3 align-middle" style={{ width: '12%' }}>
+                        <div className="flex flex-col gap-1.5">
+                          <button onClick={() => handleSelfTask(a.title)} disabled={!a.title}
+                            className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 whitespace-nowrap disabled:opacity-30">
+                            <Briefcase size={10} /> 내 업무
+                          </button>
+                          <button onClick={() => a.title && setTaskModal({ agendaTitle: a.title, mode: 'request' })} disabled={!a.title}
+                            className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 whitespace-nowrap disabled:opacity-30">
+                            <Send size={10} /> 요청
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* 업무 요청 모달 */}
@@ -685,7 +748,7 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: '전체 회의록', value: meetings.length, unit: '건', color: '' },
           { label: '전체 안건', value: allAg.length, unit: '건', color: '' },
