@@ -183,6 +183,8 @@ function ReportDetail({
 }) {
   const ap = APPROVAL_CONFIG[report.approvalStatus];
   const [deletePending, setDeletePending] = React.useState(false);
+  const [approvePending, setApprovePending] = React.useState(false);
+  const [rejectPending, setRejectPending] = React.useState(false);
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-stone-950 flex flex-col overflow-hidden">
       {/* 상단바 */}
@@ -265,17 +267,38 @@ function ReportDetail({
         </div>
       )}
 
-      {/* 결재 버튼 — 선택된 결재자 or 관리자 */}
+      {/* 결재 버튼 — 선택된 결재자 or 관리자 (인라인 확인) */}
       {(isAdmin || report.pendingApproverId === currentUser?.uid) && report.approvalStatus === 'pending' && (
-        <div className="flex gap-3 px-4 py-3 border-t border-stone-200 dark:border-stone-800 shrink-0">
-          <button onClick={onReject}
-            className="flex-1 py-3 rounded-xl border-2 border-red-400 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-50 dark:hover:bg-red-900/20">
-            반려
-          </button>
-          <button onClick={onApprove}
-            className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-700">
-            승인
-          </button>
+        <div className="px-4 py-3 border-t border-stone-200 dark:border-stone-800 shrink-0 space-y-2">
+          {/* 반려 */}
+          {rejectPending ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-red-500 shrink-0">반려 확정?</span>
+              <button onClick={() => { setRejectPending(false); onReject(); }}
+                className="px-3 py-1.5 bg-red-500 text-white text-xs font-black rounded-lg hover:bg-red-600">확인</button>
+              <button onClick={() => setRejectPending(false)}
+                className="px-3 py-1.5 text-stone-400 text-xs rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">취소</button>
+            </div>
+          ) : approvePending ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-emerald-600 shrink-0">승인 확정?</span>
+              <button onClick={() => { setApprovePending(false); onApprove(); }}
+                className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-black rounded-lg hover:bg-emerald-700">확인</button>
+              <button onClick={() => setApprovePending(false)}
+                className="px-3 py-1.5 text-stone-400 text-xs rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">취소</button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button onClick={() => setRejectPending(true)}
+                className="flex-1 py-3 rounded-xl border-2 border-red-400 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-50 dark:hover:bg-red-900/20">
+                반려
+              </button>
+              <button onClick={() => setApprovePending(true)}
+                className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-black text-sm hover:bg-emerald-700">
+                승인
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -570,8 +593,6 @@ export function ReportView({ currentUser }: Props) {
       setDetail(null);
       return;
     }
-    const ok = await confirm({ title: '승인', message: `"${report.title}"을 승인하시겠습니까?`, confirmLabel: '승인' });
-    if (!ok) return;
     try {
       await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'approved', approverId: currentUser.uid, approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       toast.success('승인되었습니다');
@@ -584,8 +605,6 @@ export function ReportView({ currentUser }: Props) {
 
   /* 반려 */
   const handleReject = async (report: Report) => {
-    const ok = await confirm({ title: '반려', message: `"${report.title}"을 반려하시겠습니까?`, confirmLabel: '반려', variant: 'danger' });
-    if (!ok) return;
     try {
       await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'rejected', approverId: currentUser.uid, approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       toast.success('반려되었습니다');
