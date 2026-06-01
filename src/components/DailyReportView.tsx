@@ -616,10 +616,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       {/* 탭 */}
       <div className="flex gap-1 mb-5 border-b border-stone-200 dark:border-stone-700">
         {([
-          { key: 'my',     label: '일일 보고' },
+          { key: 'my',     label: '내 보고' },
+          { key: 'team',   label: '팀 보고' },
           { key: 'weekly', label: '주간 보고' },
-          { key: 'feed',   label: '팀 피드' },
-          ...(isAdmin ? [{ key: 'team', label: '팀 현황' }] : []),
+          ...(isAdmin ? [{ key: 'feed', label: '팀 피드' }] : []),
         ] as { key: 'my' | 'weekly' | 'feed' | 'team'; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
@@ -893,75 +893,89 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           )}
         </div>
       ) : (
-        /* ── 팀 현황 탭 (관리자) ── */
-        <div>
-          {/* 요약 */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-            {[
-              { label: '출근 보고 제출', count: teamStatus.filter(s => s.morning).length, total: teamStatus.length, cls: 'text-blue-600 dark:text-blue-400' },
-              { label: '퇴근 보고 제출', count: teamStatus.filter(s => s.evening).length, total: teamStatus.length, cls: 'text-stone-700 dark:text-stone-300' },
-              { label: '전체 완료율', count: (() => {
-                const all = reports.filter(r => r.type === 'evening').flatMap(r => r.items);
-                return all.length ? Math.round(all.filter(it => it.status === 'done').length / all.length * 100) : 0;
-              })(), total: 100, cls: 'text-emerald-600 dark:text-emerald-400', unit: '%' },
-            ].map(s => (
-              <div key={s.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4">
-                <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">{s.label}</p>
-                <p className={`text-2xl font-black ${s.cls}`}>
-                  {s.count}{'unit' in s ? s.unit : <span className="text-sm font-semibold text-stone-400"> / {s.total}</span>}
-                </p>
-              </div>
-            ))}
+        /* ── 팀 보고 탭 (전직원) ── */
+        <div className="space-y-3">
+          {/* 요약 스트립 */}
+          <div className="flex gap-3 text-xs flex-wrap">
+            <span className="font-bold text-stone-500">
+              출근 <span className="text-blue-600 dark:text-blue-400">{teamStatus.filter(s => s.morning).length}</span>/{teamStatus.length}
+            </span>
+            <span className="text-stone-300">·</span>
+            <span className="font-bold text-stone-500">
+              퇴근 <span className="text-emerald-600 dark:text-emerald-400">{teamStatus.filter(s => s.evening).length}</span>/{teamStatus.length}
+            </span>
+            <span className="text-stone-300">·</span>
+            <span className="font-bold text-stone-500">{fmtDate(date)}</span>
           </div>
 
-          {/* 직원 목록 */}
-          <div className="space-y-2">
-            {teamStatus.map(({ emp, morning, evening }) => {
+          {/* 직원 카드 — 출근+퇴근 묶음 */}
+          {teamStatus.length === 0 ? (
+            <p className="text-center py-10 text-stone-400 text-sm">직원 명부에 등록된 직원이 없습니다</p>
+          ) : (
+            teamStatus.map(({ emp, morning, evening }) => {
+              const submitted = morning || evening;
               const doneCount = evening ? evening.items.filter(it => it.status === 'done').length : 0;
               const total = evening ? evening.items.length : 0;
+              const pct = total ? Math.round(doneCount / total * 100) : null;
               return (
-                <div key={emp.id} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
-                  {/* 직원 행 */}
-                  <div className="flex items-center gap-4 px-4 py-3">
-                    <div className="w-8 h-8 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-xs font-black text-stone-600 dark:text-stone-300 shrink-0">
-                      {emp.name.slice(0, 1)}
+                <div key={emp.id} className={`bg-white dark:bg-stone-900 border rounded-2xl overflow-hidden ${submitted ? 'border-stone-200 dark:border-stone-700' : 'border-dashed border-stone-200 dark:border-stone-700 opacity-60'}`}>
+                  {/* 헤더 — 이름 + 상태 */}
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0 ${submitted ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'bg-stone-100 dark:bg-stone-800 text-stone-400'}`}>
+                      {emp.name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-stone-900 dark:text-stone-100">{emp.name}</span>
-                        <span className="text-[11px] text-stone-400">{emp.position}</span>
-                        <span className="text-[11px] text-stone-300 dark:text-stone-600">{getDeptName(emp.departmentId)}</span>
-                      </div>
+                      <p className="text-sm font-black text-stone-900 dark:text-stone-100">{emp.name}</p>
+                      <p className="text-[10px] text-stone-400">{emp.position}{emp.departmentId ? ` · ${getDeptName(emp.departmentId)}` : ''}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${morning ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
-                        {morning ? '오전 ✓' : '오전 ✗'}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${morning ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-stone-100 text-stone-300 dark:bg-stone-800 dark:text-stone-600'}`}>
+                        {morning ? '출근 ✓' : '출근 미제출'}
                       </span>
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${evening ? (doneCount === total ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400') : 'bg-stone-100 text-stone-400 dark:bg-stone-800'}`}>
-                        {evening ? `퇴근 ${doneCount}/${total}` : '퇴근 ✗'}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        !evening ? 'bg-stone-100 text-stone-300 dark:bg-stone-800 dark:text-stone-600'
+                        : pct === 100 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      }`}>
+                        {evening ? `퇴근 ${doneCount}/${total}` : '퇴근 미제출'}
                       </span>
                     </div>
                   </div>
 
-                  {/* 보고 내용 (제출된 경우) */}
-                  {(morning || evening) && (
-                    <div className="px-4 pb-3 border-t border-stone-100 dark:border-stone-800 pt-2 space-y-1.5">
-                      {(evening ?? morning)!.items.map((it, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-[11px] text-stone-400 w-4 text-right">{i + 1}.</span>
-                          <span className={`${STATUS_CONFIG[it.status].cls} shrink-0`}>{STATUS_CONFIG[it.status].icon}</span>
-                          <span className={`text-xs flex-1 ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'} font-semibold`}>{it.text}</span>
+                  {/* 업무 목록 — 출근 제출 기준, 퇴근 상태 반영 */}
+                  {morning && (
+                    <div className="px-4 py-3 space-y-1.5">
+                      {(evening ?? morning).items.map((it, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="text-[10px] text-stone-300 w-4 text-right font-bold mt-0.5">{i + 1}</span>
+                          <span className={`mt-0.5 ${STATUS_CONFIG[it.status].cls} shrink-0`}>{STATUS_CONFIG[it.status].icon}</span>
+                          <span className={`text-xs flex-1 leading-snug ${it.status === 'done' ? 'line-through text-stone-400' : it.status === 'incomplete' ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-stone-700 dark:text-stone-300'}`}>
+                            {it.text}
+                          </span>
                           {it.status === 'incomplete' && it.note && (
-                            <span className="text-[10px] text-stone-400 truncate max-w-32">{it.note}</span>
+                            <span className="text-[10px] text-stone-400 truncate max-w-[120px] shrink-0">{it.note}</span>
                           )}
+                        </div>
+                      ))}
+                      {/* 관리자만: 확인 버튼 */}
+                      {isAdmin && (morning.confirmedAt ? (
+                        <p className="text-[10px] text-emerald-500 text-right pt-1">✓ {morning.confirmedByName ?? '관리자'} 확인</p>
+                      ) : (
+                        <div className="flex justify-end gap-2 pt-1">
+                          {!morning.confirmedAt && <button onClick={() => confirmReport(morning)} className="text-[10px] font-bold text-blue-500 hover:underline">출근 확인</button>}
+                          {evening && !evening.confirmedAt && <button onClick={() => confirmReport(evening)} className="text-[10px] font-bold text-emerald-500 hover:underline">퇴근 확인</button>}
                         </div>
                       ))}
                     </div>
                   )}
+
+                  {!submitted && (
+                    <p className="text-center text-[11px] text-stone-300 dark:text-stone-700 py-3">오늘 보고 없음</p>
+                  )}
                 </div>
               );
-            })}
-          </div>
+            })
+          )}
         </div>
       )}
     </div>
