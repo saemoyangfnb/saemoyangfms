@@ -464,6 +464,10 @@ export default function App() {
 
   const [editingBrandId, setEditingBrandId] = useState<BrandId | null>(null);
   const [editingBrandName, setEditingBrandName] = useState('');
+
+  // 관리자 보고 알림
+  const [reportAlerts, setReportAlerts] = useState<{ id: string; employeeName: string; type: 'morning' | 'evening'; date: string }[]>([]);
+  const seenReportIds = useRef<Set<string>>(new Set());
   const [showAddBrand, setShowAddBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
   const [dragOverBrandId, setDragOverBrandId] = useState<BrandId | null>(null);
@@ -555,6 +559,37 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
+
+  // 관리자 — 오늘 보고서 실시간 알림
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let firstLoad = true;
+    const unsub = onSnapshot(
+      query(collection(salesDb, 'daily_reports'), where('date', '==', todayStr)),
+      (snap) => {
+        if (firstLoad) {
+          // 첫 로드: 기존 문서 모두 "이미 본 것"으로 등록 (알림 없이)
+          snap.docs.forEach(doc => seenReportIds.current.add(doc.id));
+          firstLoad = false;
+          return;
+        }
+        snap.docChanges().forEach(change => {
+          if (change.type !== 'added') return;
+          const data = change.doc.data();
+          const id = change.doc.id;
+          if (seenReportIds.current.has(id)) return;
+          if (data.employeeId === currentUser.uid) return; // 자신 보고 알림 제외
+          seenReportIds.current.add(id);
+          setReportAlerts(prev => [...prev, {
+            id, employeeName: data.employeeName, type: data.type, date: data.date,
+          }]);
+        });
+      }
+    );
+    return () => unsub();
+  }, [currentUser?.uid, currentUser?.role]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1189,7 +1224,7 @@ export default function App() {
           {/* ── 인트라넷 ── */}
           <div className="mx-2 space-y-0.5 mb-1 mt-1">
             {([
-              { section: 'daily',     icon: <FileText size={14} />,      label: '일일 업무보고', primary: true },
+              { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고',    primary: true },
               { section: 'notice',    icon: <Megaphone size={14} />,     label: '공지사항',      primary: true },
               { section: 'calendar',  icon: <Calendar size={14} />,      label: '캘린더',        primary: true },
               { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록',        primary: true },
@@ -1729,6 +1764,50 @@ export default function App() {
       {isCategoryModalOpen && <CategoryManagementModal categories={brandCategories} onSave={handleSaveCategories} onClose={() => setIsCategoryModalOpen(false)} />}
       {isMenuModalOpen && <MenuModal menu={editingMenu} menuCategories={brandCategories} onSave={handleSaveMenu} onClose={() => { setIsMenuModalOpen(false); setEditingMenu(undefined); }} onArchive={handleArchiveMenu} onDelete={handleDeleteMenu} />}
       {isRecipeModalOpen && recipeMenu && <RecipeModal menu={recipeMenu} ingredients={brandIngredients} menus={brandMenus} onSave={handleSaveRecipe} onClose={() => { setIsRecipeModalOpen(false); setRecipeMenu(null); }} />}
+      {/* 보고서 제출 알림 팝업 (관리자) */}
+      {reportAlerts.length > 0 && (() => {
+        const alert = reportAlerts[0];
+        const label = alert.type === 'morning' ? '출근' : '퇴근';
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 border-2 border-stone-800 dark:border-stone-400">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                  <Bell size={18} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-stone-900 dark:text-white">보고서 제출 알림</p>
+                  <p className="text-xs text-stone-400 mt-0.5">{alert.date}</p>
+                </div>
+              </div>
+              <p className="text-sm text-stone-700 dark:text-stone-300 mb-5 leading-relaxed">
+                <span className="font-bold text-stone-900 dark:text-white">{alert.employeeName}</span>님의{' '}
+                <span className="font-bold text-blue-600 dark:text-blue-400">{label} 보고서</span>가 제출되었습니다.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setReportAlerts(prev => prev.slice(1));
+                    navigateTo(null, 'daily');
+                    if (isMobile) setMobileSidebarOpen(false);
+                  }}
+                  className="flex-1 py-2.5 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-bold rounded-xl hover:opacity-80">
+                  지금 확인
+                </button>
+                <button
+                  onClick={() => setReportAlerts(prev => prev.slice(1))}
+                  className="flex-1 py-2.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 text-sm font-bold rounded-xl hover:opacity-80">
+                  나중에 보기
+                </button>
+              </div>
+              {reportAlerts.length > 1 && (
+                <p className="text-center text-[11px] text-stone-400 mt-3">대기 중 알림 {reportAlerts.length - 1}건 더</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
       {showDeleteAllMenusConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">

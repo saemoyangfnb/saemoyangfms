@@ -145,7 +145,7 @@ function MorningForm({
 
   return (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-6">
-      <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-4">오전 업무보고</p>
+      <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-4">출근 보고</p>
 
       {/* 어제 미완료 이월 섹션 */}
       {carryItems.length > 0 && (
@@ -266,7 +266,12 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
 }
 
 /* ── 보고서 카드 (완료된 보고) ─────────────────────────── */
-function ReportCard({ report, showName = false, onEdit }: { report: DailyReport; showName?: boolean; onEdit?: () => void }) {
+function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin }: {
+  report: DailyReport; showName?: boolean;
+  onEdit?: () => void;
+  onConfirm?: () => void;
+  isAdmin?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const doneCount = report.items.filter(it => it.status === 'done').length;
   const total = report.items.length;
@@ -276,7 +281,7 @@ function ReportCard({ report, showName = false, onEdit }: { report: DailyReport;
     <div className={`bg-white dark:bg-stone-900 border rounded-xl overflow-hidden ${report.type === 'evening' ? 'border-stone-200 dark:border-stone-700' : 'border-stone-100 dark:border-stone-800'}`}>
       <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors text-left" onClick={() => setOpen(p => !p)}>
         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${report.type === 'morning' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400'}`}>
-          {report.type === 'morning' ? '오전' : '퇴근'}
+          {report.type === 'morning' ? '출근' : '퇴근'}
         </span>
         {showName && <span className="text-xs font-bold text-stone-700 dark:text-stone-300 shrink-0">{report.employeeName}</span>}
         <span className="flex-1 text-xs text-stone-500 dark:text-stone-400 truncate">
@@ -289,11 +294,23 @@ function ReportCard({ report, showName = false, onEdit }: { report: DailyReport;
           </span>
         )}
         <ChevronDown size={13} className={`text-stone-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
-        {onEdit && (
-          <button onClick={e => { e.stopPropagation(); onEdit(); }}
-            className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 px-2 py-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0">
-            수정
-          </button>
+        {report.confirmedAt ? (
+          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 px-2 shrink-0">✓ 확인됨</span>
+        ) : (
+          <>
+            {onEdit && (
+              <button onClick={e => { e.stopPropagation(); onEdit(); }}
+                className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 px-2 py-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0">
+                수정
+              </button>
+            )}
+            {isAdmin && onConfirm && (
+              <button onClick={e => { e.stopPropagation(); onConfirm(); }}
+                className="text-[11px] font-bold text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 shrink-0">
+                확인
+              </button>
+            )}
+          </>
         )}
       </button>
 
@@ -434,7 +451,7 @@ export function DailyReportView({ currentUser }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  /* 오전 보고 제출 / 수정 */
+  /* 출근 보고 제출 / 수정 */
   const submitMorning = async (texts: string[]) => {
     const newItems = texts.map(text => ({ text, status: 'pending' as DailyItemStatus }));
     if (isEditingMorning && myMorning) {
@@ -442,7 +459,7 @@ export function DailyReportView({ currentUser }: Props) {
         items: newItems, updatedAt: new Date().toISOString(),
       });
       setIsEditingMorning(false);
-      toast.success('오전 보고가 수정되었습니다');
+      toast.success('출근 보고가 수정되었습니다');
     } else {
       const id = genId();
       await setDoc(doc(salesDb, 'daily_reports', id), {
@@ -451,7 +468,7 @@ export function DailyReportView({ currentUser }: Props) {
         date, type: 'morning', items: newItems,
         submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
-      toast.success('오전 업무보고 완료');
+      toast.success('출근 보고 완료');
     }
     setPendingTaskTitles([]);
     fetchData();
@@ -485,9 +502,22 @@ export function DailyReportView({ currentUser }: Props) {
     fetchData();
   };
 
+  /* 관리자 보고 확인 — 이후 수정 불가 */
+  const confirmReport = async (report: DailyReport) => {
+    await updateDoc(doc(salesDb, 'daily_reports', report.id), {
+      confirmedAt: new Date().toISOString(),
+      confirmedBy: currentUser.uid,
+      confirmedByName: currentUser.name,
+      updatedAt: new Date().toISOString(),
+    });
+    toast.success(`${report.employeeName}님의 ${report.type === 'morning' ? '출근' : '퇴근'} 보고를 확인했습니다`);
+    fetchData();
+  };
+
   /* 업무 인박스 → 오전 보고 폼에 항목 추가 (Firestore 저장 안 함) */
   const addTaskToMorning = (task: Task) => {
     if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
+    if (myMorning?.confirmedAt) { toast.error('관리자가 확인한 보고서는 수정할 수 없습니다'); return; }
     if (myMorning && !isEditingMorning) setIsEditingMorning(true);
     setPendingTaskTitles(prev => [...prev, task.title]);
     toast.success(`"${task.title.slice(0, 15)}${task.title.length > 15 ? '…' : ''}" 보고 폼에 추가됐습니다`);
@@ -811,14 +841,14 @@ export function DailyReportView({ currentUser }: Props) {
             )
           ) : (
             <>
-              <ReportCard report={myMorning} onEdit={isToday ? () => setIsEditingMorning(true) : undefined} />
+              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
                 isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
                   <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
                 )
               ) : (
-                <ReportCard report={myEvening} onEdit={isToday ? () => setIsEditingEvening(true) : undefined} />
+                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} />
               )}
             </>
           )}
@@ -829,7 +859,7 @@ export function DailyReportView({ currentUser }: Props) {
           {/* 요약 */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             {[
-              { label: '오전 보고 제출', count: teamStatus.filter(s => s.morning).length, total: teamStatus.length, cls: 'text-blue-600 dark:text-blue-400' },
+              { label: '출근 보고 제출', count: teamStatus.filter(s => s.morning).length, total: teamStatus.length, cls: 'text-blue-600 dark:text-blue-400' },
               { label: '퇴근 보고 제출', count: teamStatus.filter(s => s.evening).length, total: teamStatus.length, cls: 'text-stone-700 dark:text-stone-300' },
               { label: '전체 완료율', count: (() => {
                 const all = reports.filter(r => r.type === 'evening').flatMap(r => r.items);

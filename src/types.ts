@@ -62,7 +62,7 @@ export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
 export const SECTION_LABELS: Record<PermissionSection, string> = {
   home: '홈',
-  daily: '일일 업무보고',
+  daily: '업무 보고',
   calendar: '캘린더',
   notice: '공지사항',
   meetings: '회의록',
@@ -562,9 +562,12 @@ export interface DailyReport {
   date: string;           // YYYY-MM-DD
   type: 'morning' | 'evening';
   items: DailyReportItem[];
-  photoUrls?: string[];   // Firebase Storage URLs
-  reactions?: string[];   // 확인 누른 employeeId 배열 (arrayUnion/arrayRemove)
-  commentCount?: number;  // 댓글 수 캐시
+  photoUrls?: string[];
+  reactions?: string[];
+  commentCount?: number;
+  confirmedAt?: string;     // 관리자 확인 시각 — 이 이후는 수정 불가
+  confirmedBy?: string;     // 확인한 관리자 uid
+  confirmedByName?: string;
   submittedAt: string;
   updatedAt: string;
 }
