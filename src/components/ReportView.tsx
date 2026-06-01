@@ -181,6 +181,7 @@ function ReportDetail({
   onApprove: () => void; onReject: () => void; onDelete: () => void;
 }) {
   const ap = APPROVAL_CONFIG[report.approvalStatus];
+  const [deletePending, setDeletePending] = React.useState(false);
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-stone-950 flex flex-col overflow-hidden">
       {/* 상단바 */}
@@ -199,9 +200,19 @@ function ReportDetail({
           </button>
         )}
         {(isMe || isAdmin) && (
-          <button onClick={onDelete} className="p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-400">
-            <Trash2 size={16} />
-          </button>
+          deletePending ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[11px] font-bold text-red-500">삭제?</span>
+              <button onClick={() => { setDeletePending(false); onDelete(); }}
+                className="text-[11px] font-black bg-red-500 text-white px-2 py-1 rounded-lg hover:bg-red-600">확인</button>
+              <button onClick={() => setDeletePending(false)}
+                className="text-[11px] font-bold text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800">취소</button>
+            </div>
+          ) : (
+            <button onClick={() => setDeletePending(true)} className="p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-400">
+              <Trash2 size={16} />
+            </button>
+          )
         )}
       </div>
 
@@ -582,10 +593,8 @@ export function ReportView({ currentUser }: Props) {
     }
   };
 
-  /* 삭제 */
+  /* 삭제 — 인라인 확인 후 호출됨 */
   const handleDelete = async (report: Report) => {
-    const ok = await confirm({ title: '보고서 삭제', message: `"${report.title || '(제목 없음)'}"을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`, confirmLabel: '삭제', variant: 'danger' });
-    if (!ok) return;
     try {
       for (const url of report.photoUrls ?? []) {
         try { await deleteObject(ref(storage, url)); } catch {}
