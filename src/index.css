@@ -21,9 +21,11 @@
   font-weight: 700 !important;
 }
 
-/* 캘린더 인쇄 스타일 */
+/* 인쇄 스타일 — 캘린더 / 회의록 */
 @media print {
   body * { visibility: hidden; }
+
+  /* 캘린더 */
   #calendar-print-area, #calendar-print-area * { visibility: visible; }
   #calendar-print-area {
     position: fixed;
@@ -31,6 +33,16 @@
     width: 100%;
     z-index: 9999;
   }
+
+  /* 회의록 */
+  #meeting-print-area, #meeting-print-area * { visibility: visible; }
+  #meeting-print-area {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    z-index: 9999;
+  }
+
   @page { margin: 8mm; }
 }
 

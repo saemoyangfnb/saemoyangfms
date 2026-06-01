@@ -411,7 +411,7 @@ function MeetingDetail({
   };
 
   return (
-    <div>
+    <div id="meeting-print-area">
       {/* 상단바 */}
       <div className="flex items-center gap-3 mb-5 print:hidden">
         <button onClick={onBack} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-700 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold shrink-0">
