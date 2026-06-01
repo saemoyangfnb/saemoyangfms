@@ -174,7 +174,7 @@ function ReportCard({ report, onTap, isMe }: { report: Report; onTap: () => void
 
 /* ── 보고서 상세 (풀스크린 모달) ─────────────────────────── */
 function ReportDetail({
-  report, isAdmin, isMe, currentUser, onClose, onEdit, onApprove, onReject,
+  report, isAdmin, isMe, currentUser, onClose, onEdit, onApprove, onReject, onDelete,
 }: {
   report: Report; isAdmin: boolean; isMe: boolean; currentUser: User;
   onClose: () => void; onEdit: () => void;
