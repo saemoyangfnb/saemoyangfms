@@ -267,12 +267,13 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
 }
 
 /* ── 보고서 카드 (완료된 보고) ─────────────────────────── */
-function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCreateReport }: {
+function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCreateReport, onShare }: {
   report: DailyReport; showName?: boolean;
   onEdit?: () => void;
   onConfirm?: () => void;
   isAdmin?: boolean;
   onCreateReport?: () => void;
+  onShare?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const doneCount = report.items.filter(it => it.status === 'done').length;
@@ -294,6 +295,12 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCr
           <span className={`text-[11px] font-bold shrink-0 ${pct === 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
             {pct}%
           </span>
+        )}
+        {onShare && (
+          <button onClick={e => { e.stopPropagation(); onShare(); }}
+            className="text-[13px] shrink-0 hover:scale-110 transition-transform" title="카톡으로 공유">
+            💬
+          </button>
         )}
         <ChevronDown size={13} className={`text-stone-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
         {report.confirmedAt ? (
@@ -885,14 +892,16 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             )
           ) : (
             <>
-              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports} />
+              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
+                onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'morning', items: myMorning.items.map(i => i.text) })} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
                 isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
                   <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
                 )
               ) : (
-                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports} />
+                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports}
+                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i => i.text) })} />
               )}
             </>
           )}

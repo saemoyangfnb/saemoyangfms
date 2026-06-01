@@ -8,7 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { User, Report, ReportSection, ReportType, ApprovalStatus, Employee } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { shareApprovalRequest } from '../utils/kakao';
+import { shareApprovalRequest, shareKakao } from '../utils/kakao';
 import {
   Plus, X, ChevronLeft, ChevronRight, Camera, Trash2,
   CheckCircle, XCircle, Clock, Send, Edit2, RefreshCw,
@@ -197,6 +197,11 @@ function ReportDetail({
           <p className="text-[10px] text-stone-400">{report.authorName} · {fmtDate(report.updatedAt)}</p>
         </div>
         <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${ap.cls}`}>{ap.icon}{ap.label}</span>
+        {/* 상시 카톡 공유 */}
+        <button onClick={() => shareKakao({ title: `보고서 — ${report.authorName}`, body: `"${report.title}"\n상태: ${ap.label}` })}
+          className="text-base shrink-0 hover:scale-110 transition-transform" title="카톡으로 공유">
+          💬
+        </button>
         {isMe && report.approvalStatus === 'draft' && (
           <button onClick={onEdit} className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
             <Edit2 size={16} />
