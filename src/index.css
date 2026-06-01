@@ -43,6 +43,15 @@
     z-index: 9999;
   }
 
+  /* 업무 규정 */
+  #sop-print-area, #sop-print-area * { visibility: visible; }
+  #sop-print-area {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    z-index: 9999;
+  }
+
   @page { margin: 8mm; }
 }
 

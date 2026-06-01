@@ -30,6 +30,7 @@ const CompanyCalendar = lazy(() => import('./components/CompanyCalendar').then(m
 const ReportView = lazy(() => import('./components/ReportView').then(m => ({ default: m.ReportView })));
 const NoticeBoard = lazy(() => import('./components/NoticeBoard').then(m => ({ default: m.NoticeBoard })));
 const DailyReportView = lazy(() => import('./components/DailyReportView').then(m => ({ default: m.DailyReportView })));
+const SopView = lazy(() => import('./components/SopView').then(m => ({ default: m.SopView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -39,7 +40,7 @@ import {
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
-  CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList
+  CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -1230,8 +1231,9 @@ export default function App() {
               { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록',        primary: true },
               { section: 'reports',   icon: <ClipboardList size={14} />, label: '보고서',        primary: false },
               { section: 'employees', icon: <Users size={14} />,         label: '직원 명부',     primary: false },
+              { section: 'sop',       icon: <BookOpen size={14} />,      label: '업무 규정',     primary: false },
             ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string; primary: boolean }[])
-              .filter(item => item.primary || showAllIntranet || ['reports','employees'].includes(sidebar.section))
+              .filter(item => item.primary || showAllIntranet || ['reports','employees','sop'].includes(sidebar.section))
               .map(({ section, icon, label }) => (
                 <button
                   key={section}
@@ -1247,7 +1249,7 @@ export default function App() {
                 </button>
               ))}
             {/* 더보기 토글 (펼침 모드에서만) */}
-            {(!sidebarCollapsed || isMobile) && !showAllIntranet && !['reports','employees'].includes(sidebar.section) && (
+            {(!sidebarCollapsed || isMobile) && !showAllIntranet && !['reports','employees','sop'].includes(sidebar.section) && (
               <button
                 onClick={() => setShowAllIntranet(true)}
                 className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 border-l-[3px] border-transparent pl-2"
@@ -1579,6 +1581,11 @@ export default function App() {
           {/* 직원 명부 */}
           {sidebar.section === 'employees' && (
             <EmployeeDirectory currentUser={currentUser} />
+          )}
+
+          {/* 업무 규정 */}
+          {sidebar.section === 'sop' && (
+            <SopView currentUser={currentUser} />
           )}
 
           {/* 브랜드별 콘텐츠 */}

@@ -13,7 +13,7 @@ export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사
 export type SidebarSection =
   | 'home'
   // 인트라넷
-  | 'daily' | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees'
+  | 'daily' | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees' | 'sop'
   // 브랜드별
   | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'marketing'
   // 운영 도구
@@ -54,7 +54,7 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
   'home',
-  'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees',
+  'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees', 'sop',
   'cost', 'sales', 'franchise', 'stores', 'marketing', 'review',
   'database', 'history', 'admin',
 ] as const;
@@ -607,4 +607,28 @@ export interface Report {
   htmlContent?: string;        // 구 버전 호환용
   activeTab?: string;
   docDate?: string;
+}
+
+// ==========================================
+// 업무 규정 / SOP (salesDb: sop_documents)
+// ==========================================
+export interface SopStep {
+  text: string;
+  note?: string;
+}
+
+export interface SopDocument {
+  id: string;
+  title: string;
+  category: string;
+  departmentName?: string;
+  ownerName?: string;
+  deadlineDays?: number;
+  requiredPersonnel?: number;
+  steps: SopStep[];
+  note?: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
 }
