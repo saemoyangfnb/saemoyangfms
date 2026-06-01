@@ -182,6 +182,7 @@ function ReportDetail({
   onApprove: () => void; onReject: () => void; onDelete: () => void;
 }) {
   const ap = APPROVAL_CONFIG[report.approvalStatus];
+  const toast = useToast();
   const [deletePending, setDeletePending] = React.useState(false);
   const [approvePending, setApprovePending] = React.useState(false);
   const [rejectPending, setRejectPending] = React.useState(false);
@@ -198,7 +199,7 @@ function ReportDetail({
         </div>
         <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${ap.cls}`}>{ap.icon}{ap.label}</span>
         {/* 상시 카톡 공유 */}
-        <button onClick={() => shareKakao({ title: `보고서 — ${report.authorName}`, body: `"${report.title}"\n상태: ${ap.label}` })}
+        <button onClick={() => shareKakao({ title: `보고서 — ${report.authorName}`, body: `"${report.title}"\n상태: ${ap.label}`, onCopied: toast.success })}
           className="text-base shrink-0 hover:scale-110 transition-transform" title="카톡으로 공유">
           💬
         </button>
@@ -788,7 +789,7 @@ export function ReportView({ currentUser }: Props) {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  shareApprovalRequest({ submitterName: currentUser.name, reportTitle: kakaoShareTarget.reportTitle, approverName: kakaoShareTarget.approverName });
+                  shareApprovalRequest({ submitterName: currentUser.name, reportTitle: kakaoShareTarget.reportTitle, approverName: kakaoShareTarget.approverName, onCopied: toast.success });
                   setKakaoShareTarget(null);
                 }}
                 className="flex-1 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-stone-900 text-sm font-black rounded-xl flex items-center justify-center gap-2">

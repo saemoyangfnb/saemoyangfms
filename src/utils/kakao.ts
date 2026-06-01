@@ -1,39 +1,55 @@
-const APP_URL = 'https://dalbitgo-calculator.vercel.app';
-
-/**
- * 모바일: 네이티브 공유 시트(카톡·문자·메일 등) 열기
- * 데스크탑: 클립보드 복사 + 안내
- */
-export async function shareKakao({ title, body }: { title: string; body: string; buttonLabel?: string }) {
-  const text = `[새모양 인트라넷]\n${title}\n\n${body}\n\n▶ 확인하기: ${APP_URL}`;
-
-  // 모바일 네이티브 공유 (iOS Safari, Android Chrome 등 — 카톡 포함)
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: `[새모양] ${title}`, text, url: APP_URL });
-      return;
-    } catch (e: any) {
-      if (e?.name === 'AbortError') return; // 사용자가 직접 닫은 경우 — 정상
-    }
-  }
-
-  // 데스크탑 fallback: 클립보드 복사
+/** 클립보드 복사 후 토스트 표시 */
+async function copyText(text: string, onSuccess: () => void, onFail: () => void) {
   try {
     await navigator.clipboard.writeText(text);
-    alert('내용을 클립보드에 복사했습니다.\n카카오톡에 붙여넣기 하세요.');
+    onSuccess();
   } catch {
-    alert(`공유할 내용:\n\n${text}`);
+    // clipboard API 실패 시 — textarea 트릭
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.cssText = 'position:fixed;top:-999px;left:-999px';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      onSuccess();
+    } catch {
+      onFail();
+    }
   }
+}
+
+/** 보고 내용을 포맷팅해서 클립보드에 복사 */
+export async function shareKakao({
+  title,
+  body,
+  onCopied,     // 복사 성공 시 호출할 토스트 함수
+}: {
+  title: string;
+  body: string;
+  buttonLabel?: string;
+  onCopied?: (msg: string) => void;
+}) {
+  const text = `[새모양 인트라넷]\n${title}\n${'─'.repeat(20)}\n${body}`;
+  await copyText(
+    text,
+    () => onCopied?.('📋 복사됐습니다 — 카톡에 붙여넣기 하세요'),
+    () => onCopied?.('복사 실패. 직접 선택해서 복사해주세요.'),
+  );
 }
 
 export function shareApprovalRequest(opts: {
   submitterName: string;
   reportTitle: string;
   approverName: string;
+  onCopied?: (msg: string) => void;
 }) {
   shareKakao({
     title: `결재 요청 — ${opts.submitterName}`,
     body: `"${opts.reportTitle}" 결재를 요청드립니다.\n검토 후 승인/반려 부탁드립니다.\n→ ${opts.approverName}님께 전달`,
+    onCopied: opts.onCopied,
   });
 }
 
@@ -42,12 +58,14 @@ export function shareDailyReport(opts: {
   date: string;
   type: 'morning' | 'evening';
   items: string[];
+  onCopied?: (msg: string) => void;
 }) {
   const label = opts.type === 'morning' ? '출근' : '퇴근';
-  const itemText = opts.items.slice(0, 7).map((t, i) => `${i + 1}. ${t}`).join('\n');
+  const itemText = opts.items.map((t, i) => `${i + 1}. ${t}`).join('\n');
   shareKakao({
     title: `${label} 보고 — ${opts.name} (${opts.date})`,
-    body: itemText + (opts.items.length > 7 ? `\n외 ${opts.items.length - 7}건` : ''),
+    body: itemText,
+    onCopied: opts.onCopied,
   });
 }
 
@@ -56,14 +74,16 @@ export function shareWeeklyReport(opts: {
   weekStart: string;
   weekEnd: string;
   items: { title: string; status: string }[];
+  onCopied?: (msg: string) => void;
 }) {
-  const STATUS_LABEL: Record<string, string> = { planned: '예정', in_progress: '진행 중', done: '완료' };
-  const itemText = opts.items.slice(0, 5)
+  const STATUS_LABEL: Record<string, string> = { planned: '예정', in_progress: '진행중', done: '완료' };
+  const itemText = opts.items
     .map((it, i) => `${i + 1}. [${STATUS_LABEL[it.status] ?? it.status}] ${it.title}`)
     .join('\n');
   shareKakao({
     title: `주간 보고 — ${opts.name} (${opts.weekStart}~${opts.weekEnd})`,
-    body: itemText + (opts.items.length > 5 ? `\n외 ${opts.items.length - 5}건` : ''),
+    body: itemText,
+    onCopied: opts.onCopied,
   });
 }
 
@@ -72,9 +92,11 @@ export function shareTaskRequest(opts: {
   assigneeName: string;
   taskTitle: string;
   dueDate?: string;
+  onCopied?: (msg: string) => void;
 }) {
   shareKakao({
     title: `업무 요청 — ${opts.requesterName} → ${opts.assigneeName}`,
     body: `"${opts.taskTitle}"${opts.dueDate ? `\n기한: ${opts.dueDate}` : ''}`,
+    onCopied: opts.onCopied,
   });
 }

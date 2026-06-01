@@ -893,7 +893,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           ) : (
             <>
               <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
-                onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'morning', items: myMorning.items.map(i => i.text) })} />
+                onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'morning', items: myMorning.items.map(i => i.text), onCopied: toast.success })} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
                 isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
@@ -901,7 +901,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                 )
               ) : (
                 <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports}
-                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i => i.text) })} />
+                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i => i.text), onCopied: toast.success })} />
               )}
             </>
           )}
@@ -1015,9 +1015,9 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             <div className="flex gap-2">
               <button onClick={() => {
                 if (kakaoTarget.type === 'weekly') {
-                  shareWeeklyReport({ name: currentUser.name, weekStart: kakaoTarget.weekStart!, weekEnd: kakaoTarget.weekEnd!, items: kakaoTarget.items.map(t => ({ title: t, status: 'in_progress' })) });
+                  shareWeeklyReport({ name: currentUser.name, weekStart: kakaoTarget.weekStart!, weekEnd: kakaoTarget.weekEnd!, items: kakaoTarget.items.map(t => ({ title: t, status: 'in_progress' })), onCopied: toast.success });
                 } else {
-                  shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type as 'morning' | 'evening', items: kakaoTarget.items });
+                  shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type as 'morning' | 'evening', items: kakaoTarget.items, onCopied: toast.success });
                 }
                 setKakaoTarget(null);
               }}
