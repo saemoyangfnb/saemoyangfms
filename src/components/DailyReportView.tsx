@@ -7,7 +7,7 @@ import {
 import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
 import { FeedView } from './FeedView';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss } from 'lucide-react';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

@@ -590,6 +590,8 @@ export interface Report {
   authorName: string;
   storageKey: string;
   approvalStatus: ApprovalStatus;
+  pendingApproverId?: string;   // 결재 요청 대상 uid
+  pendingApproverName?: string; // 결재 요청 대상 이름 (표시용)
   approverId?: string;
   approverName?: string;
   approverComment?: string;

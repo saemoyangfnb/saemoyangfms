@@ -5,7 +5,7 @@ import {
   query, orderBy, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { User, Report, ReportSection, ReportType, ApprovalStatus } from '../types';
+import { User, Report, ReportSection, ReportType, ApprovalStatus, Employee } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
@@ -174,11 +174,11 @@ function ReportCard({ report, onTap, isMe }: { report: Report; onTap: () => void
 
 /* ── 보고서 상세 (풀스크린 모달) ─────────────────────────── */
 function ReportDetail({
-  report, isAdmin, isMe, onClose, onEdit, onApprove, onReject,
+  report, isAdmin, isMe, currentUser, onClose, onEdit, onApprove, onReject,
 }: {
-  report: Report; isAdmin: boolean; isMe: boolean;
+  report: Report; isAdmin: boolean; isMe: boolean; currentUser: User;
   onClose: () => void; onEdit: () => void;
-  onApprove: () => void; onReject: () => void;
+  onApprove: () => void; onReject: () => void; onDelete: () => void;
 }) {
   const ap = APPROVAL_CONFIG[report.approvalStatus];
   return (
@@ -196,6 +196,11 @@ function ReportDetail({
         {isMe && report.approvalStatus === 'draft' && (
           <button onClick={onEdit} className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
             <Edit2 size={16} />
+          </button>
+        )}
+        {(isMe || isAdmin) && (
+          <button onClick={onDelete} className="p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-400">
+            <Trash2 size={16} />
           </button>
         )}
       </div>
@@ -239,8 +244,17 @@ function ReportDetail({
         </div>
       </div>
 
-      {/* 결재 버튼 (관리자 + 대기 중) */}
-      {isAdmin && report.approvalStatus === 'pending' && (
+      {/* 결재 대기 중: 누구에게 보냈는지 표시 */}
+      {report.approvalStatus === 'pending' && report.pendingApproverName && (
+        <div className="px-4 py-2 border-t border-stone-100 dark:border-stone-800 shrink-0">
+          <p className="text-[11px] text-stone-400 text-center">
+            <span className="font-bold text-stone-600 dark:text-stone-300">{report.pendingApproverName}</span>님께 결재 요청 중
+          </p>
+        </div>
+      )}
+
+      {/* 결재 버튼 — 선택된 결재자 or 관리자 */}
+      {(isAdmin || report.pendingApproverId === currentUser?.uid) && report.approvalStatus === 'pending' && (
         <div className="flex gap-3 px-4 py-3 border-t border-stone-200 dark:border-stone-800 shrink-0">
           <button onClick={onReject}
             className="flex-1 py-3 rounded-xl border-2 border-red-400 text-red-600 dark:text-red-400 font-black text-sm hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -443,14 +457,29 @@ export function ReportView({ currentUser }: Props) {
   const [detail, setDetail] = useState<Report | null>(null);
   const [editing, setEditing] = useState<(Partial<EditorState & { id: string }> & { id?: string }) | null>(null);
   const [saving, setSaving] = useState(false);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [approverPicker, setApproverPicker] = useState<Report | null>(null); // 결재자 선택 대상
+  const [approverSearch, setApproverSearch] = useState('');
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
-      const snap = isAdmin
-        ? await getDocs(query(collection(salesDb, 'reports'), orderBy('updatedAt', 'desc')))
-        : await getDocs(query(collection(salesDb, 'reports'), where('authorId', '==', currentUser.uid), orderBy('updatedAt', 'desc')));
-      setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
+      if (isAdmin) {
+        const snap = await getDocs(query(collection(salesDb, 'reports'), orderBy('updatedAt', 'desc')));
+        setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
+      } else {
+        // 내가 작성한 것 + 나에게 결재 요청된 것
+        const [mySnap, toMeSnap] = await Promise.all([
+          getDocs(query(collection(salesDb, 'reports'), where('authorId', '==', currentUser.uid), orderBy('updatedAt', 'desc'))),
+          getDocs(query(collection(salesDb, 'reports'), where('pendingApproverId', '==', currentUser.uid), orderBy('updatedAt', 'desc'))),
+        ]);
+        const map = new Map<string, Report>();
+        [...mySnap.docs, ...toMeSnap.docs].forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Report));
+        setReports([...map.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      }
+      // 직원 목록 (결재자 선택용)
+      const empSnap = await getDocs(query(collection(salesDb, 'employees'), orderBy('name')));
+      setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [isAdmin, currentUser.uid]);
@@ -502,48 +531,70 @@ export function ReportView({ currentUser }: Props) {
     finally { setSaving(false); }
   };
 
-  /* 결재 상신 */
-  const handleSubmit = async (report: Report) => {
-    const ok = await confirm({ title: '결재 상신', message: `"${report.title}"을 결재 상신하시겠습니까?`, confirmLabel: '상신' });
-    if (!ok) return;
-    await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'pending', submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    toast.success('결재 상신 완료');
-    fetchReports();
-    setDetail(null);
+  /* 결재 상신 — 결재자 선택 후 호출 */
+  const handleSubmit = async (report: Report, approverId: string, approverName: string) => {
+    try {
+      await updateDoc(doc(salesDb, 'reports', report.id), {
+        approvalStatus: 'pending',
+        pendingApproverId: approverId,
+        pendingApproverName: approverName,
+        submittedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success(`${approverName}님께 결재 상신 완료`);
+      fetchReports();
+      setDetail(null);
+    } catch (e: any) {
+      toast.error(`결재 상신 실패: ${e?.code === 'permission-denied' ? 'Firestore 권한 오류 — Firebase Console > salesDb 규칙에 reports 쓰기 허용 필요' : e?.message ?? '알 수 없는 오류'}`);
+    }
   };
 
   /* 승인 */
   const handleApprove = async (report: Report) => {
-    if (report.approvalStatus === 'draft') { handleSubmit(report); return; }
+    if (report.approvalStatus === 'draft') {
+      setApproverPicker(report); // 결재자 선택 모달 열기
+      setDetail(null);
+      return;
+    }
     const ok = await confirm({ title: '승인', message: `"${report.title}"을 승인하시겠습니까?`, confirmLabel: '승인' });
     if (!ok) return;
-    await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'approved', approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    toast.success('승인되었습니다');
-    fetchReports();
-    setDetail(null);
+    try {
+      await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'approved', approverId: currentUser.uid, approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      toast.success('승인되었습니다');
+      fetchReports();
+      setDetail(null);
+    } catch (e: any) {
+      toast.error(`승인 실패: ${e?.message ?? '오류'}`);
+    }
   };
 
   /* 반려 */
   const handleReject = async (report: Report) => {
     const ok = await confirm({ title: '반려', message: `"${report.title}"을 반려하시겠습니까?`, confirmLabel: '반려', variant: 'danger' });
     if (!ok) return;
-    await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'rejected', approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    toast.success('반려되었습니다');
-    fetchReports();
-    setDetail(null);
+    try {
+      await updateDoc(doc(salesDb, 'reports', report.id), { approvalStatus: 'rejected', approverId: currentUser.uid, approverName: currentUser.name, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      toast.success('반려되었습니다');
+      fetchReports();
+      setDetail(null);
+    } catch (e: any) {
+      toast.error(`반려 실패: ${e?.message ?? '오류'}`);
+    }
   };
 
   /* 삭제 */
   const handleDelete = async (report: Report) => {
-    const ok = await confirm({ title: '삭제', message: `"${report.title}"을 삭제하시겠습니까?`, confirmLabel: '삭제', variant: 'danger' });
+    const ok = await confirm({ title: '보고서 삭제', message: `"${report.title || '(제목 없음)'}"을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`, confirmLabel: '삭제', variant: 'danger' });
     if (!ok) return;
-    for (const url of report.photoUrls ?? []) {
-      try { await deleteObject(ref(storage, url)); } catch {}
+    try {
+      for (const url of report.photoUrls ?? []) {
+        try { await deleteObject(ref(storage, url)); } catch {}
+      }
+      await deleteDoc(doc(salesDb, 'reports', report.id));
+      setDetail(null);
+    } catch (e: any) {
+      toast.error(`삭제 실패: ${e?.message ?? '오류'}`);
     }
-    await deleteDoc(doc(salesDb, 'reports', report.id));
-    toast.success('삭제되었습니다');
-    fetchReports();
-    setDetail(null);
   };
 
   const filtered = reports.filter(r => filterStatus === 'all' || r.approvalStatus === filterStatus);
@@ -606,6 +657,7 @@ export function ReportView({ currentUser }: Props) {
           report={detail}
           isAdmin={isAdmin}
           isMe={detail.authorId === currentUser.uid}
+          currentUser={currentUser}
           onClose={() => setDetail(null)}
           onEdit={() => {
             setEditing({
@@ -620,6 +672,7 @@ export function ReportView({ currentUser }: Props) {
           }}
           onApprove={() => handleApprove(detail)}
           onReject={() => handleReject(detail)}
+          onDelete={() => handleDelete(detail)}
         />
       )}
 
@@ -631,6 +684,52 @@ export function ReportView({ currentUser }: Props) {
           onClose={() => setEditing(null)}
           saving={saving}
         />
+      )}
+
+      {/* 결재자 선택 모달 */}
+      {approverPicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-[100] p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-sm max-h-[70vh] flex flex-col border border-stone-200 dark:border-stone-700">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 dark:border-stone-800 shrink-0">
+              <p className="text-sm font-black text-stone-900 dark:text-white flex-1">결재자 선택</p>
+              <button onClick={() => { setApproverPicker(null); setApproverSearch(''); }} className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-300">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-4 py-2 border-b border-stone-100 dark:border-stone-800 shrink-0">
+              <input
+                value={approverSearch}
+                onChange={e => setApproverSearch(e.target.value)}
+                placeholder="이름으로 검색"
+                autoFocus
+                className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500"
+              />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {employees
+                .filter(e => e.isActive !== false && (approverSearch === '' || e.name.includes(approverSearch)))
+                .map(emp => (
+                  <button key={emp.id} onClick={async () => {
+                    const report = approverPicker;
+                    setApproverPicker(null);
+                    setApproverSearch('');
+                    await handleSubmit(report, emp.linkedUid ?? emp.id, emp.name);
+                  }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800 text-left transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-xs font-black text-stone-600 dark:text-stone-300 shrink-0">
+                      {emp.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-stone-900 dark:text-stone-100">{emp.name}</p>
+                      <p className="text-[11px] text-stone-400">{emp.position ?? ''} {emp.departmentId ? '' : ''}</p>
+                    </div>
+                  </button>
+                ))}
+              {employees.filter(e => e.isActive !== false && (approverSearch === '' || e.name.includes(approverSearch))).length === 0 && (
+                <p className="text-center text-stone-400 text-sm py-8">검색 결과 없음</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
