@@ -13,7 +13,7 @@ import { RecipeModal } from './components/RecipeModal';
 import { ArchiveView } from './components/ArchiveView';
 import { IngredientChangeView } from './components/IngredientChangeView';
 import { Auth, ChangePasswordModal } from './components/Auth';
-import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { PwaInstallBanner, PwaInstallButton } from './components/PwaInstallBanner';
 
 const DatabaseView = lazy(() => import('./components/DatabaseView').then(m => ({ default: m.DatabaseView })));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
@@ -1446,6 +1446,11 @@ export default function App() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* 앱 설치 버튼 */}
+        <div className="px-3 pb-1">
+          <PwaInstallButton collapsed={sidebarCollapsed && !isMobile} />
         </div>
 
         <div className="px-4 py-4 border-t-[3px] border-double border-stone-800 dark:border-stone-400 bg-stone-100 dark:bg-stone-950">
