@@ -26,6 +26,34 @@
 
 ---
 
+## 2026-06-01 (2) — Claude Code
+
+### 완료
+- 업무보고 명칭 변경: 오전 보고 → 출근 보고, 사이드바 "일일 업무보고" → "업무 보고"
+- 관리자 확인 버튼: 클릭 시 confirmedAt Firestore 저장, 이후 수정 완전 차단, "✓ 확인됨" 뱃지
+- 관리자 보고 팝업 알림: onSnapshot으로 오늘 출근/퇴근 보고 실시간 감지
+  - 모달 형태, [지금 확인 / 나중에 보기], 버튼 누를 때까지 유지, 다건 순차 표시
+- 업무보고 UX 개선: "폼에 추가" 방식(Firestore 저장 없이 폼에만 추가), 오전/퇴근 수정 버튼
+- 주간보고 지난주 미완료 이월 배너 + "이번 주로 가져오기"
+- toISOString() UTC 날짜 버그 전면 수정 (6개 파일, 한국 오전 9시 이전 날짜 오류)
+- 보고서 목록 max-w-xl 너비 제한
+- App.tsx useRef import 누락 수정
+- 번들 lazy import: 메인 2,330KB → 828KB (64% 감소)
+- CompanyCalendar window.prompt → 인라인 반려 사유 모달
+
+### 미완 / 진행 중
+- salesDb Firestore 보안 규칙 업데이트 (tasks 등 신규 컬렉션 쓰기 허용)
+
+### 다음에 이어할 것
+1. salesDb 보안 규칙: tasks, notices, daily_reports, leave_requests, calendar_events 컬렉션 쓰기 명시
+2. ScheduleCalendar.tsx — 사용자가 열어둔 파일 (작업 의도 미확인)
+
+### 주의
+- 관리자 알림 onSnapshot: salesDb daily_reports 오늘 날짜 필터, admin만 구독
+- DailyReport.confirmedAt 새 필드 — 기존 Firestore 문서에는 없음 (undefined = 미확인 처리)
+
+---
+
 ## 2026-06-01 — Claude Code
 
 ### 완료
