@@ -63,17 +63,36 @@ const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactN
 function MorningForm({
   onSubmit,
   myId,
+  editItems,
+  pendingTaskTitles = [],
 }: {
   onSubmit: (items: string[]) => void;
   myId: string;
+  editItems?: string[];       // 수정 모드: 기존 항목 초기값
+  pendingTaskTitles?: string[]; // 업무 인박스에서 추가된 제목들
 }) {
-  const [items, setItems] = useState<string[]>(['', '']);
+  const [items, setItems] = useState<string[]>(editItems ?? ['', '']);
   const [carryItems, setCarryItems] = useState<DailyReportItem[]>([]);
   const [selectedCarry, setSelectedCarry] = useState<Set<number>>(new Set());
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const processedCount = useRef(0);
 
-  // 어제 미완료 항목 로드 (읽기 전용 — 기존 데이터 수정 없음)
+  // 업무 인박스에서 추가된 항목 동기화
   useEffect(() => {
+    const newCount = pendingTaskTitles.length;
+    if (newCount > processedCount.current) {
+      const newTitles = pendingTaskTitles.slice(processedCount.current);
+      setItems(p => {
+        const withoutTrailingEmpty = p[p.length - 1]?.trim() === '' ? p.slice(0, -1) : p;
+        return [...withoutTrailingEmpty, ...newTitles, ''];
+      });
+      processedCount.current = newCount;
+    }
+  }, [pendingTaskTitles.length]);
+
+  // 어제 미완료 항목 로드 — 수정 모드에서는 스킵
+  useEffect(() => {
+    if (editItems) return;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const ymd = toYMD(yesterday);
@@ -84,7 +103,6 @@ function MorningForm({
         if (evening) {
           const incomplete = evening.items.filter(it => it.status === 'incomplete');
           setCarryItems(incomplete);
-          // 기본으로 전체 선택
           setSelectedCarry(new Set(incomplete.map((_, i) => i)));
         }
       }).catch(() => {});
@@ -248,7 +266,7 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
 }
 
 /* ── 보고서 카드 (완료된 보고) ─────────────────────────── */
-function ReportCard({ report, showName = false }: { report: DailyReport; showName?: boolean }) {
+function ReportCard({ report, showName = false, onEdit }: { report: DailyReport; showName?: boolean; onEdit?: () => void }) {
   const [open, setOpen] = useState(false);
   const doneCount = report.items.filter(it => it.status === 'done').length;
   const total = report.items.length;
@@ -271,6 +289,12 @@ function ReportCard({ report, showName = false }: { report: DailyReport; showNam
           </span>
         )}
         <ChevronDown size={13} className={`text-stone-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
+        {onEdit && (
+          <button onClick={e => { e.stopPropagation(); onEdit(); }}
+            className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 px-2 py-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0">
+            수정
+          </button>
+        )}
       </button>
 
       {open && (
@@ -315,6 +339,10 @@ export function DailyReportView({ currentUser }: Props) {
   ]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'my' | 'weekly' | 'feed' | 'team'>('my');
+  const [isEditingMorning, setIsEditingMorning] = useState(false);
+  const [isEditingEvening, setIsEditingEvening] = useState(false);
+  const [pendingTaskTitles, setPendingTaskTitles] = useState<string[]>([]);
+  const [weeklyCarryItems, setWeeklyCarryItems] = useState<WeeklyReportItem[]>([]);
 
   /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
   const myId = myEmployee?.id ?? currentUser.uid;
@@ -349,6 +377,20 @@ export function DailyReportView({ currentUser }: Props) {
       const myW = me ? wReports.find(r => r.employeeId === me.id) ?? null : null;
       setMyWeekly(myW);
       if (myW) setWeeklyForm(myW.items.length >= 4 ? myW.items : [...myW.items, ...Array(4 - myW.items.length).fill({ title: '', status: 'planned' })]);
+
+      // 지난주 미완료 이월 — 이번 주 보고 없을 때만
+      if (!myW && me) {
+        const prevWeekBounds = getWeekBounds(new Date(Date.now() - 7 * 86400000));
+        const prevSnap = await getDocs(
+          query(collection(salesDb, 'weekly_reports'), where('weekStart', '==', prevWeekBounds.weekStart), where('employeeId', '==', me.id))
+        );
+        if (prevSnap.docs[0]) {
+          const prev = prevSnap.docs[0].data() as WeeklyReport;
+          setWeeklyCarryItems(prev.items.filter(it => it.status === 'planned' || it.status === 'in_progress'));
+        }
+      } else {
+        setWeeklyCarryItems([]);
+      }
 
       // 내 업무 태스크
       const myId = me?.id ?? currentUser.uid;
@@ -392,66 +434,63 @@ export function DailyReportView({ currentUser }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  /* 오전 보고 제출 */
+  /* 오전 보고 제출 / 수정 */
   const submitMorning = async (texts: string[]) => {
-    const empId = myEmployee?.id ?? currentUser.uid;
-    const id = genId();
-    const report: DailyReport = {
-      id, employeeId: empId, employeeName: currentUser.name,
-      departmentId: myEmployee?.departmentId ?? '',
-      date, type: 'morning',
-      items: texts.map(text => ({ text, status: 'pending' })),
-      submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    };
-    await setDoc(doc(salesDb, 'daily_reports', id), report);
-    toast.success('오전 업무보고 완료');
-    fetchData();
-  };
-
-  /* 퇴근 보고 제출 */
-  const submitEvening = async (items: DailyReportItem[]) => {
-    if (!myMorning) return;
-    const id = genId();
-    const report: DailyReport = {
-      id, employeeId: myMorning.employeeId, employeeName: myMorning.employeeName,
-      departmentId: myMorning.departmentId,
-      date, type: 'evening', items,
-      submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    };
-    await setDoc(doc(salesDb, 'daily_reports', id), report);
-    // 오전 보고 상태도 업데이트
-    await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-      items, updatedAt: new Date().toISOString(),
-    });
-    toast.success('퇴근 보고 완료');
-    fetchData();
-  };
-
-  /* 업무 태스크 → 오전 보고에 추가 (없으면 자동 생성) */
-  const addTaskToDaily = async (task: Task) => {
-    if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
-    const newItem = { text: task.title, status: 'pending' as DailyItemStatus };
-    let morningId = myMorning?.id;
-    if (!myMorning) {
+    const newItems = texts.map(text => ({ text, status: 'pending' as DailyItemStatus }));
+    if (isEditingMorning && myMorning) {
+      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+        items: newItems, updatedAt: new Date().toISOString(),
+      });
+      setIsEditingMorning(false);
+      toast.success('오전 보고가 수정되었습니다');
+    } else {
       const id = genId();
-      morningId = id;
       await setDoc(doc(salesDb, 'daily_reports', id), {
-        id, employeeId: myId, employeeName: currentUser.name,
+        id, employeeId: myEmployee?.id ?? currentUser.uid, employeeName: currentUser.name,
         departmentId: myEmployee?.departmentId ?? '',
-        date, type: 'morning',
-        items: [newItem],
+        date, type: 'morning', items: newItems,
         submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
-    } else {
-      await updateDoc(doc(salesDb, 'daily_reports', morningId!), {
-        items: [...myMorning.items, newItem], updatedAt: new Date().toISOString(),
-      });
+      toast.success('오전 업무보고 완료');
     }
-    await updateDoc(doc(salesDb, 'tasks', task.id), {
-      addedToDailyDate: date, status: 'in_progress', updatedAt: new Date().toISOString(),
-    });
-    toast.success('오늘 업무보고에 추가되었습니다');
+    setPendingTaskTitles([]);
     fetchData();
+  };
+
+  /* 퇴근 보고 제출 / 수정 */
+  const submitEvening = async (items: DailyReportItem[]) => {
+    if (!myMorning) return;
+    if (isEditingEvening && myEvening) {
+      await updateDoc(doc(salesDb, 'daily_reports', myEvening.id), {
+        items, updatedAt: new Date().toISOString(),
+      });
+      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+        items, updatedAt: new Date().toISOString(),
+      });
+      setIsEditingEvening(false);
+      toast.success('퇴근 보고가 수정되었습니다');
+    } else {
+      const id = genId();
+      await setDoc(doc(salesDb, 'daily_reports', id), {
+        id, employeeId: myMorning.employeeId, employeeName: myMorning.employeeName,
+        departmentId: myMorning.departmentId,
+        date, type: 'evening', items,
+        submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+        items, updatedAt: new Date().toISOString(),
+      });
+      toast.success('퇴근 보고 완료');
+    }
+    fetchData();
+  };
+
+  /* 업무 인박스 → 오전 보고 폼에 항목 추가 (Firestore 저장 안 함) */
+  const addTaskToMorning = (task: Task) => {
+    if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
+    if (myMorning && !isEditingMorning) setIsEditingMorning(true);
+    setPendingTaskTitles(prev => [...prev, task.title]);
+    toast.success(`"${task.title.slice(0, 15)}${task.title.length > 15 ? '…' : ''}" 보고 폼에 추가됐습니다`);
   };
 
   /* 주간보고 제출/수정 */
@@ -543,6 +582,35 @@ export function DailyReportView({ currentUser }: Props) {
       ) : tab === 'weekly' ? (
         /* ── 주간보고 탭 ── */
         <div className="max-w-xl">
+          {/* 지난주 미완료 이월 배너 */}
+          {weeklyCarryItems.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                  <XCircle size={12} /> 지난주 미완료 {weeklyCarryItems.length}건
+                </p>
+                <button onClick={() => {
+                  setWeeklyForm(prev => {
+                    const carry = weeklyCarryItems.map(it => ({ ...it, status: 'in_progress' as WeeklyReportItem['status'] }));
+                    const existing = prev.filter(it => it.title.trim());
+                    const blank = Array(Math.max(0, 4 - carry.length - existing.length)).fill({ title: '', status: 'planned' });
+                    return [...carry, ...existing, ...blank].slice(0, Math.max(carry.length + existing.length + 1, 4));
+                  });
+                  setWeeklyCarryItems([]);
+                }} className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline">
+                  이번 주로 가져오기
+                </button>
+              </div>
+              <div className="space-y-1">
+                {weeklyCarryItems.map((it, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${WEEK_STATUS_CLS[it.status]}`}>{WEEK_STATUS_LABELS[it.status]}</span>
+                    <span className="truncate">{it.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden mb-4">
             <div className="px-6 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
               <div>
@@ -663,11 +731,11 @@ export function DailyReportView({ currentUser }: Props) {
                         </p>
                       </div>
                       <button
-                        onClick={() => addTaskToDaily({ id: `sch_${i}`, title: `${evt.storeName} ${evt.label} (${evt.date})`, status: 'pending', sourceType: 'manual', assigneeId: myId, assigneeName: currentUser.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Task)}
+                        onClick={() => addTaskToMorning({ id: `sch_${i}`, title: `${evt.storeName} ${evt.label} (${evt.date})`, status: 'pending', sourceType: 'manual', assigneeId: myId, assigneeName: currentUser.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Task)}
                         disabled={!isToday}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-orange-500 text-white rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
                       >
-                        <ArrowRight size={10} /> 추가
+                        <ArrowRight size={10} /> 폼에 추가
                       </button>
                     </div>
                   );
@@ -709,11 +777,11 @@ export function DailyReportView({ currentUser }: Props) {
                       </div>
                     </div>
                     <button
-                      onClick={() => addTaskToDaily(task)}
+                      onClick={() => addTaskToMorning(task)}
                       disabled={!isToday}
                       className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
                     >
-                      <ArrowRight size={10} /> 오늘 추가
+                      <ArrowRight size={10} /> 폼에 추가
                     </button>
                   </div>
                 ))}
@@ -729,20 +797,28 @@ export function DailyReportView({ currentUser }: Props) {
           )}
 
           {/* 오전 보고 */}
-          {!myMorning ? (
-            isToday ? <MorningForm onSubmit={submitMorning} myId={myId} /> : (
+          {(!myMorning || isEditingMorning) ? (
+            isToday ? (
+              <MorningForm
+                key={isEditingMorning ? 'edit' : 'new'}
+                onSubmit={submitMorning}
+                myId={myId}
+                editItems={isEditingMorning ? myMorning?.items.map(i => i.text) : undefined}
+                pendingTaskTitles={pendingTaskTitles}
+              />
+            ) : (
               <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
             )
           ) : (
             <>
-              <ReportCard report={myMorning} />
+              <ReportCard report={myMorning} onEdit={isToday ? () => setIsEditingMorning(true) : undefined} />
               {/* 퇴근 보고 */}
-              {!myEvening ? (
-                isToday ? <EveningForm morning={myMorning} onSubmit={submitEvening} /> : (
+              {(!myEvening || isEditingEvening) ? (
+                isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
                   <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
                 )
               ) : (
-                <ReportCard report={myEvening} />
+                <ReportCard report={myEvening} onEdit={isToday ? () => setIsEditingEvening(true) : undefined} />
               )}
             </>
           )}
