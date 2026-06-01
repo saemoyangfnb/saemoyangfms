@@ -208,9 +208,9 @@ function ReportDetail({
       {/* 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-5 py-5 space-y-5 max-w-2xl mx-auto">
-        {/* 사진 — 1/3 너비 */}
+        {/* 사진 — 중앙 정렬 */}
         {(report.photoUrls ?? []).length > 0 && (
-          <div className="w-1/3 min-w-[120px] max-w-[200px]">
+          <div className="max-w-[280px] mx-auto">
             <PhotoCarousel urls={report.photoUrls!} />
           </div>
         )}
@@ -591,9 +591,11 @@ export function ReportView({ currentUser }: Props) {
         try { await deleteObject(ref(storage, url)); } catch {}
       }
       await deleteDoc(doc(salesDb, 'reports', report.id));
+      toast.success('삭제되었습니다');
+      fetchReports();
       setDetail(null);
     } catch (e: any) {
-      toast.error(`삭제 실패: ${e?.message ?? '오류'}`);
+      toast.error(`삭제 실패: ${e?.code === 'permission-denied' ? 'Firestore 권한 오류' : e?.message ?? '오류'}`);
     }
   };
 
