@@ -531,7 +531,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     if (myMorning?.confirmedAt) { toast.error('관리자가 확인한 보고서는 수정할 수 없습니다'); return; }
     if (myMorning && !isEditingMorning) setIsEditingMorning(true);
     setPendingTaskTitles(prev => [...prev, task.title]);
-    toast.success(`"${task.title.slice(0, 15)}${task.title.length > 15 ? '…' : ''}" 보고 폼에 추가됐습니다`);
+    setMyTasks(prev => prev.filter(t => t.id !== task.id)); // 인박스에서 즉시 제거
   };
 
   /* 업무 반려 */
@@ -845,34 +845,13 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                           <ArrowRight size={10} /> 추가
                         </button>
                         <button
-                          onClick={() => { setRejectingTaskId(task.id); setRejectNote(''); }}
+                          onClick={() => rejectTask(task, '')}
                           className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40"
                         >
-                          <X size={10} /> 반려
+                          <X size={10} /> {task.requesterName && task.requesterName !== task.assigneeName ? '반려' : '취소'}
                         </button>
                       </div>
                     </div>
-                    {/* 인라인 반려 사유 입력 */}
-                    {rejectingTaskId === task.id && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <input
-                          value={rejectNote}
-                          onChange={e => setRejectNote(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && rejectTask(task, rejectNote)}
-                          placeholder="반려 사유 (선택, Enter로 확인)"
-                          autoFocus
-                          className="flex-1 px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-red-400"
-                        />
-                        <button onClick={() => rejectTask(task, rejectNote)}
-                          className="px-2.5 py-1.5 text-[11px] font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 shrink-0">
-                          확인
-                        </button>
-                        <button onClick={() => setRejectingTaskId(null)}
-                          className="px-2 py-1.5 text-[11px] text-stone-400 hover:text-stone-600 shrink-0">
-                          취소
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
