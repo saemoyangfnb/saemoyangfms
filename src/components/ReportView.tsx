@@ -68,7 +68,7 @@ function PhotoCarousel({ urls, small }: { urls: string[]; small?: boolean }) {
 
   const imgCls = small
     ? 'w-full h-28 object-cover'
-    : 'w-full max-h-52 object-cover';
+    : 'w-full aspect-[3/4] object-cover';
 
   return (
     <>
@@ -202,10 +202,13 @@ function ReportDetail({
 
       {/* 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto">
-        {/* 사진 */}
-        {(report.photoUrls ?? []).length > 0 && <PhotoCarousel urls={report.photoUrls!} />}
-
         <div className="px-5 py-5 space-y-5 max-w-2xl mx-auto">
+        {/* 사진 — 1/3 너비 */}
+        {(report.photoUrls ?? []).length > 0 && (
+          <div className="w-1/3 min-w-[120px] max-w-[200px]">
+            <PhotoCarousel urls={report.photoUrls!} />
+          </div>
+        )}
           {/* 메타 */}
           <div className="flex flex-wrap gap-2">
             <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${TYPE_CLS[report.type]}`}>{report.type}</span>
@@ -547,7 +550,7 @@ export function ReportView({ currentUser }: Props) {
   const pendingCount = reports.filter(r => r.approvalStatus === 'pending').length;
 
   return (
-    <div className="relative min-h-[70vh] max-w-xl">
+    <div className="relative min-h-[70vh] max-w-xl mx-auto">
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-black text-stone-900 dark:text-stone-100 flex-1">보고서</h1>

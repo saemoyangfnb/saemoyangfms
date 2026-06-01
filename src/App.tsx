@@ -1558,7 +1558,7 @@ export default function App() {
 
           {/* 일일 업무보고 */}
           {sidebar.section === 'daily' && (
-            <DailyReportView currentUser={currentUser} />
+            <DailyReportView currentUser={currentUser} onNavigateToReports={() => navigateTo(null, 'reports')} />
           )}
 
           {/* 캘린더 */}

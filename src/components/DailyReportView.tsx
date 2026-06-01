@@ -266,11 +266,12 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
 }
 
 /* ── 보고서 카드 (완료된 보고) ─────────────────────────── */
-function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin }: {
+function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCreateReport }: {
   report: DailyReport; showName?: boolean;
   onEdit?: () => void;
   onConfirm?: () => void;
   isAdmin?: boolean;
+  onCreateReport?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const doneCount = report.items.filter(it => it.status === 'done').length;
@@ -327,6 +328,14 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin }: {
               {it.note && <p className="ml-10 text-[11px] text-stone-400 mt-0.5">{it.note}</p>}
             </div>
           ))}
+          {onCreateReport && (
+            <div className="pt-2 border-t border-stone-100 dark:border-stone-800">
+              <button onClick={onCreateReport}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                <FileText size={11} /> 보고서로 작성하기 (선택)
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -334,9 +343,9 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin }: {
 }
 
 /* ── 메인 컴포넌트 ──────────────────────────────────────── */
-interface Props { currentUser: User }
+interface Props { currentUser: User; onNavigateToReports?: () => void }
 
-export function DailyReportView({ currentUser }: Props) {
+export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const toast = useToast();
   const isAdmin = currentUser.role === 'admin';
 
@@ -841,14 +850,14 @@ export function DailyReportView({ currentUser }: Props) {
             )
           ) : (
             <>
-              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} />
+              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
                 isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
                   <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
                 )
               ) : (
-                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} />
+                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports} />
               )}
             </>
           )}
