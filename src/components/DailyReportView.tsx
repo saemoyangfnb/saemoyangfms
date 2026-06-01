@@ -7,7 +7,7 @@ import {
 import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
 import { FeedView } from './FeedView';
-import { shareDailyReport } from '../utils/kakao';
+import { shareDailyReport, shareWeeklyReport } from '../utils/kakao';
 import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
@@ -372,7 +372,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const [weeklyCarryItems, setWeeklyCarryItems] = useState<WeeklyReportItem[]>([]);
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [kakaoTarget, setKakaoTarget] = useState<{ type: 'morning' | 'evening'; items: string[] } | null>(null);
+  const [kakaoTarget, setKakaoTarget] = useState<{ type: 'morning' | 'evening' | 'weekly'; items: string[]; weekStart?: string; weekEnd?: string } | null>(null);
 
   /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
   const myId = myEmployee?.id ?? currentUser.uid;
@@ -572,6 +572,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     };
     await setDoc(doc(salesDb, 'weekly_reports', id), report);
     toast.success(myWeekly ? '주간보고가 수정되었습니다' : '주간보고가 제출되었습니다');
+    if (!myWeekly) setKakaoTarget({ type: 'weekly', items: filled.map(it => it.title), weekStart, weekEnd });
     fetchData();
   };
 
@@ -990,7 +991,9 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center shrink-0 text-xl">💬</div>
               <div>
-                <p className="text-sm font-black text-stone-900 dark:text-white">{kakaoTarget.type === 'morning' ? '출근' : '퇴근'} 보고 완료</p>
+                <p className="text-sm font-black text-stone-900 dark:text-white">
+                  {kakaoTarget.type === 'morning' ? '출근' : kakaoTarget.type === 'evening' ? '퇴근' : '주간'} 보고 완료
+                </p>
                 <p className="text-[11px] text-stone-400">카톡으로 공유하시겠어요?</p>
               </div>
             </div>
@@ -1001,7 +1004,14 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
               {kakaoTarget.items.length > 5 && <p className="text-[10px] text-stone-400">외 {kakaoTarget.items.length - 5}건</p>}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type, items: kakaoTarget.items }); setKakaoTarget(null); }}
+              <button onClick={() => {
+                if (kakaoTarget.type === 'weekly') {
+                  shareWeeklyReport({ name: currentUser.name, weekStart: kakaoTarget.weekStart!, weekEnd: kakaoTarget.weekEnd!, items: kakaoTarget.items.map(t => ({ title: t, status: 'in_progress' })) });
+                } else {
+                  shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type as 'morning' | 'evening', items: kakaoTarget.items });
+                }
+                setKakaoTarget(null);
+              }}
                 className="flex-1 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-stone-900 text-sm font-black rounded-xl flex items-center justify-center gap-2">
                 <span>💬</span> 카톡 공유
               </button>
