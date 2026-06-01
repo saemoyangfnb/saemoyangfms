@@ -547,7 +547,7 @@ export function ReportView({ currentUser }: Props) {
   const pendingCount = reports.filter(r => r.approvalStatus === 'pending').length;
 
   return (
-    <div className="relative min-h-[70vh]">
+    <div className="relative min-h-[70vh] max-w-xl">
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-black text-stone-900 dark:text-stone-100 flex-1">보고서</h1>
