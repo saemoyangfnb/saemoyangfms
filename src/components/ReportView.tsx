@@ -8,6 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { User, Report, ReportSection, ReportType, ApprovalStatus, Employee } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
+import { shareApprovalRequest } from '../utils/kakao';
 import {
   Plus, X, ChevronLeft, ChevronRight, Camera, Trash2,
   CheckCircle, XCircle, Clock, Send, Edit2, RefreshCw,
@@ -469,7 +470,8 @@ export function ReportView({ currentUser }: Props) {
   const [editing, setEditing] = useState<(Partial<EditorState & { id: string }> & { id?: string }) | null>(null);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [approverPicker, setApproverPicker] = useState<Report | null>(null); // 결재자 선택 대상
+  const [approverPicker, setApproverPicker] = useState<Report | null>(null);
+  const [kakaoShareTarget, setKakaoShareTarget] = useState<{ reportTitle: string; approverName: string } | null>(null); // 결재자 선택 대상
   const [approverSearch, setApproverSearch] = useState('');
 
   const fetchReports = useCallback(async () => {
@@ -553,6 +555,7 @@ export function ReportView({ currentUser }: Props) {
         updatedAt: new Date().toISOString(),
       });
       toast.success(`${approverName}님께 결재 상신 완료`);
+      setKakaoShareTarget({ reportTitle: report.title, approverName });
       fetchReports();
       setDetail(null);
     } catch (e: any) {
@@ -738,6 +741,39 @@ export function ReportView({ currentUser }: Props) {
               {employees.filter(e => e.isActive !== false && (approverSearch === '' || e.name.includes(approverSearch))).length === 0 && (
                 <p className="text-center text-stone-400 text-sm py-8">검색 결과 없음</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결재 상신 후 카톡 공유 제안 */}
+      {kakaoShareTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150] p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-stone-200 dark:border-stone-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center shrink-0 text-xl">💬</div>
+              <div>
+                <p className="text-sm font-black text-stone-900 dark:text-white">결재 상신 완료</p>
+                <p className="text-[11px] text-stone-400">{kakaoShareTarget.approverName}님께 카톡으로 알릴까요?</p>
+              </div>
+            </div>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-5 bg-stone-50 dark:bg-stone-800 rounded-xl px-4 py-3 leading-relaxed">
+              <span className="font-bold text-stone-700 dark:text-stone-300">"{kakaoShareTarget.reportTitle}"</span><br />
+              결재를 요청드립니다. 검토 후 승인/반려 부탁드립니다.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  shareApprovalRequest({ submitterName: currentUser.name, reportTitle: kakaoShareTarget.reportTitle, approverName: kakaoShareTarget.approverName });
+                  setKakaoShareTarget(null);
+                }}
+                className="flex-1 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-stone-900 text-sm font-black rounded-xl flex items-center justify-center gap-2">
+                <span>💬</span> 카톡으로 알리기
+              </button>
+              <button onClick={() => setKakaoShareTarget(null)}
+                className="flex-1 py-2.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 text-sm font-bold rounded-xl hover:opacity-80">
+                나중에
+              </button>
             </div>
           </div>
         </div>

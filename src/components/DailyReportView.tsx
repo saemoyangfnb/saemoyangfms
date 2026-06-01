@@ -7,6 +7,7 @@ import {
 import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Department, Task, WeeklyReport, WeeklyReportItem, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
 import { FeedView } from './FeedView';
+import { shareDailyReport } from '../utils/kakao';
 import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText } from 'lucide-react';
 
 /* ── 상수 ─────────────────────────────────────────────── */
@@ -371,6 +372,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const [weeklyCarryItems, setWeeklyCarryItems] = useState<WeeklyReportItem[]>([]);
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+  const [kakaoTarget, setKakaoTarget] = useState<{ type: 'morning' | 'evening'; items: string[] } | null>(null);
 
   /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
   const myId = myEmployee?.id ?? currentUser.uid;
@@ -480,6 +482,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
       toast.success('출근 보고 완료');
+      setKakaoTarget({ type: 'morning', items: texts });
     }
     setPendingTaskTitles([]);
     fetchData();
@@ -509,6 +512,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         items, updatedAt: new Date().toISOString(),
       });
       toast.success('퇴근 보고 완료');
+      setKakaoTarget({ type: 'evening', items: items.map(i => i.text) });
     }
     fetchData();
   };
@@ -976,6 +980,37 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
               );
             })
           )}
+        </div>
+      )}
+
+      {/* 보고 후 카톡 공유 제안 */}
+      {kakaoTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150] p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-stone-200 dark:border-stone-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center shrink-0 text-xl">💬</div>
+              <div>
+                <p className="text-sm font-black text-stone-900 dark:text-white">{kakaoTarget.type === 'morning' ? '출근' : '퇴근'} 보고 완료</p>
+                <p className="text-[11px] text-stone-400">카톡으로 공유하시겠어요?</p>
+              </div>
+            </div>
+            <div className="bg-stone-50 dark:bg-stone-800 rounded-xl px-4 py-3 mb-5 space-y-1 max-h-32 overflow-y-auto">
+              {kakaoTarget.items.slice(0, 5).map((t, i) => (
+                <p key={i} className="text-xs text-stone-600 dark:text-stone-300">{i + 1}. {t}</p>
+              ))}
+              {kakaoTarget.items.length > 5 && <p className="text-[10px] text-stone-400">외 {kakaoTarget.items.length - 5}건</p>}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type, items: kakaoTarget.items }); setKakaoTarget(null); }}
+                className="flex-1 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-stone-900 text-sm font-black rounded-xl flex items-center justify-center gap-2">
+                <span>💬</span> 카톡 공유
+              </button>
+              <button onClick={() => setKakaoTarget(null)}
+                className="flex-1 py-2.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 text-sm font-bold rounded-xl hover:opacity-80">
+                닫기
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
