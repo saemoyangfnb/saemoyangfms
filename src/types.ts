@@ -520,7 +520,7 @@ export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected';
 // 업무 태스크 (salesDb: tasks)
 // 회의 안건 → 개인/협업 업무로 전환
 // ==========================================
-export type TaskStatus = 'pending' | 'in_progress' | 'done';
+export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'rejected';
 export type TaskSourceType = 'meeting' | 'request' | 'manual';
 
 export interface Task {
@@ -538,6 +538,7 @@ export interface Task {
   collaboratorNames?: string[];
   dueDate?: string;             // YYYY-MM-DD
   status: TaskStatus;
+  rejectionNote?: string;       // 반려 사유
   addedToDailyDate?: string;    // 일일 보고에 추가된 날짜
   createdAt: string;
   updatedAt: string;

@@ -369,6 +369,8 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const [isEditingEvening, setIsEditingEvening] = useState(false);
   const [pendingTaskTitles, setPendingTaskTitles] = useState<string[]>([]);
   const [weeklyCarryItems, setWeeklyCarryItems] = useState<WeeklyReportItem[]>([]);
+  const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
 
   /* 오늘 내 보고서 — employee 미연결 시 uid로도 탐색 */
   const myId = myEmployee?.id ?? currentUser.uid;
@@ -530,6 +532,24 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     if (myMorning && !isEditingMorning) setIsEditingMorning(true);
     setPendingTaskTitles(prev => [...prev, task.title]);
     toast.success(`"${task.title.slice(0, 15)}${task.title.length > 15 ? '…' : ''}" 보고 폼에 추가됐습니다`);
+  };
+
+  /* 업무 반려 */
+  const rejectTask = async (task: Task, note: string) => {
+    try {
+      await updateDoc(doc(salesDb, 'tasks', task.id), {
+        status: 'rejected',
+        rejectionNote: note.trim() || '',
+        updatedAt: new Date().toISOString(),
+      });
+      setMyTasks(prev => prev.filter(t => t.id !== task.id));
+      toast.success(`"${task.title.slice(0, 15)}${task.title.length > 15 ? '…' : ''}" 반려됨`);
+    } catch (e: any) {
+      toast.error(`반려 실패: ${e?.message ?? '오류'}`);
+    } finally {
+      setRejectingTaskId(null);
+      setRejectNote('');
+    }
   };
 
   /* 주간보고 제출/수정 */
@@ -793,35 +813,66 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
               </div>
               <div className="divide-y divide-stone-100 dark:divide-stone-800">
                 {myTasks.map(task => (
-                  <div key={task.id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {task.sourceAgendaTitle && (
-                          <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
-                            <Briefcase size={9} /> 회의 안건
-                          </span>
-                        )}
-                        {task.requesterName && task.requesterName !== task.assigneeName && (
-                          <span className="text-[10px] text-stone-400">from {task.requesterName}</span>
-                        )}
-                        {(task.collaboratorNames ?? []).length > 0 && (
-                          <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
-                            <AtSign size={9} /> {task.collaboratorNames!.join(', ')}
-                          </span>
-                        )}
-                        {task.dueDate && (
-                          <span className="text-[10px] text-red-400">~{task.dueDate}</span>
-                        )}
+                  <div key={task.id} className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{task.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {task.sourceAgendaTitle && (
+                            <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                              <Briefcase size={9} /> 회의 안건
+                            </span>
+                          )}
+                          {task.requesterName && task.requesterName !== task.assigneeName && (
+                            <span className="text-[10px] text-stone-400">from {task.requesterName}</span>
+                          )}
+                          {(task.collaboratorNames ?? []).length > 0 && (
+                            <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
+                              <AtSign size={9} /> {task.collaboratorNames!.join(', ')}
+                            </span>
+                          )}
+                          {task.dueDate && (
+                            <span className="text-[10px] text-red-400">~{task.dueDate}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => addTaskToMorning(task)}
+                          disabled={!isToday}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30"
+                        >
+                          <ArrowRight size={10} /> 추가
+                        </button>
+                        <button
+                          onClick={() => { setRejectingTaskId(task.id); setRejectNote(''); }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40"
+                        >
+                          <X size={10} /> 반려
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => addTaskToMorning(task)}
-                      disabled={!isToday}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30 shrink-0"
-                    >
-                      <ArrowRight size={10} /> 폼에 추가
-                    </button>
+                    {/* 인라인 반려 사유 입력 */}
+                    {rejectingTaskId === task.id && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          value={rejectNote}
+                          onChange={e => setRejectNote(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && rejectTask(task, rejectNote)}
+                          placeholder="반려 사유 (선택, Enter로 확인)"
+                          autoFocus
+                          className="flex-1 px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-red-400"
+                        />
+                        <button onClick={() => rejectTask(task, rejectNote)}
+                          className="px-2.5 py-1.5 text-[11px] font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 shrink-0">
+                          확인
+                        </button>
+                        <button onClick={() => setRejectingTaskId(null)}
+                          className="px-2 py-1.5 text-[11px] text-stone-400 hover:text-stone-600 shrink-0">
+                          취소
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
