@@ -23,7 +23,7 @@ function MVCView({ currentUser }: { currentUser: User }) {
       try {
         const snap = await getDocs(collection(salesDb, 'company_info'));
         const mvcDoc = snap.docs.find(d => d.id === 'mvc');
-        if (mvcDoc) setData(mvcDoc.data() as MVCDoc);
+        if (mvcDoc) setData({ values: [], ...mvcDoc.data() as MVCDoc });
       } catch {}
     })();
   }, []);
@@ -31,21 +31,25 @@ function MVCView({ currentUser }: { currentUser: User }) {
   useEffect(() => { setForm(data); }, [data]);
 
   const handleSave = async () => {
-    const updated = { ...form, updatedAt: ts() };
-    await setDoc(doc(salesDb, 'company_info', 'mvc'), updated);
-    setData(updated);
-    setEditing(false);
-    toast.success('저장됨');
+    const updated = { ...form, values: form.values ?? [], updatedAt: ts() };
+    try {
+      await setDoc(doc(salesDb, 'company_info', 'mvc'), updated);
+      setData(updated);
+      setEditing(false);
+      toast.success('저장됨');
+    } catch {
+      toast.error('저장 실패. Firestore 규칙을 확인해주세요.');
+    }
   };
 
   const addValue = () => {
     if (!newValue.trim()) return;
-    setForm(f => ({ ...f, values: [...f.values, newValue.trim()] }));
+    setForm(f => ({ ...f, values: [...(f.values ?? []), newValue.trim()] }));
     setNewValue('');
   };
 
   const removeValue = (i: number) =>
-    setForm(f => ({ ...f, values: f.values.filter((_, idx) => idx !== i) }));
+    setForm(f => ({ ...f, values: (f.values ?? []).filter((_, idx) => idx !== i) }));
 
   return (
     <div>
@@ -109,7 +113,7 @@ function MVCView({ currentUser }: { currentUser: User }) {
         </div>
       ) : (
         <div className="space-y-6">
-          {data.mission || data.vision || data.values.length > 0 ? (
+          {data.mission || data.vision || (data.values ?? []).length > 0 ? (
             <>
               {[
                 { label: 'Mission', value: data.mission },
@@ -120,11 +124,11 @@ function MVCView({ currentUser }: { currentUser: User }) {
                   <p className="text-sm text-stone-800 dark:text-stone-200 leading-relaxed whitespace-pre-wrap">{value}</p>
                 </div>
               ))}
-              {data.values.length > 0 && (
+              {(data.values ?? []).length > 0 && (
                 <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-5">
                   <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase mb-3">Core Values</p>
                   <div className="flex flex-wrap gap-2">
-                    {data.values.map((v, i) => (
+                    {(data.values ?? []).map((v, i) => (
                       <span key={i} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-sm font-bold rounded-sm">{v}</span>
                     ))}
                   </div>
