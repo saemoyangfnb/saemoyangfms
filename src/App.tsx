@@ -40,7 +40,8 @@ import {
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
-  CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen
+  CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
+  Flag, GitBranch, Building2, Target, FolderKanban,
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -57,7 +58,7 @@ enum OperationType {
 }
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1222,18 +1223,18 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto py-2">
 
-          {/* ── 인트라넷 ── */}
-          <div className="mx-2 space-y-0.5 mb-1 mt-1">
+          {/* ── 새모양에프엔비 ── */}
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="px-3 pt-2 pb-1">
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest">새모양에프엔비</p>
+            </div>
+          )}
+          <div className="mx-2 space-y-0.5 mb-1">
             {([
-              { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고',    primary: true },
-              { section: 'notice',    icon: <Megaphone size={14} />,     label: '공지사항',      primary: true },
-              { section: 'calendar',  icon: <Calendar size={14} />,      label: '캘린더',        primary: true },
-              { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록',        primary: true },
-              { section: 'reports',   icon: <ClipboardList size={14} />, label: '보고서',        primary: false },
-              { section: 'employees', icon: <Users size={14} />,         label: '직원 명부',     primary: false },
-              { section: 'sop',       icon: <BookOpen size={14} />,      label: '업무 규정',     primary: false },
-            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string; primary: boolean }[])
-              .filter(item => item.primary || showAllIntranet || ['reports','employees','sop'].includes(sidebar.section))
+              { section: 'mvc',             icon: <Flag size={14} />,      label: 'MVC' },
+              { section: 'brand_history',   icon: <GitBranch size={14} />, label: '브랜드 연혁' },
+              { section: 'company_profile', icon: <Building2 size={14} />, label: '회사 소개서' },
+            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[])
               .map(({ section, icon, label }) => (
                 <button
                   key={section}
@@ -1248,27 +1249,50 @@ export default function App() {
                   {(!sidebarCollapsed || isMobile) && label}
                 </button>
               ))}
-            {/* 더보기 토글 (펼침 모드에서만) */}
-            {(!sidebarCollapsed || isMobile) && !showAllIntranet && !['reports','employees','sop'].includes(sidebar.section) && (
-              <button
-                onClick={() => setShowAllIntranet(true)}
-                className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 border-l-[3px] border-transparent pl-2"
-              >
-                <ChevronDown size={12} /> 더보기
-              </button>
-            )}
-            {(!sidebarCollapsed || isMobile) && showAllIntranet && (
-              <button
-                onClick={() => setShowAllIntranet(false)}
-                className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 border-l-[3px] border-transparent pl-2"
-              >
-                <ChevronDown size={12} className="rotate-180" /> 접기
-              </button>
-            )}
           </div>
 
-          {/* ── 운영 브랜드 ── */}
+          {/* ── 운영 ── */}
           <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="px-3 pb-1">
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest">운영</p>
+            </div>
+          )}
+          <div className="mx-2 space-y-0.5 mb-1">
+            {([
+              { section: 'okr',       icon: <Target size={14} />,        label: 'OKR & KPI' },
+              { section: 'projects',  icon: <FolderKanban size={14} />,  label: '프로젝트' },
+              { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고' },
+              { section: 'calendar',  icon: <Calendar size={14} />,      label: '캘린더' },
+              { section: 'notice',    icon: <Megaphone size={14} />,     label: '공지사항' },
+              { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록' },
+              { section: 'sop',       icon: <BookOpen size={14} />,      label: '업무규정' },
+              { section: 'employees', icon: <Users size={14} />,         label: '팀/부서' },
+              { section: 'reports',   icon: <ClipboardList size={14} />, label: '결재보고센터' },
+            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[])
+              .map(({ section, icon, label }) => (
+                <button
+                  key={section}
+                  onClick={() => navigateAndCloseMobile(null, section)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
+                    sidebar.section === section
+                      ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                      : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                  }`}
+                >
+                  {icon}
+                  {(!sidebarCollapsed || isMobile) && label}
+                </button>
+              ))}
+          </div>
+
+          {/* ── 브랜드 ── */}
+          <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="px-3 pb-1">
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest">브랜드</p>
+            </div>
+          )}
 
           {[...brands].sort((a, b) => a.order - b.order).map(brand => {
             const isExpanded = expandedBrands.has(brand.id);
@@ -1404,7 +1428,7 @@ export default function App() {
           <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />
           {(!sidebarCollapsed || isMobile) && (
             <div className="px-3 mb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">운영 도구</p>
+              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">관리자 도구</p>
             </div>
           )}
           <div className="mx-2 space-y-0.5">
@@ -1557,6 +1581,37 @@ export default function App() {
 
           {/* 에이전트 팀 */}
           {sidebar.section === 'agents' && <AgentsDashboard />}
+
+          {/* 새모양에프엔비 섹션 (준비 중) */}
+          {(sidebar.section === 'mvc' || sidebar.section === 'brand_history' || sidebar.section === 'company_profile') && (
+            <div className="flex flex-col items-center justify-center py-32 text-center">
+              {sidebar.section === 'mvc' && <Flag size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
+              {sidebar.section === 'brand_history' && <GitBranch size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
+              {sidebar.section === 'company_profile' && <Building2 size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
+              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">
+                {sidebar.section === 'mvc' ? 'MVC' : sidebar.section === 'brand_history' ? '브랜드 연혁' : '회사 소개서'}
+              </h2>
+              <p className="text-sm text-stone-400">준비 중입니다.</p>
+            </div>
+          )}
+
+          {/* OKR & KPI (준비 중) */}
+          {sidebar.section === 'okr' && (
+            <div className="flex flex-col items-center justify-center py-32 text-center">
+              <Target size={48} className="text-stone-300 dark:text-stone-600 mb-4" />
+              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">OKR & KPI</h2>
+              <p className="text-sm text-stone-400">준비 중입니다.</p>
+            </div>
+          )}
+
+          {/* 프로젝트 (준비 중) */}
+          {sidebar.section === 'projects' && (
+            <div className="flex flex-col items-center justify-center py-32 text-center">
+              <FolderKanban size={48} className="text-stone-300 dark:text-stone-600 mb-4" />
+              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">프로젝트</h2>
+              <p className="text-sm text-stone-400">준비 중입니다.</p>
+            </div>
+          )}
 
           {/* 회의록 */}
           {sidebar.section === 'meetings' && (

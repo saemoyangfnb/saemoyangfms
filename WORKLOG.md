@@ -26,6 +26,28 @@
 
 ---
 
+## 2026-06-02 (2) — Claude Code
+
+### 완료
+- 사이드바 전면 개편 P1: 3그룹 구조로 재편
+  - 새모양에프엔비 (MVC / 브랜드 연혁 / 회사 소개서)
+  - 운영 (OKR & KPI / 프로젝트 / 업무보고 / 캘린더 / 공지사항 / 회의록 / 업무규정 / 팀·부서 / 결재보고센터)
+  - 브랜드 / 관리자 도구
+- types.ts: SidebarSection·PERMISSION_SECTIONS·SECTION_LABELS 3곳 모두 신규 섹션 추가
+- App.tsx: 로컬 SidebarSection 확장, 아이콘 5개 추가(Flag·GitBranch·Building2·Target·FolderKanban)
+- 신규 섹션 플레이스홀더(mvc/brand_history/company_profile/okr/projects) 추가
+- 기획 문서 PROJECTS_PLAN.md 작성·완성 (결정사항 전부 확정)
+
+### 다음에 이어할 것
+- P2: 프로젝트 기능 구현 (ProjectsView, ProjectDetailView, 칸반 보드)
+- P3: OKR, 새모양에프엔비 섹션 콘텐츠 구현
+
+### 주의
+- "더보기/접기" 토글 제거 — showAllIntranet 상태는 선언만 남아있음(unused), 향후 정리 가능
+- 신규 섹션은 모두 기본 'edit' 권한 (BRAND_RESTRICTED 아님) — 관리자 패널에서 개별 제한 가능
+
+---
+
 ## 2026-06-02 — Claude Code
 
 ### 완료

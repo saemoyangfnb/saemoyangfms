@@ -12,11 +12,14 @@ export enum OperationType {
 export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
 export type SidebarSection =
   | 'home'
-  // 인트라넷
+  // 새모양에프엔비
+  | 'mvc' | 'brand_history' | 'company_profile'
+  // 운영
+  | 'okr' | 'projects'
   | 'daily' | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees' | 'sop'
   // 브랜드별
   | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'marketing'
-  // 운영 도구
+  // 관리자 도구
   | 'database' | 'history' | 'admin'
   // (레거시, UI에 미노출)
   | 'agents';
@@ -54,6 +57,8 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
   'home',
+  'mvc', 'brand_history', 'company_profile',
+  'okr', 'projects',
   'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees', 'sop',
   'cost', 'sales', 'franchise', 'stores', 'marketing', 'review',
   'database', 'history', 'admin',
@@ -62,12 +67,18 @@ export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
 export const SECTION_LABELS: Record<PermissionSection, string> = {
   home: '홈',
+  mvc: 'MVC',
+  brand_history: '브랜드 연혁',
+  company_profile: '회사 소개서',
+  okr: 'OKR & KPI',
+  projects: '프로젝트',
   daily: '업무 보고',
   calendar: '캘린더',
   notice: '공지사항',
   meetings: '회의록',
-  reports: '보고서',
-  employees: '직원 명부',
+  reports: '결재보고센터',
+  employees: '팀/부서',
+  sop: '업무규정',
   cost: '원가 계산',
   sales: '매출 현황',
   franchise: '가맹 일정',
