@@ -1062,7 +1062,7 @@ function ProjectDetail({
   onDocsChange: () => void;
 }) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<'diagram' | 'kanban' | 'gantt' | 'docs'>('diagram');
   const [focusReportId, setFocusReportId] = useState<string | undefined>();
@@ -1557,7 +1557,7 @@ function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: 
 // ── 메인 ProjectsView ─────────────────────────────────────
 export function ProjectsView({ currentUser }: { currentUser: User }) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectDocs, setProjectDocs] = useState<Report[]>([]);

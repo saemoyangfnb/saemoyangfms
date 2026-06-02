@@ -39,7 +39,7 @@ interface Props { currentUser: User }
 
 export function NoticeBoard({ currentUser }: Props) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
   const [notices, setNotices] = useState<Notice[]>([]);

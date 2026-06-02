@@ -79,7 +79,7 @@ interface Props {
 
 export function CompanyCalendar({ currentUser }: Props) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
   const today = new Date();

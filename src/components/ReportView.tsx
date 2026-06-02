@@ -518,7 +518,7 @@ interface Props { currentUser: User; projectId?: string; projectTitle?: string; 
 
 export function ReportView({ currentUser, projectId, projectTitle, focusReportId, onDataChange, openNew, initialParentReportId, onNewOpened }: Props) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
   const [reports, setReports] = useState<Report[]>([]);

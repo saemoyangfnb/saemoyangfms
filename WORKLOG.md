@@ -11,6 +11,27 @@
 
 ---
 
+## 2026-06-02 (15) — Claude Code
+
+### 완료
+- **`useConfirm()` 전면 수정** — `const confirm = useConfirm()` → `const { confirm } = useConfirm()` 9개 파일
+  - 영향 파일: CompanyCalendar, CompanyInfoView, EmployeeDirectory, NoticeBoard, MeetingView, OKRView, ReportView, ProjectsView(×2)
+  - 이 버그로 인해 삭제/확인 팝업이 뜨더라도 기능이 동작하지 않았음 (TypeError: confirm is not a function, 무음 실패)
+  - MVC/브랜드 연혁/OKR/회의록/공지사항/보고서/프로젝트 항목 삭제 전부 복구
+  - 캘린더 일정 삭제 기능 복구
+
+### 미완 / 진행 중
+- 없음
+
+### 다음에 이어할 것
+- 배포 (git add src/ → commit → push)
+
+### 주의
+- Vite는 TypeScript 타입 에러가 있어도 빌드 통과 (esbuild 사용). tsc --noEmit 별도 확인 필요
+- `useConfirm()`은 `{ confirm }` 객체 반환 — 반드시 비구조화 할당으로 사용
+
+---
+
 ## 2026-06-02 (14) — Claude Code
 
 ### 완료

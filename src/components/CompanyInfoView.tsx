@@ -147,7 +147,7 @@ function MVCView({ currentUser }: { currentUser: User }) {
 // ── 브랜드 연혁 뷰 ─────────────────────────────────────────
 function BrandHistoryView({ currentUser }: { currentUser: User }) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
   const [milestones, setMilestones] = useState<BrandMilestone[]>([]);
   const [showForm, setShowForm] = useState(false);

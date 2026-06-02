@@ -240,7 +240,7 @@ function ObjectiveCard({
 // ── 메인 OKRView ──────────────────────────────────────────
 export function OKRView({ currentUser }: { currentUser: User }) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
   const [quarters, setQuarters] = useState<OKRQuarter[]>([]);

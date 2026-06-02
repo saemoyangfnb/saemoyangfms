@@ -638,7 +638,7 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
 
   const fetchMeetings = async () => {
     setLoading(true);

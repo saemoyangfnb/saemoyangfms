@@ -113,7 +113,7 @@ interface Props {
 
 export function EmployeeDirectory({ currentUser }: Props) {
   const toast = useToast();
-  const confirm = useConfirm();
+  const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
   const [employees, setEmployees] = useState<Employee[]>([]);
