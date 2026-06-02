@@ -198,7 +198,7 @@ function DocPickerModal({
             filtered.map(d => {
               const cfg = LINK_TYPE_CFG[d.linkedType];
               return (
-                <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800/50 group">
+                <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800/50 cursor-pointer active:bg-stone-100 dark:active:bg-stone-800">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${cfg.cls}`}>{cfg.label}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-stone-800 dark:text-stone-200 truncate">{d.title}</p>
@@ -219,7 +219,7 @@ function DocPickerModal({
                         linkedDate: d.date,
                       }) as Omit<ProjectItem, 'id' | 'createdAt' | 'updatedAt'>);
                     }}
-                    className="shrink-0 px-2.5 py-1 text-[11px] font-bold bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 rounded-sm hover:bg-stone-600 dark:hover:bg-stone-400 transition-colors opacity-0 group-hover:opacity-100"
+                    className="shrink-0 px-2.5 py-1 text-[11px] font-bold bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 rounded-sm hover:bg-stone-600 dark:hover:bg-stone-400 transition-colors"
                   >
                     연결
                   </button>
@@ -785,7 +785,7 @@ function ProjectDetail({
   const toast = useToast();
   const confirm = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'kanban' | 'docs' | 'diagram'>('kanban');
+  const [view, setView] = useState<'kanban' | 'docs' | 'diagram'>('diagram');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
@@ -933,9 +933,9 @@ function ProjectDetail({
       {/* 뷰 토글 */}
       <div className="flex items-center gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
         {([
-          { key: 'kanban',  icon: <Kanban size={12} />,    label: '칸반' },
+          { key: 'diagram', icon: <GitBranch size={12} />,    label: '도식화' },
+          { key: 'kanban',  icon: <Kanban size={12} />,       label: '칸반' },
           { key: 'docs',    icon: <ExternalLink size={12} />, label: '문서' },
-          { key: 'diagram', icon: <GitBranch size={12} />, label: '도식화' },
         ] as { key: 'kanban' | 'docs' | 'diagram'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
           <button
             key={key}
