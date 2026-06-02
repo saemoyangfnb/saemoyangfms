@@ -18,7 +18,7 @@ import { useConfirm } from './ConfirmModal';
 import {
   Plus, ChevronLeft, ChevronRight, Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
-  Archive, CheckCircle2, RotateCcw, BookOpen,
+  Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -649,6 +649,218 @@ function ProjectFormModal({
   );
 }
 
+// ── 간트차트 오늘 선 ──────────────────────────────────────
+function TodayLine({ pct }: { pct: number }) {
+  if (pct < 0 || pct > 100) return null;
+  return (
+    <div
+      className="absolute inset-y-0 w-px bg-red-400/50 dark:bg-red-500/40 pointer-events-none z-10"
+      style={{ left: `${pct}%` }}
+    />
+  );
+}
+
+// ── 프로젝트 간트차트 ──────────────────────────────────────
+function ProjectGanttView({
+  project, docs, columns, onEditProject, onOpenDoc,
+}: {
+  project: Project;
+  docs: Report[];
+  columns: KanbanColumnDef[];
+  onEditProject: () => void;
+  onOpenDoc: (r: Report) => void;
+}) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  // 날짜 범위 계산
+  const allDates: Date[] = [
+    ...(project.milestones ?? []).map(m => new Date(m.dueDate)),
+    ...docs.map(d => new Date(d.docDate || d.createdAt)),
+  ].filter(d => !isNaN(d.getTime()));
+
+  let rStart: Date, rEnd: Date;
+  if (project.startDate && project.endDate) {
+    rStart = new Date(project.startDate);
+    rEnd   = new Date(project.endDate);
+  } else if (allDates.length > 0) {
+    const ms = allDates.map(d => d.getTime());
+    rStart = new Date(Math.min(...ms) - 7 * 86400000);
+    rEnd   = new Date(Math.max(...ms) + 14 * 86400000);
+  } else {
+    rStart = new Date(today.getTime() - 14 * 86400000);
+    rEnd   = new Date(today.getTime() + 46 * 86400000);
+  }
+  // 오늘이 항상 범위 안에 포함
+  if (today < rStart) rStart = new Date(today.getTime() - 7 * 86400000);
+  if (today > rEnd)   rEnd   = new Date(today.getTime() + 14 * 86400000);
+
+  const totalMs = rEnd.getTime() - rStart.getTime();
+  const pct = (d: Date) =>
+    Math.max(0, Math.min(100, (d.getTime() - rStart.getTime()) / totalMs * 100));
+  const todayPct = pct(today);
+
+  // 월 레이블
+  const months: { label: string; p: number }[] = [];
+  const mc = new Date(rStart.getFullYear(), rStart.getMonth(), 1);
+  while (mc <= rEnd) {
+    const p = pct(mc);
+    if (p <= 100) months.push({ label: `${mc.getMonth() + 1}월`, p });
+    mc.setMonth(mc.getMonth() + 1);
+  }
+
+  const milestones = project.milestones ?? [];
+
+  const LABEL = 'w-28 shrink-0 text-[11px] pr-2 truncate';
+  const ROW   = 'flex items-center h-9 border-b border-stone-100 dark:border-stone-800/60';
+
+  return (
+    <div className="text-xs">
+      {/* 날짜 미설정 안내 */}
+      {(!project.startDate || !project.endDate) && (
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-sm">
+          <span className="text-[11px] text-amber-700 dark:text-amber-400 flex-1">
+            프로젝트 시작일·종료일을 설정하면 전체 기간 바가 표시됩니다.
+          </span>
+          <button onClick={onEditProject} className="text-[11px] font-bold text-amber-600 hover:underline shrink-0">
+            설정
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[440px]">
+
+          {/* 월 레이블 헤더 */}
+          <div className="flex mb-0.5">
+            <div className="w-28 shrink-0" />
+            <div className="flex-1 relative h-6 border-b border-stone-200 dark:border-stone-700">
+              <span
+                className="absolute text-[9px] font-bold text-red-400 dark:text-red-500 -translate-x-1/2"
+                style={{ left: `${todayPct}%` }}
+              >
+                오늘
+              </span>
+              {months.map((m, i) => (
+                <span
+                  key={i}
+                  className="absolute bottom-0.5 text-[10px] font-bold text-stone-400"
+                  style={{ left: `${m.p}%` }}
+                >
+                  {m.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 프로젝트 전체 기간 */}
+          {project.startDate && project.endDate && (() => {
+            const sp = pct(new Date(project.startDate));
+            const ep = pct(new Date(project.endDate));
+            return (
+              <div className={ROW}>
+                <span className={`${LABEL} font-bold text-stone-700 dark:text-stone-200`}>전체 기간</span>
+                <div className="flex-1 relative h-full">
+                  <TodayLine pct={todayPct} />
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 h-4 bg-blue-500/70 dark:bg-blue-400/60 rounded-sm"
+                    style={{ left: `${sp}%`, width: `${Math.max(ep - sp, 0.5)}%` }}
+                  />
+                  <span className="absolute text-[9px] text-blue-500 dark:text-blue-400 top-1" style={{ left: `${sp}%` }}>
+                    {fmtDate(project.startDate)}
+                  </span>
+                  <span className="absolute text-[9px] text-blue-500 dark:text-blue-400 top-1 -translate-x-full" style={{ left: `${ep}%` }}>
+                    {fmtDate(project.endDate)}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 마일스톤 */}
+          {milestones.length > 0 && (
+            <>
+              <div className="flex items-center h-5 mt-1.5">
+                <span className="w-28 shrink-0 text-[9px] font-black text-stone-400 uppercase tracking-wider">마일스톤</span>
+                <div className="flex-1 border-t border-dashed border-stone-200 dark:border-stone-700" />
+              </div>
+              {milestones.map(m => {
+                const mp = pct(new Date(m.dueDate));
+                return (
+                  <div key={m.id} className={ROW}>
+                    <span className={`${LABEL} ${m.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
+                      {m.title}
+                    </span>
+                    <div className="flex-1 relative h-full">
+                      <TodayLine pct={todayPct} />
+                      {/* 다이아몬드 마커 */}
+                      <div
+                        className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rotate-45 ${m.done ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                        style={{ left: `${mp}%` }}
+                      />
+                      <span
+                        className={`absolute text-[9px] -translate-x-1/2 ${m.done ? 'text-emerald-500' : 'text-amber-500'}`}
+                        style={{ left: `${mp}%`, top: '22px' }}
+                      >
+                        {fmtDate(m.dueDate)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {/* 보고서 */}
+          {docs.length > 0 && (
+            <>
+              <div className="flex items-center h-5 mt-1.5">
+                <span className="w-28 shrink-0 text-[9px] font-black text-stone-400 uppercase tracking-wider">보고서</span>
+                <div className="flex-1 border-t border-dashed border-stone-200 dark:border-stone-700" />
+              </div>
+              {docs.map(d => {
+                const dateStr = d.docDate || d.createdAt;
+                const dp = pct(new Date(dateStr));
+                const colDef = columns.find(c => c.id === (d.kanbanColumn ?? columns[0]?.id));
+                const dotCls = COLOR_CFG[colDef?.color ?? 'stone']?.dotCls ?? 'bg-stone-400';
+                return (
+                  <div key={d.id} className={ROW}>
+                    <button
+                      onClick={() => onOpenDoc(d)}
+                      className={`${LABEL} text-left text-stone-600 dark:text-stone-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                    >
+                      {d.title || '(제목 없음)'}
+                    </button>
+                    <div className="flex-1 relative h-full">
+                      <TodayLine pct={todayPct} />
+                      <button
+                        onClick={() => onOpenDoc(d)}
+                        className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full ${dotCls} hover:scale-150 hover:ring-2 hover:ring-offset-1 hover:ring-stone-400 transition-all border-2 border-white dark:border-stone-900`}
+                        style={{ left: `${dp}%` }}
+                        title={`${d.title || '(제목 없음)'} · ${fmtDate(dateStr)}`}
+                      />
+                      <span className="absolute text-[8px] text-stone-400 -translate-x-1/2" style={{ left: `${dp}%`, top: '24px' }}>
+                        {fmtDate(dateStr)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {/* 빈 상태 */}
+          {milestones.length === 0 && docs.length === 0 && (
+            <div className="py-16 text-center text-stone-400">
+              마일스톤이나 보고서를 추가하면 여기에 표시됩니다.
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 프로젝트 상세 ─────────────────────────────────────────
 function ProjectDetail({
   project, docs, employees, currentUser, onBack,
@@ -666,7 +878,7 @@ function ProjectDetail({
   const toast = useToast();
   const confirm = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'diagram' | 'kanban' | 'docs'>('diagram');
+  const [view, setView] = useState<'diagram' | 'kanban' | 'gantt' | 'docs'>('diagram');
   const [focusReportId, setFocusReportId] = useState<string | undefined>();
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
@@ -880,8 +1092,8 @@ function ProjectDetail({
         {([
           { key: 'diagram', icon: <GitBranch size={12} />, label: '도식화' },
           { key: 'kanban',  icon: <Kanban size={12} />,    label: '칸반' },
-          { key: 'docs',    icon: <Plus size={12} />,      label: '문서 작성' },
-        ] as { key: 'diagram' | 'kanban' | 'docs'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+          { key: 'gantt',   icon: <BarChart2 size={12} />, label: '간트' },
+        ] as { key: 'diagram' | 'kanban' | 'gantt'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
           <button key={key} onClick={() => setView(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${view === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
             {icon} {label}
@@ -950,7 +1162,18 @@ function ProjectDetail({
         </DndContext>
       )}
 
-      {/* 문서 작성/조회 */}
+      {/* 간트차트 */}
+      {view === 'gantt' && (
+        <ProjectGanttView
+          project={project}
+          docs={docs}
+          columns={localCols}
+          onEditProject={() => setShowProjectForm(true)}
+          onOpenDoc={openReport}
+        />
+      )}
+
+      {/* 문서 조회 (탭 없이 카드 클릭으로만 진입) */}
       {view === 'docs' && (
         <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
           <ReportView
