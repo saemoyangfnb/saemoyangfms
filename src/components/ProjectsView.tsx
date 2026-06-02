@@ -1170,8 +1170,17 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   }, []);
 
   const loadProjectItems = useCallback(async (projectId: string) => {
-    const snap = await getDocs(query(collection(salesDb, 'project_items'), where('projectId', '==', projectId), orderBy('order')));
-    setProjectItems(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProjectItem)));
+    try {
+      // orderBy 없이 쿼리 → 복합 인덱스 불필요, 클라이언트 정렬
+      const snap = await getDocs(query(collection(salesDb, 'project_items'), where('projectId', '==', projectId)));
+      setProjectItems(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as ProjectItem))
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      );
+    } catch (e) {
+      console.error('loadProjectItems 오류:', e);
+    }
   }, []);
 
   useEffect(() => {
