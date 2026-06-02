@@ -518,9 +518,9 @@ function ReportEditor({
 }
 
 /* ── 메인 컴포넌트 ─────────────────────────────────────── */
-interface Props { currentUser: User; projectId?: string; projectTitle?: string; focusReportId?: string; }
+interface Props { currentUser: User; projectId?: string; projectTitle?: string; focusReportId?: string; onDataChange?: () => void; }
 
-export function ReportView({ currentUser, projectId, projectTitle, focusReportId }: Props) {
+export function ReportView({ currentUser, projectId, projectTitle, focusReportId, onDataChange }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const isAdmin = currentUser.role === 'admin';
@@ -626,6 +626,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
       setEditing(null);
       setDetail(null);
       fetchReports();
+      onDataChange?.();
     } catch (e) { toast.error('저장 실패'); console.error(e); }
     finally { setSaving(false); }
   };
@@ -687,6 +688,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
       await deleteDoc(doc(salesDb, 'reports', report.id));
       toast.success('삭제되었습니다');
       fetchReports();
+      onDataChange?.();
       setDetail(null);
     } catch (e: any) {
       toast.error(`삭제 실패: ${e?.code === 'permission-denied' ? 'Firestore 권한 오류' : e?.message ?? '오류'}`);

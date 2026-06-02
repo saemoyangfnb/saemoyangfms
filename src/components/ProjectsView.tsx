@@ -16,7 +16,7 @@ import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
   Plus, ChevronLeft, Trash2, Edit2, X, Users, Calendar,
-  GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch,
+  GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -162,11 +162,11 @@ function DroppableColumn({
 
 // ── 도식화 노드 (보고서 기반) ─────────────────────────────
 function ReportDiagramNode({
-  report, allDocs, onOpen, onUnlink, depth,
+  report, allDocs, onNodeClick, onUnlink, depth,
 }: {
   report: Report;
   allDocs: Report[];
-  onOpen: (r: Report) => void;
+  onNodeClick: (r: Report) => void;
   onUnlink: (r: Report) => void;
   depth: number;
 }) {
@@ -179,20 +179,25 @@ function ReportDiagramNode({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative">
+      <div className="relative group">
         <button
-          onClick={() => onOpen(report)}
-          className={`border-2 rounded-sm p-2.5 w-40 text-left hover:shadow-lg hover:-translate-y-0.5 transition-all ${borderCls}`}
+          onClick={() => onNodeClick(report)}
+          className={`border-2 rounded-sm p-2.5 w-44 text-left hover:shadow-lg hover:-translate-y-0.5 transition-all ${borderCls}`}
         >
+          <div className="flex items-center gap-1 mb-1.5">
+            <span className={`text-[9px] font-bold px-1 py-0.5 rounded-sm ${COL_CFG[col].bgCls} ${COL_CFG[col].headCls}`}>{COL_CFG[col].label}</span>
+          </div>
           <p className="text-[11px] font-bold text-stone-800 dark:text-stone-200 leading-tight mb-1 pr-2">{report.title || '(제목 없음)'}</p>
-          <p className="text-[10px] text-stone-400 leading-none mb-1.5">{report.authorName}</p>
-          <span className={`text-[10px] font-bold ${COL_CFG[col].headCls}`}>{COL_CFG[col].label}</span>
+          <p className="text-[10px] text-stone-400 leading-none">{report.authorName}</p>
+          {report.sections?.[0]?.body && (
+            <p className="text-[9px] text-stone-400 mt-1 line-clamp-2 leading-snug">{report.sections[0].body}</p>
+          )}
         </button>
-        {/* 항상 표시되는 X 버튼 */}
+        {/* X — 프로젝트에서 제거 */}
         <button
-          onClick={() => onUnlink(report)}
+          onClick={e => { e.stopPropagation(); onUnlink(report); }}
           title="프로젝트에서 제거"
-          className="absolute -top-2 -right-2 w-5 h-5 bg-stone-200 dark:bg-stone-700 rounded-full flex items-center justify-center text-stone-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors"
+          className="absolute -top-2 -right-2 w-5 h-5 bg-stone-200 dark:bg-stone-700 rounded-full flex items-center justify-center text-stone-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
         >
           <X size={9} />
         </button>
@@ -200,17 +205,17 @@ function ReportDiagramNode({
 
       {children.length > 0 && (
         <>
-          <div className="w-px h-5 bg-stone-300 dark:bg-stone-600" />
-          <div className="relative flex items-start gap-6">
+          <div className="w-px h-6 bg-stone-300 dark:bg-stone-600" />
+          <div className="relative flex items-start gap-8">
             {children.length > 1 && (
               <div className="absolute top-0 h-px bg-stone-300 dark:bg-stone-600"
-                style={{ left: '50%', transform: 'translateX(-50%)', width: `calc(100% - ${144 / children.length}px)` }}
+                style={{ left: '50%', transform: 'translateX(-50%)', width: `calc(100% - 88px)` }}
               />
             )}
             {children.map(child => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="w-px h-5 bg-stone-300 dark:bg-stone-600" />
-                <ReportDiagramNode report={child} allDocs={allDocs} onOpen={onOpen} onUnlink={onUnlink} depth={depth + 1} />
+                <div className="w-px h-6 bg-stone-300 dark:bg-stone-600" />
+                <ReportDiagramNode report={child} allDocs={allDocs} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={depth + 1} />
               </div>
             ))}
           </div>
@@ -221,19 +226,216 @@ function ReportDiagramNode({
 }
 
 function ReportTreeDiagram({
-  docs, onOpen, onUnlink,
+  docs, onNodeClick, onUnlink,
 }: {
   docs: Report[];
-  onOpen: (r: Report) => void;
+  onNodeClick: (r: Report) => void;
   onUnlink: (r: Report) => void;
 }) {
   const roots = docs.filter(d => !d.parentReportId);
   return (
-    <div className="overflow-auto py-6 px-4">
-      <div className="flex gap-10 items-start justify-center min-w-max mx-auto">
-        {roots.map(root => (
-          <ReportDiagramNode key={root.id} report={root} allDocs={docs} onOpen={onOpen} onUnlink={onUnlink} depth={0} />
-        ))}
+    <div className="overflow-auto py-8 px-4">
+      {roots.length === 0 ? (
+        <div className="text-center py-10 text-xs text-stone-400">보고서가 없습니다.</div>
+      ) : (
+        <div className="flex gap-12 items-start justify-center min-w-max mx-auto">
+          {roots.map(root => (
+            <ReportDiagramNode key={root.id} report={root} allDocs={docs} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={0} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 도식화 노드 팝업 ──────────────────────────────────────
+function NodeActionPopup({
+  report, onView, onAddSibling, onAddChild, onClose,
+}: {
+  report: Report;
+  onView: () => void;
+  onAddSibling: () => void;
+  onAddChild: () => void;
+  onClose: () => void;
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const ap = AP_CFG[report.approvalStatus] ?? AP_CFG.draft;
+  const col = report.kanbanColumn ?? 'todo';
+  const preview = report.sections?.[0]?.body?.slice(0, 80) ?? '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl border border-stone-200 dark:border-stone-700 w-64 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 보고서 요약 헤더 */}
+        <div className="px-4 py-3 border-b border-stone-200 dark:border-stone-700">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${ap.cls}`}>{ap.label}</span>
+            <span className={`text-[10px] font-bold ${COL_CFG[col].headCls}`}>● {COL_CFG[col].label}</span>
+          </div>
+          <p className="text-xs font-black text-stone-900 dark:text-white leading-snug">{report.title || '(제목 없음)'}</p>
+          {report.authorName && (
+            <p className="text-[10px] text-stone-400 mt-0.5">{report.authorName} · {fmtDate(report.updatedAt)}</p>
+          )}
+          {preview && (
+            <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-1.5 line-clamp-2 leading-snug">{preview}</p>
+          )}
+        </div>
+
+        {!showAdd ? (
+          <div className="p-2 space-y-0.5">
+            <button
+              onClick={onView}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+            >
+              <FileText size={13} className="text-stone-400 shrink-0" /> 보고서 확인
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+            >
+              <Plus size={13} className="text-stone-400 shrink-0" /> 보고서 추가
+            </button>
+          </div>
+        ) : (
+          <div className="p-2 space-y-0.5">
+            <p className="text-[10px] text-stone-400 px-3 py-1.5">어디에 추가할까요?</p>
+            <button
+              onClick={onAddSibling}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left"
+            >
+              <span className="text-base font-bold text-blue-500 shrink-0 w-5 text-center">↔</span>
+              <div>
+                <p className="text-xs font-bold text-stone-800 dark:text-stone-200">추가 보고서</p>
+                <p className="text-[10px] text-stone-400">같은 단계 (형제)</p>
+              </div>
+            </button>
+            <button
+              onClick={onAddChild}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors text-left"
+            >
+              <span className="text-base font-bold text-emerald-500 shrink-0 w-5 text-center">↓</span>
+              <div>
+                <p className="text-xs font-bold text-stone-800 dark:text-stone-200">다음 보고서</p>
+                <p className="text-[10px] text-stone-400">하위 단계 (자식)</p>
+              </div>
+            </button>
+            <button
+              onClick={() => setShowAdd(false)}
+              className="w-full px-3 py-1.5 text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 rounded-sm transition-colors text-left"
+            >
+              ← 뒤로
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 도식화에서 빠른 보고서 작성 ───────────────────────────
+function QuickReportModal({
+  project, currentUser, parentReportId, mode, parentReportTitle, onSave, onClose,
+}: {
+  project: Project;
+  currentUser: User;
+  parentReportId?: string;
+  mode: 'sibling' | 'child';
+  parentReportTitle?: string;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [column, setColumn] = useState<KanbanColumn>('todo');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const id = genId();
+      const now = ts();
+      const data: Record<string, unknown> = {
+        id,
+        title: title.trim(),
+        type: 'general',
+        sections: body.trim() ? [{ title: '', body: body.trim() }] : [],
+        photoUrls: [],
+        authorName: currentUser.name,
+        authorId: currentUser.uid,
+        approvalStatus: 'draft',
+        projectId: project.id,
+        projectTitle: project.title,
+        kanbanColumn: column,
+        createdAt: now,
+        updatedAt: now,
+      };
+      if (parentReportId) data.parentReportId = parentReportId;
+      await setDoc(doc(salesDb, 'reports', id), data);
+      toast.success('보고서 생성됨');
+      onSave();
+      onClose();
+    } catch { toast.error('생성 실패'); } finally { setSaving(false); }
+  };
+
+  const contextLabel = mode === 'child'
+    ? `"${parentReportTitle || '상위 보고서'}"의 하위`
+    : '같은 단계에 추가';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-md border border-stone-200 dark:border-stone-700">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
+          <div>
+            <h2 className="text-sm font-black text-stone-900 dark:text-white">새 보고서</h2>
+            <p className="text-[10px] text-stone-400 mt-0.5">{contextLabel}</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">제목 *</label>
+            <input
+              value={title} onChange={e => setTitle(e.target.value)} autoFocus
+              placeholder="보고서 제목"
+              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-stone-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">내용 (선택)</label>
+            <textarea
+              value={body} onChange={e => setBody(e.target.value)} rows={3}
+              placeholder="보고서 내용..."
+              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">상태</label>
+            <div className="flex gap-2">
+              {COLS.map(col => (
+                <button key={col} onClick={() => setColumn(col)}
+                  className={`flex-1 py-1.5 text-[11px] font-bold rounded-sm transition-colors border-2 ${
+                    column === col
+                      ? `${COL_CFG[col].headCls} border-current bg-white dark:bg-stone-800`
+                      : 'border-stone-200 dark:border-stone-700 text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'
+                  }`}>
+                  {COL_CFG[col].label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
+          <button onClick={onClose} className="px-4 py-2 text-xs text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
+          <button onClick={handleSubmit} disabled={!title.trim() || saving}
+            className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
+            {saving ? '저장 중...' : '작성'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -439,6 +641,11 @@ function ProjectDetail({
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
 
+  type NodeActionState =
+    | { kind: 'menu'; report: Report }
+    | { kind: 'quick'; report: Report; mode: 'sibling' | 'child' };
+  const [nodeAction, setNodeAction] = useState<NodeActionState | null>(null);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // 문서 탭을 벗어나면 focusReportId 초기화
@@ -447,8 +654,13 @@ function ProjectDetail({
   }, [view]);
 
   const openReport = (report: Report) => {
+    setNodeAction(null);
     setFocusReportId(report.id);
     setView('docs');
+  };
+
+  const handleNodeClick = (report: Report) => {
+    setNodeAction({ kind: 'menu', report });
   };
 
   const handleUnlink = async (report: Report) => {
@@ -464,6 +676,7 @@ function ProjectDetail({
         projectId: deleteField(),
         projectTitle: deleteField(),
         kanbanColumn: deleteField(),
+        parentReportId: deleteField(),
       });
       toast.success('제거됨');
       onDocsChange();
@@ -593,7 +806,7 @@ function ProjectDetail({
             </div>
           </div>
         ) : (
-          <ReportTreeDiagram docs={docs} onOpen={openReport} onUnlink={handleUnlink} />
+          <ReportTreeDiagram docs={docs} onNodeClick={handleNodeClick} onUnlink={handleUnlink} />
         )
       )}
 
@@ -623,8 +836,33 @@ function ProjectDetail({
             projectId={project.id}
             projectTitle={project.title}
             focusReportId={focusReportId}
+            onDataChange={onDocsChange}
           />
         </Suspense>
+      )}
+
+      {/* 도식화 노드 팝업 */}
+      {nodeAction?.kind === 'menu' && (
+        <NodeActionPopup
+          report={nodeAction.report}
+          onView={() => openReport(nodeAction.report)}
+          onAddSibling={() => setNodeAction({ kind: 'quick', report: nodeAction.report, mode: 'sibling' })}
+          onAddChild={() => setNodeAction({ kind: 'quick', report: nodeAction.report, mode: 'child' })}
+          onClose={() => setNodeAction(null)}
+        />
+      )}
+
+      {/* 도식화에서 빠른 보고서 작성 */}
+      {nodeAction?.kind === 'quick' && (
+        <QuickReportModal
+          project={project}
+          currentUser={currentUser}
+          parentReportId={nodeAction.mode === 'child' ? nodeAction.report.id : nodeAction.report.parentReportId}
+          mode={nodeAction.mode}
+          parentReportTitle={nodeAction.report.title}
+          onSave={() => { setNodeAction(null); onDocsChange(); }}
+          onClose={() => setNodeAction(null)}
+        />
       )}
 
       {/* 문서 연결 모달 */}
