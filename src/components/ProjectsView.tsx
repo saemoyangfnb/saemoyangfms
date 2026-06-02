@@ -17,6 +17,7 @@ import { useConfirm } from './ConfirmModal';
 import {
   Plus, ChevronLeft, Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
+  Archive, CheckCircle2, RotateCcw, BookOpen,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -53,6 +54,11 @@ const AP_CFG: Record<string, { label: string; cls: string }> = {
 };
 
 const COLS: KanbanColumn[] = ['todo', 'doing', 'done'];
+
+interface SimpleMeeting {
+  id: string; title: string; date: string; author?: string;
+  agendas?: { title: string }[];
+}
 
 // ── 보고서 칸반 카드 ──────────────────────────────────────
 function ReportKanbanCard({
@@ -519,16 +525,18 @@ function DocLinkPickerModal({
 
 // ── 프로젝트 생성/수정 폼 ─────────────────────────────────
 function ProjectFormModal({
-  project, employees, currentUser, onSave, onClose,
+  project, employees, currentUser, initialTitle, initialDescription, onSave, onClose,
 }: {
   project?: Project;
   employees: Employee[];
   currentUser: User;
+  initialTitle?: string;
+  initialDescription?: string;
   onSave: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onClose: () => void;
 }) {
-  const [title, setTitle] = useState(project?.title ?? '');
-  const [description, setDescription] = useState(project?.description ?? '');
+  const [title, setTitle] = useState(project?.title ?? initialTitle ?? '');
+  const [description, setDescription] = useState(project?.description ?? initialDescription ?? '');
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? 'active');
   const [startDate, setStartDate] = useState(project?.startDate ?? '');
   const [endDate, setEndDate] = useState(project?.endDate ?? '');
@@ -891,47 +899,112 @@ function ProjectDetail({
   );
 }
 
-// ── 프로젝트 목록 카드 ────────────────────────────────────
-function ProjectCard({ project, docCount, doneCount, onClick }: {
-  project: Project; docCount: number; doneCount: number; onClick: () => void;
+// ── 회의록 미니 카드 ──────────────────────────────────────
+function MeetingMiniCard({ meeting, onCreateProject }: {
+  meeting: SimpleMeeting;
+  onCreateProject: (m: SimpleMeeting) => void;
 }) {
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-3 mb-2 last:mb-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-stone-800 dark:text-stone-200 truncate">{meeting.title || '(제목 없음)'}</p>
+          <p className="text-[10px] text-stone-400 mt-0.5">
+            {meeting.date}{meeting.author ? ` · ${meeting.author}` : ''}{meeting.agendas?.length ? ` · 안건 ${meeting.agendas.length}개` : ''}
+          </p>
+        </div>
+        <button
+          onClick={() => onCreateProject(meeting)}
+          className="shrink-0 flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-sm transition-colors whitespace-nowrap"
+        >
+          <Plus size={9} /> 프로젝트로
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 프로젝트 목록 카드 ────────────────────────────────────
+function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: {
+  project: Project; docCount: number; doneCount: number; onClick: () => void;
+  onStatusChange: (status: ProjectStatus) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
   const statusCfg = STATUS_CFG[project.status];
   const progress = docCount > 0 ? Math.round((doneCount / docCount) * 100) : 0;
   const isEndingSoon = project.endDate && project.status === 'active' &&
     new Date(project.endDate) > new Date() && new Date(project.endDate) < new Date(Date.now() + 7 * 86400000);
+  const isArchived = project.status === 'completed' || project.status === 'archived';
 
   return (
-    <button onClick={onClick}
-      className="w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-4 hover:shadow-md hover:border-stone-400 dark:hover:border-stone-500 transition-all group">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="text-sm font-black text-stone-900 dark:text-white group-hover:text-stone-700 dark:group-hover:text-stone-200 leading-snug flex-1 min-w-0 truncate">{project.title}</h3>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
-      </div>
-      {project.description && <p className="text-xs text-stone-500 dark:text-stone-400 mb-3 line-clamp-2 leading-snug">{project.description}</p>}
-      {docCount > 0 && (
-        <div className="mb-2">
-          <div className="flex justify-between text-[10px] text-stone-400 mb-1">
-            <span>진행률</span>
-            <span className="tabular-nums">{doneCount}/{docCount} ({progress}%)</span>
-          </div>
-          <div className="h-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${project.status === 'completed' ? 'bg-blue-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }} />
-          </div>
+    <div className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm hover:shadow-md hover:border-stone-400 dark:hover:border-stone-500 transition-all group">
+      <div onClick={onClick} className="text-left p-4 cursor-pointer">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h3 className="text-sm font-black text-stone-900 dark:text-white group-hover:text-stone-700 dark:group-hover:text-stone-200 leading-snug flex-1 min-w-0 truncate">{project.title}</h3>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
         </div>
-      )}
-      <div className="flex items-center gap-3 text-[10px] text-stone-400 flex-wrap">
-        {project.memberNames.length > 0 && (
-          <span className="flex items-center gap-0.5">
-            <Users size={9} /> {project.memberNames.slice(0, 2).join(', ')}{project.memberNames.length > 2 ? ` +${project.memberNames.length - 2}` : ''}
-          </span>
+        {project.description && <p className="text-xs text-stone-500 dark:text-stone-400 mb-3 line-clamp-2 leading-snug">{project.description}</p>}
+        {docCount > 0 && (
+          <div className="mb-2">
+            <div className="flex justify-between text-[10px] text-stone-400 mb-1">
+              <span>진행률</span>
+              <span className="tabular-nums">{doneCount}/{docCount} ({progress}%)</span>
+            </div>
+            <div className="h-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${project.status === 'completed' ? 'bg-blue-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }} />
+            </div>
+          </div>
         )}
-        {project.endDate && (
-          <span className={`flex items-center gap-0.5 ${isEndingSoon ? 'text-amber-500 font-bold' : ''}`}>
-            <Calendar size={9} /> {fmtDate(project.endDate)}{isEndingSoon ? ' ⚡' : ''}
-          </span>
+        <div className="flex items-center gap-3 text-[10px] text-stone-400 flex-wrap">
+          {project.memberNames.length > 0 && (
+            <span className="flex items-center gap-0.5">
+              <Users size={9} /> {project.memberNames.slice(0, 2).join(', ')}{project.memberNames.length > 2 ? ` +${project.memberNames.length - 2}` : ''}
+            </span>
+          )}
+          {project.endDate && (
+            <span className={`flex items-center gap-0.5 ${isEndingSoon ? 'text-amber-500 font-bold' : ''}`}>
+              <Calendar size={9} /> {fmtDate(project.endDate)}{isEndingSoon ? ' ⚡' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+      {/* 빠른 액션 풋터 */}
+      <div className="px-4 pb-3 border-t border-stone-100 dark:border-stone-800/50 pt-2">
+        {isArchived ? (
+          <button
+            onClick={() => onStatusChange('active')}
+            className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+          >
+            <RotateCcw size={9} /> 진행중으로 복구
+          </button>
+        ) : (
+          <div className="relative">
+            <button
+              onClick={e => { e.stopPropagation(); setShowMenu(v => !v); }}
+              className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
+            >
+              <Archive size={9} /> 종료
+            </button>
+            {showMenu && (
+              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm shadow-lg z-20 py-1 min-w-[7rem]">
+                <button
+                  onClick={() => { onStatusChange('completed'); setShowMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-2"
+                >
+                  <CheckCircle2 size={11} className="text-blue-500" /> 완료
+                </button>
+                <button
+                  onClick={() => { onStatusChange('archived'); setShowMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-2"
+                >
+                  <Archive size={11} className="text-stone-400" /> 아카이브
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -945,9 +1018,14 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'active' | 'all' | 'visual'>('active');
+  const [tab, setTab] = useState<'active' | 'all' | 'archived' | 'visual'>('active');
+  const [search, setSearch] = useState('');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [docStats, setDocStats] = useState<Record<string, { total: number; done: number }>>({});
+  const [showMeetings, setShowMeetings] = useState(false);
+  const [meetings, setMeetings] = useState<SimpleMeeting[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [meetingToConvert, setMeetingToConvert] = useState<SimpleMeeting | null>(null);
 
   const loadProjects = useCallback(async () => {
     const snap = await getDocs(query(collection(salesDb, 'projects'), orderBy('updatedAt', 'desc')));
@@ -1025,7 +1103,48 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     await loadProjectDocs(project.id);
   };
 
-  const filteredProjects = projects.filter(p => tab === 'active' ? p.status === 'active' : true);
+  const handleStatusChange = async (projectId: string, newStatus: ProjectStatus) => {
+    try {
+      await updateDoc(doc(salesDb, 'projects', projectId), { status: newStatus, updatedAt: ts() });
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status: newStatus } : p));
+      const msg = newStatus === 'active' ? '진행중으로 복구됨' : newStatus === 'completed' ? '완료 처리됨' : '아카이브됨';
+      toast.success(msg);
+    } catch { toast.error('상태 변경 실패'); }
+  };
+
+  const loadMeetings = useCallback(async () => {
+    setLoadingMeetings(true);
+    try {
+      const snap = await getDocs(query(collection(salesDb, 'meetings'), orderBy('date', 'desc')));
+      setMeetings(snap.docs.slice(0, 20).map(d => ({ id: d.id, ...d.data() } as SimpleMeeting)));
+    } catch {} finally { setLoadingMeetings(false); }
+  }, []);
+
+  const handleToggleMeetings = async () => {
+    if (!showMeetings && meetings.length === 0) await loadMeetings();
+    setShowMeetings(v => !v);
+  };
+
+  const handleCreateFromMeeting = (meeting: SimpleMeeting) => {
+    setMeetingToConvert(meeting);
+    setShowProjectForm(true);
+  };
+
+  const matchesSearch = (p: Project) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return p.title.toLowerCase().includes(q) ||
+      (p.description?.toLowerCase().includes(q) ?? false) ||
+      p.memberNames.some(n => n.toLowerCase().includes(q));
+  };
+
+  const filteredProjects = projects
+    .filter(p => {
+      if (tab === 'active') return p.status === 'active';
+      if (tab === 'archived') return p.status === 'completed' || p.status === 'archived';
+      return true;
+    })
+    .filter(matchesSearch);
 
   if (loading) return (
     <div className="flex items-center justify-center py-32">
@@ -1053,94 +1172,189 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   }
 
   // 프로젝트 목록
+  const archivedCount = projects.filter(p => p.status === 'completed' || p.status === 'archived').length;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-3">
         <div>
           <h1 className="text-xl font-black text-stone-900 dark:text-white">프로젝트</h1>
           <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">전사 프로젝트 관리</p>
         </div>
-        <button onClick={() => setShowProjectForm(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors">
-          <Plus size={13} /> 새 프로젝트
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleMeetings}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-sm border transition-colors ${showMeetings ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-900 dark:border-stone-100' : 'border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+          >
+            <BookOpen size={13} /> 회의록
+          </button>
+          <button onClick={() => setShowProjectForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors">
+            <Plus size={13} /> 새 프로젝트
+          </button>
+        </div>
+      </div>
+
+      {/* 검색바 */}
+      <div className="flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2 mb-3">
+        <Search size={13} className="text-stone-400 shrink-0" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="제목·설명·멤버 검색..."
+          className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700">
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       {/* 탭 */}
       <div className="flex gap-0 border-b border-stone-200 dark:border-stone-700 mb-4">
-        {([['active', '진행중'], ['all', '전체'], ['visual', '시각화']] as [string, string][]).map(([key, label]) => (
+        {([
+          ['active', '진행중'],
+          ['all', '전체'],
+          ['archived', '보관함'],
+          ['visual', '시각화'],
+        ] as [string, string][]).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key as typeof tab)}
             className={`px-4 py-2.5 text-xs font-bold transition-colors border-b-2 -mb-px ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`}>
             {label}
-            {key === 'active' && (
+            {key === 'active' && projects.filter(p => p.status === 'active').length > 0 && (
               <span className="ml-1.5 text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded-full tabular-nums">
                 {projects.filter(p => p.status === 'active').length}
+              </span>
+            )}
+            {key === 'archived' && archivedCount > 0 && (
+              <span className="ml-1.5 text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded-full tabular-nums">
+                {archivedCount}
               </span>
             )}
           </button>
         ))}
       </div>
 
-      {/* 시각화 */}
-      {tab === 'visual' && (
-        <div className="space-y-3">
-          {projects.filter(p => p.status !== 'archived').map(p => {
-            const stats = docStats[p.id] ?? { total: 0, done: 0 };
-            const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
-            const statusCfg = STATUS_CFG[p.status];
-            return (
-              <button key={p.id} onClick={() => handleSelectProject(p)}
-                className="w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-4 hover:shadow-md transition-all">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
-                  <span className="text-sm font-black text-stone-900 dark:text-white flex-1 truncate">{p.title}</span>
-                  <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{pct}%</span>
-                </div>
-                <div className="h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${p.status === 'completed' ? 'bg-blue-500' : p.status === 'on_hold' ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
-                </div>
-                <div className="flex items-center gap-3 mt-2 text-[10px] text-stone-400">
-                  {stats.total > 0 && <span>{stats.done}/{stats.total} 완료</span>}
-                  {p.endDate && <span className="flex items-center gap-0.5"><Calendar size={9} /> {fmtDate(p.endDate)}</span>}
-                  {p.memberNames.length > 0 && <span className="flex items-center gap-0.5"><Users size={9} /> {p.memberNames.slice(0, 2).join(', ')}</span>}
-                </div>
-              </button>
-            );
-          })}
-          {projects.filter(p => p.status !== 'archived').length === 0 && (
-            <div className="text-center py-16 text-stone-400">프로젝트가 없습니다.</div>
-          )}
-        </div>
-      )}
+      {/* 본문: 회의록 분할 레이아웃 or 단독 */}
+      <div className={showMeetings && tab !== 'visual' ? 'flex gap-4' : ''}>
 
-      {/* 목록 */}
-      {tab !== 'visual' && (
-        filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <FolderKanban size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
-            <p className="text-sm font-bold text-stone-500 dark:text-stone-400 mb-1">
-              {tab === 'active' ? '진행 중인 프로젝트가 없습니다' : '프로젝트가 없습니다'}
-            </p>
-            <button onClick={() => setShowProjectForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">
-              새 프로젝트 만들기
-            </button>
+        {/* 좌측 — 회의록 패널 */}
+        {showMeetings && tab !== 'visual' && (
+          <div className="w-64 shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-black text-stone-700 dark:text-stone-300 flex items-center gap-1">
+                <BookOpen size={12} /> 최근 회의록
+              </h2>
+              <button onClick={() => setShowMeetings(false)} className="text-stone-400 hover:text-stone-700">
+                <X size={13} />
+              </button>
+            </div>
+            <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+              {loadingMeetings ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+                </div>
+              ) : meetings.length === 0 ? (
+                <div className="text-center py-8 text-[11px] text-stone-400">회의록이 없습니다</div>
+              ) : (
+                meetings.map(m => (
+                  <MeetingMiniCard key={m.id} meeting={m} onCreateProject={handleCreateFromMeeting} />
+                ))
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredProjects.map(p => {
-              const stats = docStats[p.id] ?? { total: 0, done: 0 };
-              return (
-                <ProjectCard key={p.id} project={p} docCount={stats.total} doneCount={stats.done}
-                  onClick={() => handleSelectProject(p)} />
-              );
-            })}
-          </div>
-        )
-      )}
+        )}
+
+        {/* 우측 — 프로젝트 목록 */}
+        <div className="flex-1 min-w-0">
+
+          {/* 시각화 탭 */}
+          {tab === 'visual' && (
+            <div className="space-y-3">
+              {projects.filter(p => p.status !== 'archived').filter(matchesSearch).map(p => {
+                const stats = docStats[p.id] ?? { total: 0, done: 0 };
+                const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+                const statusCfg = STATUS_CFG[p.status];
+                return (
+                  <button key={p.id} onClick={() => handleSelectProject(p)}
+                    className="w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-4 hover:shadow-md transition-all">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
+                      <span className="text-sm font-black text-stone-900 dark:text-white flex-1 truncate">{p.title}</span>
+                      <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{pct}%</span>
+                    </div>
+                    <div className="h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${p.status === 'completed' ? 'bg-blue-500' : p.status === 'on_hold' ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-[10px] text-stone-400">
+                      {stats.total > 0 && <span>{stats.done}/{stats.total} 완료</span>}
+                      {p.endDate && <span className="flex items-center gap-0.5"><Calendar size={9} /> {fmtDate(p.endDate)}</span>}
+                      {p.memberNames.length > 0 && <span className="flex items-center gap-0.5"><Users size={9} /> {p.memberNames.slice(0, 2).join(', ')}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+              {projects.filter(p => p.status !== 'archived').filter(matchesSearch).length === 0 && (
+                <div className="text-center py-16 text-stone-400">프로젝트가 없습니다.</div>
+              )}
+            </div>
+          )}
+
+          {/* 목록 탭 (active / all / archived) */}
+          {tab !== 'visual' && (
+            filteredProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <FolderKanban size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
+                <p className="text-sm font-bold text-stone-500 dark:text-stone-400 mb-1">
+                  {tab === 'active' ? '진행 중인 프로젝트가 없습니다' :
+                   tab === 'archived' ? '보관된 프로젝트가 없습니다' :
+                   search ? '검색 결과가 없습니다' : '프로젝트가 없습니다'}
+                </p>
+                {tab !== 'archived' && !search && (
+                  <button onClick={() => setShowProjectForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">
+                    새 프로젝트 만들기
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filteredProjects.map(p => {
+                  const stats = docStats[p.id] ?? { total: 0, done: 0 };
+                  return (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      docCount={stats.total}
+                      doneCount={stats.done}
+                      onClick={() => handleSelectProject(p)}
+                      onStatusChange={newStatus => handleStatusChange(p.id, newStatus)}
+                    />
+                  );
+                })}
+              </div>
+            )
+          )}
+
+        </div>
+      </div>
 
       {showProjectForm && (
-        <ProjectFormModal employees={employees} currentUser={currentUser}
-          onSave={handleCreateProject} onClose={() => setShowProjectForm(false)} />
+        <ProjectFormModal
+          employees={employees}
+          currentUser={currentUser}
+          initialTitle={meetingToConvert?.title}
+          initialDescription={meetingToConvert?.agendas?.map(a => a.title).filter(Boolean).join(' / ')}
+          onSave={data => {
+            handleCreateProject(data);
+            setMeetingToConvert(null);
+          }}
+          onClose={() => {
+            setShowProjectForm(false);
+            setMeetingToConvert(null);
+          }}
+        />
       )}
     </div>
   );
