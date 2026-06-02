@@ -839,7 +839,10 @@ function ProjectGanttView({
     mc.setMonth(mc.getMonth() + 1);
   }
 
-  const milestones = project.milestones ?? [];
+  // 각 섹션 날짜 오름차순 정렬
+  const milestones = [...(project.milestones ?? [])].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const sortedDocs = [...docs].sort((a, b) => (a.docDate || a.createdAt).localeCompare(b.docDate || b.createdAt));
+  const sortedTasks = [...tasks].sort((a, b) => (a.dueDate ?? a.createdAt).localeCompare(b.dueDate ?? b.createdAt));
 
   const LABEL = 'w-28 shrink-0 text-[11px] pr-2 truncate';
   const ROW   = 'flex items-center h-9 border-b border-stone-100 dark:border-stone-800/60';
@@ -942,13 +945,13 @@ function ProjectGanttView({
           )}
 
           {/* 보고서 */}
-          {docs.length > 0 && (
+          {sortedDocs.length > 0 && (
             <>
               <div className="flex items-center h-5 mt-1.5">
                 <span className="w-28 shrink-0 text-[9px] font-black text-stone-400 uppercase tracking-wider">보고서</span>
                 <div className="flex-1 border-t border-dashed border-stone-200 dark:border-stone-700" />
               </div>
-              {docs.map(d => {
+              {sortedDocs.map(d => {
                 const dateStr = d.docDate || d.createdAt;
                 const dp = pct(new Date(dateStr));
                 const colDef = columns.find(c => c.id === (d.kanbanColumn ?? columns[0]?.id));
@@ -990,7 +993,7 @@ function ProjectGanttView({
               <Plus size={10} /> 추가
             </button>
           </div>
-          {tasks.map(t => {
+          {sortedTasks.map(t => {
             const dateStr = t.dueDate || t.createdAt.slice(0, 10);
             const tp = pct(new Date(dateStr));
             return (
@@ -1022,7 +1025,7 @@ function ProjectGanttView({
               </div>
             );
           })}
-          {tasks.length === 0 && (
+          {sortedTasks.length === 0 && (
             <div className={`${ROW} border-b-0`}>
               <div className="w-28 shrink-0" />
               <button onClick={onAddTask} className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors py-1">
@@ -1032,7 +1035,7 @@ function ProjectGanttView({
           )}
 
           {/* 빈 상태 */}
-          {milestones.length === 0 && docs.length === 0 && tasks.length === 0 && (
+          {milestones.length === 0 && sortedDocs.length === 0 && sortedTasks.length === 0 && (
             <div className="py-12 text-center text-stone-400">
               마일스톤, 보고서, 업무를 추가하면 여기에 표시됩니다.
             </div>
