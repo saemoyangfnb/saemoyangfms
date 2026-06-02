@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { salesDb, db } from '../firebase';
+import { salesDb } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy } from 'firebase/firestore';
 import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine } from '../types';
 import { useToast } from './Toast';
@@ -107,6 +107,8 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [rForm, setRForm] = useState({ title: '', recurrence: 'daily' as CalendarRoutine['recurrence'], weekdays: [] as number[], monthDay: 1, timeSlot: 'allday' as CalendarRoutine['timeSlot'] });
   const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
   /* 데이터 불러오기 */
   const fetchData = async () => {
@@ -116,15 +118,12 @@ export function CompanyCalendar({ currentUser }: Props) {
       const endDate = new Date(year, month + 1, 0);
       const endStr = toYMD(endDate);
 
-      const [evtSnap, leaveSnap, empSnap, meetingSnap, franchiseSnap] = await Promise.all([
+      const [evtSnap, leaveSnap, empSnap, meetingSnap] = await Promise.all([
         getDocs(query(collection(salesDb, 'calendar_events'),
           where('startDate', '<=', endStr), orderBy('startDate'))),
         getDocs(query(collection(salesDb, 'leave_requests'), orderBy('startDate', 'desc'))),
         getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
-        // 회의록 — 이 달 범위 내 (읽기 전용)
         getDocs(collection(salesDb, 'meetings')),
-        // 오픈 일정 — 전체 읽어서 클라이언트 필터 (읽기 전용)
-        getDocs(query(collection(salesDb, 'franchise_schedules'))),
       ]);
 
       /* 캘린더 이벤트 */
@@ -145,35 +144,7 @@ export function CompanyCalendar({ currentUser }: Props) {
           createdAt: '', updatedAt: '',
         }));
 
-      /* 오픈 일정 주요 날짜 → 가상 이벤트 (저장 안 함, 표시만) */
-      const franchiseEvents: CalendarEvent[] = [];
-      franchiseSnap.docs.forEach(d => {
-        const s = d.data() as Record<string, string>;
-        if (s.archived) return;
-        const name = s.storeName || s.storeNumber || '매장';
-        const dateFields: { key: string; label: string }[] = [
-          { key: 'openDate',        label: `🏪 ${name} 오픈` },
-          { key: 'trainingStart',   label: `📚 ${name} 교육시작` },
-          { key: 'constructionStart', label: `🔨 ${name} 공사시작` },
-          { key: 'constructionEnd', label: `✅ ${name} 공사완료` },
-        ];
-        dateFields.forEach(({ key, label }) => {
-          const dateVal = s[key];
-          if (dateVal && dateVal >= startStr && dateVal <= endStr) {
-            franchiseEvents.push({
-              id: `franchise_${d.id}_${key}`,
-              type: 'franchise' as CalendarEventType,
-              title: label,
-              startDate: dateVal, endDate: dateVal,
-              allDay: true,
-              visibility: 'all',
-              createdAt: '', updatedAt: '',
-            });
-          }
-        });
-      });
-
-      setEvents([...calEvents, ...meetingEvents, ...franchiseEvents]);
+      setEvents([...calEvents, ...meetingEvents]);
 
       const allLeave = leaveSnap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest));
       setLeaveRequests(allLeave);
@@ -281,20 +252,22 @@ export function CompanyCalendar({ currentUser }: Props) {
 
   const getEmpName = (id: string) => employees.find(e => e.id === id)?.name ?? '-';
 
-  /* 이벤트 저장 */
+  /* 이벤트 저장 (신규/수정 겸용) */
   const saveEvent = async () => {
     if (!eventForm.title.trim()) { toast.error('제목을 입력해주세요'); return; }
     if (eventForm.startDate > eventForm.endDate) { toast.error('종료일이 시작일보다 빠릅니다'); return; }
     const now = new Date().toISOString();
-    const id = genId();
-    const evt: CalendarEvent = {
-      id, ...eventForm,
-      employeeId: myEmployee?.id,
-      createdAt: now, updatedAt: now,
-    };
-    await setDoc(doc(salesDb, 'calendar_events', id), evt);
-    toast.success('일정이 추가되었습니다');
+    if (editingEvent) {
+      await updateDoc(doc(salesDb, 'calendar_events', editingEvent.id), { ...eventForm, updatedAt: now });
+      toast.success('일정이 수정되었습니다');
+    } else {
+      const id = genId();
+      const evt: CalendarEvent = { id, ...eventForm, employeeId: myEmployee?.id, createdAt: now, updatedAt: now };
+      await setDoc(doc(salesDb, 'calendar_events', id), evt);
+      toast.success('일정이 추가되었습니다');
+    }
     setShowEventModal(false);
+    setEditingEvent(null);
     fetchData();
   };
 
@@ -541,12 +514,14 @@ export function CompanyCalendar({ currentUser }: Props) {
             </button>
             {/* 범례 — 데스크탑만 표시 */}
             <div className="ml-auto hidden sm:flex items-center gap-3 flex-wrap">
-              {(Object.entries(EVENT_COLORS) as [CalendarEventType, string][]).map(([type, color]) => (
-                <span key={type} className="flex items-center gap-1 text-[11px] text-stone-500">
-                  <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
-                  {EVENT_TEXT[type]}
-                </span>
-              ))}
+              {(Object.entries(EVENT_COLORS) as [CalendarEventType, string][])
+                .filter(([type]) => type !== 'franchise')
+                .map(([type, color]) => (
+                  <span key={type} className="flex items-center gap-1 text-[11px] text-stone-500">
+                    <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+                    {EVENT_TEXT[type]}
+                  </span>
+                ))}
             </div>
           </div>
 
@@ -579,11 +554,11 @@ export function CompanyCalendar({ currentUser }: Props) {
                       </div>
                       <div className="space-y-0.5">
                         {dayEvts.slice(0, 3).map(evt => {
-                          const isReadOnly = evt.type === 'meeting' || evt.type === 'franchise' || evt.type === 'leave';
+                          const isReadOnly = evt.type === 'meeting' || evt.type === 'leave';
                           return (
                             <div key={evt.id}
                               className={`text-white rounded truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
-                              onClick={e => { e.stopPropagation(); if (!isReadOnly) deleteEvent(evt); }}
+                              onClick={e => { e.stopPropagation(); if (!isReadOnly) setSelectedEvent(evt); }}
                               title={evt.title}
                             >
                               {/* 모바일: 점, 데스크탑: 텍스트 */}
@@ -627,13 +602,68 @@ export function CompanyCalendar({ currentUser }: Props) {
         </div>
       )}
 
-      {/* 일정 추가 모달 */}
+      {/* 일정 상세/수정 팝업 */}
+      {selectedEvent && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setSelectedEvent(null)}>
+          <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl border border-stone-200 dark:border-stone-700 w-72" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between px-5 py-4 border-b border-stone-200 dark:border-stone-700">
+              <div className="min-w-0 flex-1 pr-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${EVENT_COLORS[selectedEvent.type]}`} />
+                  <span className="text-[11px] text-stone-400">{EVENT_TEXT[selectedEvent.type]}</span>
+                </div>
+                <p className="text-sm font-black text-stone-900 dark:text-white">{selectedEvent.title}</p>
+                <p className="text-xs text-stone-400 mt-1 flex items-center gap-0.5">
+                  <Calendar size={10} />
+                  {fmtKor(selectedEvent.startDate)}{selectedEvent.startDate !== selectedEvent.endDate ? ` ~ ${fmtKor(selectedEvent.endDate)}` : ''}
+                </p>
+                {!selectedEvent.allDay && selectedEvent.startTime && (
+                  <p className="text-xs text-stone-400 mt-0.5 flex items-center gap-0.5">
+                    <Clock size={10} /> {selectedEvent.startTime} ~ {selectedEvent.endTime}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setSelectedEvent(null)} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm shrink-0"><X size={16} /></button>
+            </div>
+            <div className="p-3 flex gap-2">
+              <button
+                onClick={() => {
+                  setEditingEvent(selectedEvent);
+                  setEventForm({
+                    title: selectedEvent.title,
+                    type: selectedEvent.type,
+                    startDate: selectedEvent.startDate,
+                    endDate: selectedEvent.endDate,
+                    allDay: selectedEvent.allDay ?? true,
+                    startTime: (selectedEvent as any).startTime ?? '09:00',
+                    endTime: (selectedEvent as any).endTime ?? '18:00',
+                    visibility: selectedEvent.visibility ?? 'all',
+                  });
+                  setSelectedEvent(null);
+                  setShowEventModal(true);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold border border-stone-200 dark:border-stone-700 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+              >
+                <Edit2 size={12} /> 수정
+              </button>
+              <button
+                onClick={() => { const ev = selectedEvent; setSelectedEvent(null); deleteEvent(ev); }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold border border-red-200 dark:border-red-800 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                <Trash2 size={12} /> 삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 일정 추가/수정 모달 */}
       {showEventModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-stone-700">
-              <h2 className="text-base font-black text-stone-900 dark:text-stone-100">일정 추가</h2>
-              <button onClick={() => setShowEventModal(false)}><X size={18} className="text-stone-400" /></button>
+              <h2 className="text-base font-black text-stone-900 dark:text-stone-100">{editingEvent ? '일정 수정' : '일정 추가'}</h2>
+              <button onClick={() => { setShowEventModal(false); setEditingEvent(null); }}><X size={18} className="text-stone-400" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
@@ -695,9 +725,9 @@ export function CompanyCalendar({ currentUser }: Props) {
               )}
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-stone-200 dark:border-stone-700">
-              <button onClick={() => setShowEventModal(false)} className="px-4 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold">취소</button>
+              <button onClick={() => { setShowEventModal(false); setEditingEvent(null); }} className="px-4 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold">취소</button>
               <button onClick={saveEvent} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg font-bold hover:opacity-80">
-                <Check size={13} /> 저장
+                <Check size={13} /> {editingEvent ? '수정' : '저장'}
               </button>
             </div>
           </div>
