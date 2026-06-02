@@ -643,3 +643,59 @@ export interface SopDocument {
   createdAt: string;
   updatedAt: string;
 }
+
+// ==========================================
+// 프로젝트 (salesDb: projects / project_items)
+// ==========================================
+export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived';
+export type KanbanColumn = 'todo' | 'doing' | 'done';
+export type ProjectItemPriority = 'urgent' | 'high' | 'normal' | 'low';
+
+export interface ProjectMilestone {
+  id: string;
+  title: string;
+  dueDate: string;
+  done: boolean;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  description?: string;
+  status: ProjectStatus;
+  ownerId: string;
+  ownerName: string;
+  memberIds: string[];
+  memberNames: string[];
+  brandTags?: string[];
+  startDate?: string;
+  endDate?: string;
+  milestones?: ProjectMilestone[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectItem {
+  id: string;
+  projectId: string;
+  title: string;
+  column: KanbanColumn;
+  order: number;
+  priority: ProjectItemPriority;
+  kind: 'task' | 'link';
+  // kind='link'
+  linkedType?: 'report' | 'meeting' | 'daily' | 'weekly';
+  linkedId?: string;
+  linkedTitle?: string;
+  // 담당자/확인자/요청자
+  assigneeId?: string;
+  assigneeName?: string;
+  accountableId?: string;
+  accountableName?: string;
+  requesterId?: string;
+  requesterName?: string;
+  requesterNote?: string;
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}

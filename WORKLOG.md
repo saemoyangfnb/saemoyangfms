@@ -26,6 +26,30 @@
 
 ---
 
+## 2026-06-02 (3) — Claude Code
+
+### 완료
+- 프로젝트 기능 P2 구현 (ProjectsView.tsx, 약 450줄)
+  - 프로젝트 목록: 진행중/전체/시각화 탭, 카드 그리드
+  - 프로젝트 생성/수정/삭제 + 멤버 선택, 기간 설정
+  - 칸반 보드: 할일/진행중/완료 3컬럼 + dnd-kit 드래그앤드롭
+  - 카드: 담당자/요청자/요청맥락/마감일/우선순위 + 편집/삭제
+  - types.ts: Project, ProjectItem, KanbanColumn, ProjectItemPriority 등 추가
+  - salesDb: projects / project_items 컬렉션 사용
+
+### 다음에 이어할 것
+- P3: OKR & KPI 섹션 구현
+- P3: 새모양에프엔비 섹션 (MVC, 브랜드 연혁, 회사 소개서) 콘텐츠
+- P3: 칸반 카드 ↔ 기존 보고서/회의록 링크 연결 기능 (kind='link')
+- 루틴: 캘린더 내 반복 등록 기능 추가
+
+### 주의
+- project_items: getDocs + 명시적 리프레시 방식 (onSnapshot 미사용 — b815 방지)
+- Firestore 저장 시 scrub() 필수 (undefined 필드 제거)
+- 드래그: GripVertical 핸들에만 listeners 적용 (카드 클릭과 충돌 방지)
+
+---
+
 ## 2026-06-02 (2) — Claude Code
 
 ### 완료

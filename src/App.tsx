@@ -31,6 +31,7 @@ const ReportView = lazy(() => import('./components/ReportView').then(m => ({ def
 const NoticeBoard = lazy(() => import('./components/NoticeBoard').then(m => ({ default: m.NoticeBoard })));
 const DailyReportView = lazy(() => import('./components/DailyReportView').then(m => ({ default: m.DailyReportView })));
 const SopView = lazy(() => import('./components/SopView').then(m => ({ default: m.SopView })));
+const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({ default: m.ProjectsView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -1604,13 +1605,9 @@ export default function App() {
             </div>
           )}
 
-          {/* 프로젝트 (준비 중) */}
+          {/* 프로젝트 */}
           {sidebar.section === 'projects' && (
-            <div className="flex flex-col items-center justify-center py-32 text-center">
-              <FolderKanban size={48} className="text-stone-300 dark:text-stone-600 mb-4" />
-              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">프로젝트</h2>
-              <p className="text-sm text-stone-400">준비 중입니다.</p>
-            </div>
+            <ProjectsView currentUser={currentUser} />
           )}
 
           {/* 회의록 */}
