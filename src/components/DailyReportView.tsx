@@ -519,7 +519,11 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         items, updatedAt: new Date().toISOString(),
       });
       toast.success('퇴근 보고 완료');
-      setKakaoTarget({ type: 'evening', items: items.map(i => i.text) });
+      setKakaoTarget({ type: 'evening', items: items.map(i =>
+        i.status === 'done'
+          ? `${i.text} - 완료`
+          : `${i.text} - 미완료${i.note ? `[${i.note}]` : ''}`
+      ) });
     }
     fetchData();
   };
@@ -901,7 +905,11 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                 )
               ) : (
                 <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports}
-                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i => i.text), onCopied: toast.success })} />
+                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i =>
+                    i.status === 'done'
+                      ? `${i.text} - 완료`
+                      : `${i.text} - 미완료${i.note ? `[${i.note}]` : ''}`
+                  ), onCopied: toast.success })} />
               )}
             </>
           )}
