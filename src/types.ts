@@ -687,6 +687,7 @@ export interface ProjectItem {
   linkedType?: 'report' | 'meeting' | 'daily' | 'weekly';
   linkedId?: string;
   linkedTitle?: string;
+  linkedDate?: string;
   // 담당자/확인자/요청자
   assigneeId?: string;
   assigneeName?: string;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { salesDb } from '../firebase';
+import { salesDb, db } from '../firebase';
 import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
   query, orderBy, where,
@@ -16,7 +16,7 @@ import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
   Plus, ChevronLeft, Trash2, Edit2, X, Users, Calendar,
-  GripVertical, FolderKanban, Check, MoreHorizontal,
+  GripVertical, FolderKanban, Check, ExternalLink, Link, Search,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -57,6 +57,171 @@ const STATUS_CFG: Record<ProjectStatus, { label: string; cls: string }> = {
 
 const COLS: KanbanColumn[] = ['todo', 'doing', 'done'];
 
+const LINK_TYPE_CFG: Record<NonNullable<ProjectItem['linkedType']>, { label: string; cls: string }> = {
+  report:  { label: '보고서',  cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+  meeting: { label: '회의록',  cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  daily:   { label: '일일보고', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  weekly:  { label: '주간보고', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+};
+
+// ── DocPickerModal ────────────────────────────────────────
+interface PickerDoc { id: string; title: string; sub: string; linkedType: NonNullable<ProjectItem['linkedType']>; date: string; }
+
+function DocPickerModal({
+  column, projectId, existingLinkedIds, onLink, onClose,
+}: {
+  column: KanbanColumn;
+  projectId: string;
+  existingLinkedIds: string[];
+  onLink: (data: Omit<ProjectItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onClose: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<NonNullable<ProjectItem['linkedType']>>('report');
+  const [docs, setDocs] = useState<PickerDoc[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    setDocs([]);
+    (async () => {
+      try {
+        if (activeTab === 'report') {
+          const snap = await getDocs(query(collection(salesDb, 'reports'), orderBy('createdAt', 'desc')));
+          setDocs(snap.docs.map(d => {
+            const r = d.data();
+            return { id: d.id, title: r.title || '(제목없음)', sub: `${r.authorName ?? ''} · ${r.createdAt?.slice(0, 10) ?? ''}`, linkedType: 'report', date: r.createdAt ?? '' };
+          }));
+        } else if (activeTab === 'meeting') {
+          const snap = await getDocs(query(collection(db, 'meetings'), orderBy('date', 'desc')));
+          setDocs(snap.docs.map(d => {
+            const m = d.data();
+            return { id: d.id, title: m.title || '(제목없음)', sub: `${m.author ?? ''} · ${m.date ?? ''}`, linkedType: 'meeting', date: m.date ?? '' };
+          }));
+        } else if (activeTab === 'daily') {
+          const snap = await getDocs(query(collection(salesDb, 'daily_reports'), orderBy('date', 'desc')));
+          setDocs(snap.docs.slice(0, 100).map(d => {
+            const r = d.data();
+            const typeLabel = r.type === 'morning' ? '출근' : '퇴근';
+            return { id: d.id, title: `[${typeLabel}] ${r.employeeName}`, sub: r.date ?? '', linkedType: 'daily', date: r.date ?? '' };
+          }));
+        } else {
+          const snap = await getDocs(query(collection(salesDb, 'weekly_reports'), orderBy('weekStart', 'desc')));
+          setDocs(snap.docs.slice(0, 100).map(d => {
+            const r = d.data();
+            return { id: d.id, title: r.employeeName ?? '(이름없음)', sub: `${r.weekStart ?? ''} 주간`, linkedType: 'weekly', date: r.weekStart ?? '' };
+          }));
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [activeTab]);
+
+  const filtered = docs.filter(d => {
+    if (existingLinkedIds.includes(d.id)) return false;
+    if (!search.trim()) return true;
+    return d.title.includes(search) || d.sub.includes(search);
+  });
+
+  const tabs: { key: NonNullable<ProjectItem['linkedType']>; label: string }[] = [
+    { key: 'report',  label: '보고서' },
+    { key: 'meeting', label: '회의록' },
+    { key: 'daily',   label: '일일보고' },
+    { key: 'weekly',  label: '주간보고' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-lg border border-stone-200 dark:border-stone-700 flex flex-col" style={{ maxHeight: '80vh' }}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400 shrink-0">
+          <h2 className="text-sm font-black text-stone-900 dark:text-white flex items-center gap-2">
+            <Link size={14} /> 기존 문서 연결
+          </h2>
+          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-sm">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 탭 */}
+        <div className="flex border-b border-stone-200 dark:border-stone-700 shrink-0">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setSearch(''); }}
+              className={`flex-1 py-2 text-[11px] font-bold transition-colors border-b-2 -mb-px ${
+                activeTab === key
+                  ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white'
+                  : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 검색 */}
+        <div className="px-4 py-2.5 border-b border-stone-100 dark:border-stone-800 shrink-0">
+          <div className="flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-2.5 py-1.5">
+            <Search size={12} className="text-stone-400 shrink-0" />
+            <input
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="제목 검색..."
+              className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        {/* 목록 */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-xs text-stone-400">
+              {search ? '검색 결과 없음' : '문서가 없습니다'}
+            </div>
+          ) : (
+            filtered.map(d => {
+              const cfg = LINK_TYPE_CFG[d.linkedType];
+              return (
+                <div key={d.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800/50 group">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${cfg.cls}`}>{cfg.label}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-stone-800 dark:text-stone-200 truncate">{d.title}</p>
+                    <p className="text-[10px] text-stone-400">{d.sub}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      onLink(scrub({
+                        projectId,
+                        title: d.title,
+                        column,
+                        order: Date.now(),
+                        priority: 'normal' as const,
+                        kind: 'link' as const,
+                        linkedType: d.linkedType,
+                        linkedId: d.id,
+                        linkedTitle: d.title,
+                        linkedDate: d.date,
+                      }) as Omit<ProjectItem, 'id' | 'createdAt' | 'updatedAt'>);
+                    }}
+                    className="shrink-0 px-2.5 py-1 text-[11px] font-bold bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 rounded-sm hover:bg-stone-600 dark:hover:bg-stone-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    연결
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── KanbanCard ────────────────────────────────────────────
 function KanbanCard({
   item, onEdit, onDelete,
@@ -66,14 +231,16 @@ function KanbanCard({
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
+  const isLink = item.kind === 'link';
   const cfg = PRIORITY_CFG[item.priority];
   const overdue = isOverdue(item.dueDate, item.column);
+  const linkCfg = isLink && item.linkedType ? LINK_TYPE_CFG[item.linkedType] : null;
 
   return (
     <div
       ref={setNodeRef}
       style={transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0 : 1 } : undefined}
-      className="bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm p-3 mb-2 shadow-sm group touch-none"
+      className={`bg-white dark:bg-stone-800 border rounded-sm p-3 mb-2 shadow-sm group touch-none ${isLink ? 'border-l-2 border-l-indigo-400 border-stone-200 dark:border-stone-700' : 'border-stone-200 dark:border-stone-700'}`}
     >
       <div className="flex items-start gap-1.5">
         <button
@@ -85,28 +252,45 @@ function KanbanCard({
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-stone-800 dark:text-stone-100 leading-snug mb-1.5 pr-1">{item.title}</p>
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${cfg.cls}`}>{cfg.label}</span>
-            {item.assigneeName && (
-              <span className="text-[10px] text-stone-500 dark:text-stone-400 flex items-center gap-0.5">
-                <Users size={9} />{item.assigneeName}
-              </span>
-            )}
-            {item.dueDate && (
-              <span className={`text-[10px] flex items-center gap-0.5 ${overdue ? 'text-red-500 font-bold' : 'text-stone-400'}`}>
-                <Calendar size={9} />{fmtDate(item.dueDate)}{overdue ? ' !' : ''}
-              </span>
+            {isLink && linkCfg ? (
+              <>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold flex items-center gap-0.5 ${linkCfg.cls}`}>
+                  <ExternalLink size={8} />{linkCfg.label}
+                </span>
+                {item.linkedDate && (
+                  <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                    <Calendar size={9} />{fmtDate(item.linkedDate)}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${cfg.cls}`}>{cfg.label}</span>
+                {item.assigneeName && (
+                  <span className="text-[10px] text-stone-500 dark:text-stone-400 flex items-center gap-0.5">
+                    <Users size={9} />{item.assigneeName}
+                  </span>
+                )}
+                {item.dueDate && (
+                  <span className={`text-[10px] flex items-center gap-0.5 ${overdue ? 'text-red-500 font-bold' : 'text-stone-400'}`}>
+                    <Calendar size={9} />{fmtDate(item.dueDate)}{overdue ? ' !' : ''}
+                  </span>
+                )}
+              </>
             )}
           </div>
-          {item.requesterName && (
+          {!isLink && item.requesterName && (
             <p className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 leading-snug">
               요청: {item.requesterName}{item.requesterNote ? ` — ${item.requesterNote}` : ''}
             </p>
           )}
         </div>
         <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-          <button onClick={onEdit} className="p-0.5 text-stone-400 hover:text-blue-600 rounded-sm transition-colors">
-            <Edit2 size={11} />
-          </button>
+          {!isLink && (
+            <button onClick={onEdit} className="p-0.5 text-stone-400 hover:text-blue-600 rounded-sm transition-colors">
+              <Edit2 size={11} />
+            </button>
+          )}
           <button onClick={onDelete} className="p-0.5 text-stone-400 hover:text-red-600 rounded-sm transition-colors">
             <Trash2 size={11} />
           </button>
@@ -129,13 +313,14 @@ function KanbanCardGhost({ item }: { item: ProjectItem }) {
 
 // ── DroppableColumn ───────────────────────────────────────
 function DroppableColumn({
-  column, items, onAddItem, onEditItem, onDeleteItem,
+  column, items, onAddItem, onEditItem, onDeleteItem, onLinkDoc,
 }: {
   column: KanbanColumn;
   items: ProjectItem[];
   onAddItem: (col: KanbanColumn) => void;
   onEditItem: (item: ProjectItem) => void;
   onDeleteItem: (item: ProjectItem) => void;
+  onLinkDoc: (col: KanbanColumn) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column });
   const cfg = COL_CFG[column];
@@ -164,6 +349,12 @@ function DroppableColumn({
           className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-stone-700/40 rounded-sm transition-colors"
         >
           <Plus size={11} /> 추가
+        </button>
+        <button
+          onClick={() => onLinkDoc(column)}
+          className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] text-stone-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 rounded-sm transition-colors"
+        >
+          <Link size={11} /> 문서 연결
         </button>
       </div>
     </div>
@@ -453,6 +644,7 @@ function ProjectDetail({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
+  const [showDocPicker, setShowDocPicker] = useState(false);
   const [editingItem, setEditingItem] = useState<ProjectItem | undefined>();
   const [defaultCol, setDefaultCol] = useState<KanbanColumn>('todo');
 
@@ -533,6 +725,11 @@ function ProjectDetail({
     setShowItemForm(true);
   };
 
+  const openLinkDoc = (col: KanbanColumn) => {
+    setDefaultCol(col);
+    setShowDocPicker(true);
+  };
+
   const statusCfg = STATUS_CFG[project.status];
 
   return (
@@ -604,6 +801,7 @@ function ProjectDetail({
               onAddItem={openAddItem}
               onEditItem={openEditItem}
               onDeleteItem={handleDeleteItem}
+              onLinkDoc={openLinkDoc}
             />
           ))}
         </div>
@@ -635,6 +833,28 @@ function ProjectDetail({
           employees={employees}
           onSave={editingItem ? handleEditItem : handleAddItem}
           onClose={() => { setShowItemForm(false); setEditingItem(undefined); }}
+        />
+      )}
+
+      {/* 문서 연결 모달 */}
+      {showDocPicker && (
+        <DocPickerModal
+          column={defaultCol}
+          projectId={project.id}
+          existingLinkedIds={items.filter(i => i.kind === 'link' && i.linkedId).map(i => i.linkedId!)}
+          onLink={async (data) => {
+            const id = genId();
+            const now = ts();
+            try {
+              await setDoc(doc(salesDb, 'project_items', id), scrub({ ...data, id, createdAt: now, updatedAt: now }));
+              toast.success('문서 연결됨');
+              onItemsChange();
+            } catch {
+              toast.error('연결 실패');
+            }
+            setShowDocPicker(false);
+          }}
+          onClose={() => setShowDocPicker(false)}
         />
       )}
     </div>
