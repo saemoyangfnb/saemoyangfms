@@ -620,7 +620,7 @@ export interface Report {
   docDate?: string;
   projectId?: string;          // 프로젝트 연동
   projectTitle?: string;       // 표시용 프로젝트명
-  kanbanColumn?: KanbanColumn; // 프로젝트 칸반 컬럼
+  kanbanColumn?: string; // 프로젝트 칸반 컬럼 (동적 컬럼 ID)
   parentReportId?: string;     // 도식화 상위 보고서
 }
 
@@ -652,8 +652,20 @@ export interface SopDocument {
 // 프로젝트 (salesDb: projects / project_items)
 // ==========================================
 export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived';
-export type KanbanColumn = 'todo' | 'doing' | 'done';
+export type KanbanColumn = 'todo' | 'doing' | 'done'; // ProjectItem 하위 호환용
 export type ProjectItemPriority = 'urgent' | 'high' | 'normal' | 'low';
+
+export type KanbanColumnColor = 'stone' | 'amber' | 'emerald' | 'blue' | 'purple' | 'rose';
+export interface KanbanColumnDef {
+  id: string;
+  label: string;
+  color: KanbanColumnColor;
+}
+export const DEFAULT_KANBAN_COLUMNS: KanbanColumnDef[] = [
+  { id: 'todo',  label: '계획 수립', color: 'stone' },
+  { id: 'doing', label: '진행중',   color: 'amber' },
+  { id: 'done',  label: '완료',     color: 'emerald' },
+];
 
 export interface ProjectMilestone {
   id: string;
@@ -675,6 +687,7 @@ export interface Project {
   startDate?: string;
   endDate?: string;
   milestones?: ProjectMilestone[];
+  kanbanColumns?: KanbanColumnDef[];
   createdAt: string;
   updatedAt: string;
 }

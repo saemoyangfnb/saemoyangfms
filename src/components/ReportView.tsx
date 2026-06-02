@@ -8,7 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { User, Report, ReportSection, ReportType, ApprovalStatus, Employee } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { shareApprovalRequest, shareKakao } from '../utils/kakao';
+import { shareApprovalRequest } from '../utils/kakao';
 import {
   Plus, X, ChevronLeft, ChevronRight, Camera, Trash2,
   CheckCircle, XCircle, Clock, Send, Edit2, RefreshCw,
@@ -189,45 +189,12 @@ function ReportDetail({
 }) {
   const ap = APPROVAL_CONFIG[report.approvalStatus];
   const toast = useToast();
-  const captureRef = useRef<HTMLDivElement>(null);
   const [deletePending, setDeletePending] = React.useState(false);
   const [approvePending, setApprovePending] = React.useState(false);
   const [rejectPending, setRejectPending] = React.useState(false);
-  const [capturing, setCapturing] = React.useState(false);
-
-  const handleCapture = async () => {
-    if (!captureRef.current) return;
-    setCapturing(true);
-    try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(captureRef.current, {
-        backgroundColor: document.documentElement.classList.contains('dark') ? '#0c0a09' : '#ffffff',
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-      await new Promise<void>((resolve, reject) => {
-        canvas.toBlob(async blob => {
-          if (!blob) { reject(new Error('blob 없음')); return; }
-          try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-            toast.success('캡처됨 — 카톡에 바로 붙여넣기하세요 📋');
-          } catch {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `${report.title || '보고서'}.png`;
-            a.click(); URL.revokeObjectURL(url);
-            toast.success('이미지로 저장됐습니다');
-          }
-          resolve();
-        }, 'image/png');
-      });
-    } catch { toast.error('캡처 실패'); }
-    finally { setCapturing(false); }
-  };
 
   return (
-    <div ref={captureRef} className="fixed inset-0 z-50 bg-white dark:bg-stone-950 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-white dark:bg-stone-950 flex flex-col overflow-hidden">
       {/* 상단바 */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-200 dark:border-stone-800 shrink-0">
         <button onClick={onClose} className="p-1.5 -ml-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
@@ -245,16 +212,6 @@ function ReportDetail({
           </div>
         </div>
         <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${ap.cls}`}>{ap.icon}{ap.label}</span>
-        {/* 텍스트 공유 */}
-        <button onClick={() => shareKakao({ title: `보고서 — ${report.authorName}`, body: `"${report.title}"\n상태: ${ap.label}`, onCopied: toast.success })}
-          className="text-base shrink-0 hover:scale-110 transition-transform" title="카톡으로 공유">
-          💬
-        </button>
-        {/* 캡처 복사 */}
-        <button onClick={handleCapture} disabled={capturing}
-          className="text-base shrink-0 hover:scale-110 transition-transform disabled:opacity-40" title="보고서 캡처 → 클립보드 복사">
-          {capturing ? '⏳' : '📸'}
-        </button>
         {isMe && report.approvalStatus === 'draft' && (
           <button onClick={onEdit} className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
             <Edit2 size={16} />

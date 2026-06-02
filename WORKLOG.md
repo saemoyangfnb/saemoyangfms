@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-06-02 (14) — Claude Code
+
+### 완료
+- **보고서 공유 버튼 2개 제거** — 텍스트 복사(💬), 캡처(📸) 버튼 모두 삭제 (작동 불량)
+- **칸반보드 재구성**: 동적 컬럼 시스템 도입
+  - 각 카드에 상태 드롭다운(계획 수립/진행중/완료) 추가
+  - 컬럼 헤더: 이름 클릭 인라인 편집, 색상 도트 클릭 색상 변경(6색), ← → 순서 이동, × 삭제
+  - "+ 컬럼 추가" 버튼으로 자유 추가, 삭제 시 고아 카드는 첫 컬럼으로 이동
+  - 기본 컬럼 ID(todo/doing/done) 유지 → 기존 데이터 호환
+  - 진행률 = 마지막 컬럼 기준으로 계산
+
+### 미완 / 진행 중
+- 없음
+
+### 다음에 이어할 것
+- 배포 (git add src/ → commit → push)
+- **홈 대시보드 개편** (위젯 선택형) — 최우선 미완 과제
+
+### 주의
+- `KanbanColumn` union type은 ProjectItem 하위 호환을 위해 유지, Report는 `string` 타입으로 변경됨
+- `docStats`(목록 뷰 진행률)는 여전히 `kanbanColumn === 'done'` 기준 → 기본 컬럼 사용자는 정상 동작
+
+---
+
 ## 양식 (복붙용)
 
 ```
@@ -26,9 +50,31 @@
 
 ---
 
+## 2026-06-02 (13) — Claude Code
+
+### 완료
+- 이번 세션 전체 작업 내역 정리 (아래 11~12 참조)
+
+### 미완 / 진행 중
+- salesDb Firestore 보안 규칙 업데이트 — 여전히 미완 (permission-denied 발생 시 우선 처리)
+
+### 다음에 이어할 것
+- **홈 대시보드 개편** (위젯 선택형) — 세션 (2)(5)(9)(13) 계속 밀림, 최우선 과제
+
+### 주의
+- html2canvas 📸 캡처: CORS 정책상 Firebase Storage 이미지가 캡처에서 빠질 수 있음 (useCORS: true 설정했으나 Storage CORS 헤더 미설정 시 이미지 누락)
+
+---
+
 ## 2026-06-02 (12) — Claude Code
 
 ### 완료
+- **ProjectsView 버그 5종 수정** (커밋 18b02d6에 포함)
+  - 헤더·칸반·도식화 "새 보고서" 버튼이 폼을 열지 않던 문제 → openNewReport()로 통일
+  - docs 탭에서 focusReportId stale 유지 버그 수정
+  - DocLinkPickerModal: 연결 클릭 즉시 로컬 목록에서 제거 (중복 클릭 방지)
+  - handleUpdateProject: updateDoc에 id/createdAt 중복 저장 제거
+  - 회의록→프로젝트 onSave async/await 누락 수정
 - **보고서 양식 통일**: QuickReportModal 제거, 모든 "새 보고서" 진입점을 ReportView로 통일
   - ProjectDetail 헤더/칸반/도식화 버튼 → `openNewReport()` → ReportView 에디터 자동 오픈
   - 도식화 노드 "추가 보고서(형제)" / "다음 보고서(자식)" → parentReportId 전달해 ReportView 에디터 오픈

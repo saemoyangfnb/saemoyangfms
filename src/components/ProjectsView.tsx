@@ -10,12 +10,13 @@ import {
   DragEndEvent, DragStartEvent, useDroppable, useDraggable,
 } from '@dnd-kit/core';
 import {
-  User, Employee, Department, Project, Report, ProjectStatus, KanbanColumn,
+  User, Employee, Department, Project, Report, ProjectStatus,
+  KanbanColumnDef, KanbanColumnColor, DEFAULT_KANBAN_COLUMNS,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
-  Plus, ChevronLeft, Trash2, Edit2, X, Users, Calendar,
+  Plus, ChevronLeft, ChevronRight, Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
   Archive, CheckCircle2, RotateCcw, BookOpen,
 } from 'lucide-react';
@@ -33,11 +34,15 @@ const fmtDate = (iso: string) => {
 };
 
 // ── 설정 ──────────────────────────────────────────────────
-const COL_CFG: Record<KanbanColumn, { label: string; headCls: string; bgCls: string; dotCls: string }> = {
-  todo:  { label: '할 일',   headCls: 'text-stone-600 dark:text-stone-300',     bgCls: 'bg-stone-100/80 dark:bg-stone-800/50',    dotCls: 'bg-stone-400' },
-  doing: { label: '진행 중', headCls: 'text-amber-600 dark:text-amber-400',     bgCls: 'bg-amber-50/80 dark:bg-amber-900/10',     dotCls: 'bg-amber-400' },
-  done:  { label: '완료',    headCls: 'text-emerald-600 dark:text-emerald-400', bgCls: 'bg-emerald-50/80 dark:bg-emerald-900/10', dotCls: 'bg-emerald-500' },
+const COLOR_CFG: Record<string, { headCls: string; bgCls: string; dotCls: string; cardBorderCls: string }> = {
+  stone:   { headCls: 'text-stone-600 dark:text-stone-300',     bgCls: 'bg-stone-100/80 dark:bg-stone-800/50',    dotCls: 'bg-stone-400',   cardBorderCls: 'border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800' },
+  amber:   { headCls: 'text-amber-600 dark:text-amber-400',     bgCls: 'bg-amber-50/80 dark:bg-amber-900/10',     dotCls: 'bg-amber-400',   cardBorderCls: 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' },
+  emerald: { headCls: 'text-emerald-600 dark:text-emerald-400', bgCls: 'bg-emerald-50/80 dark:bg-emerald-900/10', dotCls: 'bg-emerald-500', cardBorderCls: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' },
+  blue:    { headCls: 'text-blue-600 dark:text-blue-400',       bgCls: 'bg-blue-50/80 dark:bg-blue-900/10',       dotCls: 'bg-blue-500',    cardBorderCls: 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' },
+  purple:  { headCls: 'text-purple-600 dark:text-purple-400',   bgCls: 'bg-purple-50/80 dark:bg-purple-900/10',   dotCls: 'bg-purple-500',  cardBorderCls: 'border-purple-400 bg-purple-50 dark:bg-purple-900/20' },
+  rose:    { headCls: 'text-rose-600 dark:text-rose-400',       bgCls: 'bg-rose-50/80 dark:bg-rose-900/10',       dotCls: 'bg-rose-500',    cardBorderCls: 'border-rose-400 bg-rose-50 dark:bg-rose-900/20' },
 };
+const COLOR_ORDER = ['stone', 'amber', 'emerald', 'blue', 'purple', 'rose'];
 
 const STATUS_CFG: Record<ProjectStatus, { label: string; cls: string }> = {
   active:    { label: '진행중',   cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
@@ -53,8 +58,6 @@ const AP_CFG: Record<string, { label: string; cls: string }> = {
   rejected: { label: '반려',    cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 };
 
-const COLS: KanbanColumn[] = ['todo', 'doing', 'done'];
-
 interface SimpleMeeting {
   id: string; title: string; date: string; author?: string;
   agendas?: { title: string }[];
@@ -62,15 +65,18 @@ interface SimpleMeeting {
 
 // ── 보고서 칸반 카드 ──────────────────────────────────────
 function ReportKanbanCard({
-  report, onOpen, onUnlink,
+  report, columns, onOpen, onUnlink, onStatusChange,
 }: {
   report: Report;
+  columns: KanbanColumnDef[];
   onOpen: () => void;
   onUnlink: () => void;
+  onStatusChange: (colId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: report.id });
   const ap = AP_CFG[report.approvalStatus] ?? AP_CFG.draft;
   const preview = report.sections?.[0]?.body ?? '';
+  const currentColId = report.kanbanColumn ?? columns[0]?.id ?? 'todo';
 
   return (
     <div
@@ -85,20 +91,32 @@ function ReportKanbanCard({
           <GripVertical size={13} />
         </button>
         {/* 내용 */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
+        <div className="flex-1 min-w-0">
+          {/* 상태 드롭다운 + 결재상태 */}
           <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <select
+              value={currentColId}
+              onChange={e => { e.stopPropagation(); onStatusChange(e.target.value); }}
+              onClick={e => e.stopPropagation()}
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-200 border-0 cursor-pointer outline-none"
+            >
+              {columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${ap.cls}`}>{ap.label}</span>
             <span className="text-[10px] text-stone-400">{report.authorName}</span>
-            {report.updatedAt && <span className="text-[10px] text-stone-300">{fmtDate(report.updatedAt)}</span>}
           </div>
-          <p className="text-xs font-bold text-stone-800 dark:text-stone-200 leading-snug hover:text-stone-600 dark:hover:text-stone-300">
+          {/* 제목 */}
+          <p
+            className="text-xs font-bold text-stone-800 dark:text-stone-200 leading-snug hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+            onClick={onOpen}
+          >
             {report.title || '(제목 없음)'}
           </p>
           {preview && (
             <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-1 line-clamp-2 leading-snug">{preview}</p>
           )}
         </div>
-        {/* 항상 표시되는 제거 버튼 */}
+        {/* 제거 버튼 */}
         <button
           onClick={onUnlink}
           title="프로젝트에서 제거"
@@ -124,35 +142,135 @@ function ReportCardGhost({ report }: { report: Report }) {
 
 // ── 드롭 가능한 칸반 컬럼 ─────────────────────────────────
 function DroppableColumn({
-  column, docs, onNewReport, onOpenDoc, onUnlinkDoc,
+  colDef, docs, columns, isFirst, isLast,
+  onNewReport, onOpenDoc, onUnlinkDoc, onStatusChange,
+  onRename, onColorChange, onMoveLeft, onMoveRight, onDelete,
 }: {
-  column: KanbanColumn;
+  colDef: KanbanColumnDef;
   docs: Report[];
+  columns: KanbanColumnDef[];
+  isFirst: boolean;
+  isLast: boolean;
   onNewReport: () => void;
   onOpenDoc: (r: Report) => void;
   onUnlinkDoc: (r: Report) => void;
+  onStatusChange: (reportId: string, colId: string) => void;
+  onRename: (label: string) => void;
+  onColorChange: (color: KanbanColumnColor) => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  onDelete: () => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column });
-  const cfg = COL_CFG[column];
-  const colDocs = docs.filter(d => (d.kanbanColumn ?? 'todo') === column);
+  const { setNodeRef, isOver } = useDroppable({ id: colDef.id });
+  const cfg = COLOR_CFG[colDef.color] ?? COLOR_CFG.stone;
+  const colDocs = docs.filter(d => (d.kanbanColumn ?? columns[0]?.id) === colDef.id);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(colDef.label);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  // 외부에서 label 바뀌면 동기화
+  React.useEffect(() => { if (!editing) setDraft(colDef.label); }, [colDef.label, editing]);
+
+  const commitRename = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== colDef.label) onRename(trimmed);
+    else setDraft(colDef.label);
+  };
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col min-h-0">
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <span className={`w-2 h-2 rounded-full ${cfg.dotCls} shrink-0`} />
-        <h3 className={`text-xs font-bold ${cfg.headCls} flex-1`}>{cfg.label}</h3>
-        <span className="text-[10px] text-stone-400 tabular-nums">{colDocs.length}</span>
+    <div className="flex-1 min-w-[190px] max-w-[270px] flex flex-col min-h-0">
+      {/* 컬럼 헤더 */}
+      <div className="flex items-center gap-1 mb-2 px-1">
+        {/* 색상 도트 */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setShowColorPicker(v => !v)}
+            className={`w-2.5 h-2.5 rounded-full ${cfg.dotCls} hover:scale-125 transition-transform`}
+            title="색상 변경"
+          />
+          {showColorPicker && (
+            <div
+              className="absolute top-5 left-0 z-20 flex gap-1 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-2 shadow-lg"
+              onMouseLeave={() => setShowColorPicker(false)}
+            >
+              {COLOR_ORDER.map(c => (
+                <button
+                  key={c}
+                  onClick={() => { onColorChange(c as KanbanColumnColor); setShowColorPicker(false); }}
+                  className={`w-4 h-4 rounded-full ${COLOR_CFG[c].dotCls} hover:scale-125 transition-transform ${colDef.color === c ? 'ring-2 ring-offset-1 ring-stone-400 dark:ring-stone-500' : ''}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 컬럼 이름 (인라인 편집) */}
+        {editing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitRename();
+              if (e.key === 'Escape') { setEditing(false); setDraft(colDef.label); }
+            }}
+            className="text-xs font-bold flex-1 min-w-0 bg-transparent border-b border-stone-400 dark:border-stone-500 outline-none py-0.5"
+          />
+        ) : (
+          <button
+            onClick={() => setEditing(true)}
+            className={`text-xs font-bold ${cfg.headCls} flex-1 text-left truncate hover:opacity-70 transition-opacity`}
+            title="클릭하여 이름 변경"
+          >
+            {colDef.label}
+          </button>
+        )}
+
+        <span className="text-[10px] text-stone-400 tabular-nums shrink-0">{colDocs.length}</span>
+
+        {/* 이동 / 삭제 */}
+        <div className="flex items-center gap-0 shrink-0">
+          <button
+            onClick={onMoveLeft}
+            disabled={isFirst}
+            className="p-0.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-20 rounded-sm transition-colors"
+            title="왼쪽으로"
+          >
+            <ChevronLeft size={12} />
+          </button>
+          <button
+            onClick={onMoveRight}
+            disabled={isLast}
+            className="p-0.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-20 rounded-sm transition-colors"
+            title="오른쪽으로"
+          >
+            <ChevronRight size={12} />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-0.5 text-stone-300 dark:text-stone-600 hover:text-red-500 rounded-sm transition-colors"
+            title="컬럼 삭제"
+          >
+            <X size={12} />
+          </button>
+        </div>
       </div>
+
+      {/* 카드 드롭 영역 */}
       <div
         ref={setNodeRef}
         className={`${cfg.bgCls} rounded-sm p-2 flex-1 min-h-[120px] transition-all border-2 ${isOver ? 'border-blue-400 dark:border-blue-500' : 'border-transparent'}`}
       >
-        {colDocs.map(doc => (
+        {colDocs.map(d => (
           <ReportKanbanCard
-            key={doc.id}
-            report={doc}
-            onOpen={() => onOpenDoc(doc)}
-            onUnlink={() => onUnlinkDoc(doc)}
+            key={d.id}
+            report={d}
+            columns={columns}
+            onOpen={() => onOpenDoc(d)}
+            onUnlink={() => onUnlinkDoc(d)}
+            onStatusChange={colId => onStatusChange(d.id, colId)}
           />
         ))}
         <button
@@ -168,20 +286,23 @@ function DroppableColumn({
 
 // ── 도식화 노드 (보고서 기반) ─────────────────────────────
 function ReportDiagramNode({
-  report, allDocs, onNodeClick, onUnlink, depth,
+  report, allDocs, columns, onNodeClick, onUnlink, depth,
 }: {
   report: Report;
   allDocs: Report[];
+  columns: KanbanColumnDef[];
   onNodeClick: (r: Report) => void;
   onUnlink: (r: Report) => void;
   depth: number;
 }) {
   const children = allDocs.filter(d => d.parentReportId === report.id);
-  const col = report.kanbanColumn ?? 'todo';
-  const borderCls =
-    col === 'done'  ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' :
-    col === 'doing' ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' :
-                     'border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800';
+  const colId = report.kanbanColumn ?? columns[0]?.id ?? 'todo';
+  const colDef = columns.find(c => c.id === colId);
+  const colorCfg = COLOR_CFG[colDef?.color ?? 'stone'] ?? COLOR_CFG.stone;
+  const borderCls = colorCfg.cardBorderCls;
+  const headCls = colorCfg.headCls;
+  const bgCls = colorCfg.bgCls;
+  const colLabel = colDef?.label ?? colId;
 
   return (
     <div className="flex flex-col items-center">
@@ -191,7 +312,7 @@ function ReportDiagramNode({
           className={`border-2 rounded-sm p-2.5 w-44 text-left hover:shadow-lg hover:-translate-y-0.5 transition-all ${borderCls}`}
         >
           <div className="flex items-center gap-1 mb-1.5">
-            <span className={`text-[9px] font-bold px-1 py-0.5 rounded-sm ${COL_CFG[col].bgCls} ${COL_CFG[col].headCls}`}>{COL_CFG[col].label}</span>
+            <span className={`text-[9px] font-bold px-1 py-0.5 rounded-sm ${bgCls} ${headCls}`}>{colLabel}</span>
           </div>
           <p className="text-[11px] font-bold text-stone-800 dark:text-stone-200 leading-tight mb-1 pr-2">{report.title || '(제목 없음)'}</p>
           <p className="text-[10px] text-stone-400 leading-none">{report.authorName}</p>
@@ -221,7 +342,7 @@ function ReportDiagramNode({
             {children.map(child => (
               <div key={child.id} className="flex flex-col items-center">
                 <div className="w-px h-6 bg-stone-300 dark:bg-stone-600" />
-                <ReportDiagramNode report={child} allDocs={allDocs} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={depth + 1} />
+                <ReportDiagramNode report={child} allDocs={allDocs} columns={columns} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={depth + 1} />
               </div>
             ))}
           </div>
@@ -232,9 +353,10 @@ function ReportDiagramNode({
 }
 
 function ReportTreeDiagram({
-  docs, onNodeClick, onUnlink,
+  docs, columns, onNodeClick, onUnlink,
 }: {
   docs: Report[];
+  columns: KanbanColumnDef[];
   onNodeClick: (r: Report) => void;
   onUnlink: (r: Report) => void;
 }) {
@@ -246,7 +368,7 @@ function ReportTreeDiagram({
       ) : (
         <div className="flex gap-12 items-start justify-center min-w-max mx-auto">
           {roots.map(root => (
-            <ReportDiagramNode key={root.id} report={root} allDocs={docs} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={0} />
+            <ReportDiagramNode key={root.id} report={root} allDocs={docs} columns={columns} onNodeClick={onNodeClick} onUnlink={onUnlink} depth={0} />
           ))}
         </div>
       )}
@@ -256,9 +378,10 @@ function ReportTreeDiagram({
 
 // ── 도식화 노드 팝업 ──────────────────────────────────────
 function NodeActionPopup({
-  report, onView, onAddSibling, onAddChild, onClose,
+  report, columns, onView, onAddSibling, onAddChild, onClose,
 }: {
   report: Report;
+  columns: KanbanColumnDef[];
   onView: () => void;
   onAddSibling: () => void;
   onAddChild: () => void;
@@ -266,7 +389,9 @@ function NodeActionPopup({
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const ap = AP_CFG[report.approvalStatus] ?? AP_CFG.draft;
-  const col = report.kanbanColumn ?? 'todo';
+  const colId = report.kanbanColumn ?? columns[0]?.id ?? 'todo';
+  const colDef = columns.find(c => c.id === colId);
+  const colorCfg = COLOR_CFG[colDef?.color ?? 'stone'] ?? COLOR_CFG.stone;
   const preview = report.sections?.[0]?.body?.slice(0, 80) ?? '';
 
   return (
@@ -279,7 +404,7 @@ function NodeActionPopup({
         <div className="px-4 py-3 border-b border-stone-200 dark:border-stone-700">
           <div className="flex items-center gap-1.5 mb-1.5">
             <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${ap.cls}`}>{ap.label}</span>
-            <span className={`text-[10px] font-bold ${COL_CFG[col].headCls}`}>● {COL_CFG[col].label}</span>
+            <span className={`text-[10px] font-bold ${colorCfg.headCls}`}>● {colDef?.label ?? colId}</span>
           </div>
           <p className="text-xs font-black text-stone-900 dark:text-white leading-snug">{report.title || '(제목 없음)'}</p>
           {report.authorName && (
@@ -548,6 +673,16 @@ function ProjectDetail({
   const [docViewOpenNew, setDocViewOpenNew] = useState(false);
   const [docViewParentId, setDocViewParentId] = useState<string | undefined>();
 
+  // 동적 칸반 컬럼 상태
+  const [localCols, setLocalCols] = useState<KanbanColumnDef[]>(
+    () => project.kanbanColumns ?? DEFAULT_KANBAN_COLUMNS
+  );
+
+  // 프로젝트 변경 시 컬럼 초기화
+  useEffect(() => {
+    setLocalCols(project.kanbanColumns ?? DEFAULT_KANBAN_COLUMNS);
+  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   type NodeActionState = { kind: 'menu'; report: Report };
   const [nodeAction, setNodeAction] = useState<NodeActionState | null>(null);
 
@@ -557,6 +692,58 @@ function ProjectDetail({
   useEffect(() => {
     if (view !== 'docs') setFocusReportId(undefined);
   }, [view]);
+
+  // 컬럼 설정 저장 (Firestore + 로컬 상태)
+  const saveColumns = useCallback(async (newCols: KanbanColumnDef[]) => {
+    setLocalCols(newCols);
+    try {
+      await updateDoc(doc(salesDb, 'projects', project.id), { kanbanColumns: newCols });
+    } catch { toast.error('컬럼 저장 실패'); }
+  }, [project.id, toast]);
+
+  const handleAddColumn = () => {
+    const nextColor = COLOR_ORDER[localCols.length % COLOR_ORDER.length] as KanbanColumnColor;
+    saveColumns([...localCols, { id: `col_${Date.now()}`, label: '새 컬럼', color: nextColor }]);
+  };
+
+  const handleDeleteColumn = async (colId: string) => {
+    if (localCols.length <= 1) { toast.error('컬럼은 1개 이상 필요합니다'); return; }
+    const newCols = localCols.filter(c => c.id !== colId);
+    const fallbackId = newCols[0].id;
+    const orphaned = docs.filter(d => (d.kanbanColumn ?? localCols[0].id) === colId);
+    if (orphaned.length > 0) {
+      await Promise.all(orphaned.map(d =>
+        updateDoc(doc(salesDb, 'reports', d.id), { kanbanColumn: fallbackId, updatedAt: ts() })
+      ));
+      onDocsChange();
+    }
+    saveColumns(newCols);
+  };
+
+  const handleRenameColumn = (colId: string, label: string) => {
+    saveColumns(localCols.map(c => c.id === colId ? { ...c, label } : c));
+  };
+
+  const handleColorColumn = (colId: string, color: KanbanColumnColor) => {
+    saveColumns(localCols.map(c => c.id === colId ? { ...c, color } : c));
+  };
+
+  const handleMoveColumn = (colId: string, dir: 'left' | 'right') => {
+    const idx = localCols.findIndex(c => c.id === colId);
+    if (idx < 0) return;
+    const newIdx = dir === 'left' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= localCols.length) return;
+    const newCols = [...localCols];
+    [newCols[idx], newCols[newIdx]] = [newCols[newIdx], newCols[idx]];
+    saveColumns(newCols);
+  };
+
+  const handleCardStatusChange = useCallback(async (reportId: string, colId: string) => {
+    try {
+      await updateDoc(doc(salesDb, 'reports', reportId), { kanbanColumn: colId, updatedAt: ts() });
+      onDocsChange();
+    } catch { toast.error('상태 변경 실패'); }
+  }, [onDocsChange, toast]);
 
   const openReport = (report: Report) => {
     setNodeAction(null);
@@ -601,7 +788,7 @@ function ProjectDetail({
       await updateDoc(doc(salesDb, 'reports', reportId), {
         projectId: project.id,
         projectTitle: project.title,
-        kanbanColumn: 'todo',
+        kanbanColumn: localCols[0]?.id ?? 'todo',
         updatedAt: ts(),
       });
       toast.success('연결됨');
@@ -616,18 +803,20 @@ function ProjectDetail({
     setActiveId(null);
     const { active, over } = e;
     if (!over) return;
-    const targetCol = over.id as KanbanColumn;
-    if (!COLS.includes(targetCol)) return;
+    const targetColId = over.id as string;
+    const colIds = localCols.map(c => c.id);
+    if (!colIds.includes(targetColId)) return;
     const dragged = docs.find(d => d.id === active.id);
-    if (!dragged || (dragged.kanbanColumn ?? 'todo') === targetCol) return;
+    if (!dragged || (dragged.kanbanColumn ?? localCols[0]?.id) === targetColId) return;
     try {
-      await updateDoc(doc(salesDb, 'reports', dragged.id), { kanbanColumn: targetCol, updatedAt: ts() });
+      await updateDoc(doc(salesDb, 'reports', dragged.id), { kanbanColumn: targetColId, updatedAt: ts() });
       onDocsChange();
     } catch { toast.error('이동 실패'); }
-  }, [docs, onDocsChange, toast]);
+  }, [docs, localCols, onDocsChange, toast]);
 
   const activeDoc = activeId ? docs.find(d => d.id === activeId) : null;
-  const doneCount = docs.filter(d => d.kanbanColumn === 'done').length;
+  const doneColId = localCols.length > 0 ? localCols[localCols.length - 1].id : 'done';
+  const doneCount = docs.filter(d => (d.kanbanColumn ?? localCols[0]?.id ?? 'todo') === doneColId).length;
   const progress = docs.length > 0 ? Math.round((doneCount / docs.length) * 100) : 0;
   const statusCfg = STATUS_CFG[project.status];
 
@@ -719,19 +908,39 @@ function ProjectDetail({
             </div>
           </div>
         ) : (
-          <ReportTreeDiagram docs={docs} onNodeClick={handleNodeClick} onUnlink={handleUnlink} />
+          <ReportTreeDiagram docs={docs} columns={localCols} onNodeClick={handleNodeClick} onUnlink={handleUnlink} />
         )
       )}
 
       {/* 칸반 */}
       {view === 'kanban' && (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={handleAddColumn}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+            >
+              <Plus size={11} /> 컬럼 추가
+            </button>
+          </div>
           <div className="flex gap-4 overflow-x-auto pb-2">
-            {COLS.map(col => (
-              <DroppableColumn key={col} column={col} docs={docs}
+            {localCols.map((colDef, idx) => (
+              <DroppableColumn
+                key={colDef.id}
+                colDef={colDef}
+                docs={docs}
+                columns={localCols}
+                isFirst={idx === 0}
+                isLast={idx === localCols.length - 1}
                 onNewReport={() => openNewReport()}
                 onOpenDoc={openReport}
                 onUnlinkDoc={handleUnlink}
+                onStatusChange={handleCardStatusChange}
+                onRename={label => handleRenameColumn(colDef.id, label)}
+                onColorChange={color => handleColorColumn(colDef.id, color)}
+                onMoveLeft={() => handleMoveColumn(colDef.id, 'left')}
+                onMoveRight={() => handleMoveColumn(colDef.id, 'right')}
+                onDelete={() => handleDeleteColumn(colDef.id)}
               />
             ))}
           </div>
@@ -761,6 +970,7 @@ function ProjectDetail({
       {nodeAction?.kind === 'menu' && (
         <NodeActionPopup
           report={nodeAction.report}
+          columns={localCols}
           onView={() => openReport(nodeAction.report)}
           onAddSibling={() => openNewReport(nodeAction.report.parentReportId)}
           onAddChild={() => openNewReport(nodeAction.report.id)}
