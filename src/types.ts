@@ -716,6 +716,8 @@ export interface ProjectItem {
   requesterName?: string;
   requesterNote?: string;
   dueDate?: string;
+  done?: boolean;
+  memo?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import {
   User, Employee, Department, Project, Report, ProjectStatus,
-  KanbanColumnDef, KanbanColumnColor, DEFAULT_KANBAN_COLUMNS,
+  KanbanColumnDef, KanbanColumnColor, DEFAULT_KANBAN_COLUMNS, ProjectItem,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -649,6 +649,133 @@ function ProjectFormModal({
   );
 }
 
+// ── 간트 업무 추가/수정 모달 ──────────────────────────────
+function GanttTaskModal({
+  task, projectId, onSaved, onClose,
+}: {
+  task?: ProjectItem;
+  projectId: string;
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [title,        setTitle]        = useState(task?.title ?? '');
+  const [date,         setDate]         = useState(task?.dueDate ?? todayStr);
+  const [assigneeName, setAssigneeName] = useState(task?.assigneeName ?? '');
+  const [assigneeDept, setAssigneeDept] = useState(task?.assigneeDept ?? '');
+  const [memo,         setMemo]         = useState(task?.memo ?? '');
+  const [done,         setDone]         = useState(task?.done ?? false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!title.trim()) { toast.error('업무명을 입력하세요'); return; }
+    setSaving(true);
+    try {
+      const id  = task?.id ?? `gtask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const now = new Date().toISOString();
+      const data: Record<string, unknown> = {
+        id, projectId, kind: 'task',
+        title: title.trim(),
+        column: 'todo', order: task?.order ?? Date.now(), priority: 'normal',
+        dueDate: date,
+        done,
+        createdAt: task?.createdAt ?? now,
+        updatedAt: now,
+      };
+      if (assigneeName.trim()) data.assigneeName = assigneeName.trim();
+      if (assigneeDept.trim()) data.assigneeDept = assigneeDept.trim();
+      if (memo.trim())         data.memo         = memo.trim();
+      await setDoc(doc(salesDb, 'project_items', id), data);
+      toast.success(task ? '수정됨' : '업무 추가됨');
+      onSaved();
+      onClose();
+    } catch { toast.error('저장 실패'); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!task) return;
+    setSaving(true);
+    try {
+      await deleteDoc(doc(salesDb, 'project_items', task.id));
+      toast.success('삭제됨');
+      onSaved();
+      onClose();
+    } catch { toast.error('삭제 실패'); }
+    finally { setSaving(false); }
+  };
+
+  const inputCls = 'w-full text-sm bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 outline-none focus:border-stone-400 dark:focus:border-stone-500 text-stone-900 dark:text-stone-100';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[120] p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl w-full max-w-sm border border-stone-200 dark:border-stone-700 overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="px-5 py-4 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between">
+          <h3 className="text-sm font-black text-stone-900 dark:text-white">{task ? '업무 수정' : '업무 추가'}</h3>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"><X size={16} /></button>
+        </div>
+        {/* 폼 */}
+        <div className="px-5 py-4 space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">업무명 *</label>
+            <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+              placeholder="업무 내용" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">날짜</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-stone-500 mb-1">담당자</label>
+              <input value={assigneeName} onChange={e => setAssigneeName(e.target.value)}
+                placeholder="이름" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-stone-500 mb-1">담당부서</label>
+              <input value={assigneeDept} onChange={e => setAssigneeDept(e.target.value)}
+                placeholder="부서명" className={inputCls} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">메모</label>
+            <textarea value={memo} onChange={e => setMemo(e.target.value)}
+              placeholder="간략한 내용" rows={2}
+              className={`${inputCls} resize-none`} />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={done} onChange={e => setDone(e.target.checked)}
+              className="w-4 h-4 accent-emerald-500 rounded" />
+            <span className="text-sm text-stone-600 dark:text-stone-300">완료됨</span>
+          </label>
+        </div>
+        {/* 하단 버튼 */}
+        <div className="px-5 pb-4 flex items-center gap-2">
+          {task && (
+            <button onClick={handleDelete} disabled={saving}
+              className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+              <Trash2 size={15} />
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors">
+            취소
+          </button>
+          <button onClick={handleSave} disabled={saving || !title.trim()}
+            className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:bg-stone-700 transition-colors disabled:opacity-40">
+            {saving ? '저장중…' : task ? '수정' : '추가'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 간트차트 오늘 선 ──────────────────────────────────────
 function TodayLine({ pct }: { pct: number }) {
   if (pct < 0 || pct > 100) return null;
@@ -662,20 +789,24 @@ function TodayLine({ pct }: { pct: number }) {
 
 // ── 프로젝트 간트차트 ──────────────────────────────────────
 function ProjectGanttView({
-  project, docs, columns, onEditProject, onOpenDoc,
+  project, docs, columns, tasks, onEditProject, onOpenDoc, onAddTask, onEditTask,
 }: {
   project: Project;
   docs: Report[];
   columns: KanbanColumnDef[];
+  tasks: ProjectItem[];
   onEditProject: () => void;
   onOpenDoc: (r: Report) => void;
+  onAddTask: () => void;
+  onEditTask: (t: ProjectItem) => void;
 }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  // 날짜 범위 계산
+  // 날짜 범위 계산 (업무 날짜 포함)
   const allDates: Date[] = [
     ...(project.milestones ?? []).map(m => new Date(m.dueDate)),
     ...docs.map(d => new Date(d.docDate || d.createdAt)),
+    ...tasks.map(t => new Date(t.dueDate || t.createdAt.slice(0, 10))),
   ].filter(d => !isNaN(d.getTime()));
 
   let rStart: Date, rEnd: Date;
@@ -848,10 +979,62 @@ function ProjectGanttView({
             </>
           )}
 
+          {/* 업무 섹션 */}
+          <div className="flex items-center h-5 mt-1.5">
+            <span className="w-28 shrink-0 text-[9px] font-black text-stone-400 uppercase tracking-wider">업무</span>
+            <div className="flex-1 border-t border-dashed border-stone-200 dark:border-stone-700" />
+            <button
+              onClick={onAddTask}
+              className="ml-2 shrink-0 flex items-center gap-0.5 text-[10px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors"
+            >
+              <Plus size={10} /> 추가
+            </button>
+          </div>
+          {tasks.map(t => {
+            const dateStr = t.dueDate || t.createdAt.slice(0, 10);
+            const tp = pct(new Date(dateStr));
+            return (
+              <div key={t.id} className={ROW}>
+                <button
+                  onClick={() => onEditTask(t)}
+                  className={`${LABEL} text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${t.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}
+                >
+                  <span className="block truncate">{t.title}</span>
+                  {(t.assigneeName || t.assigneeDept) && (
+                    <span className="text-[9px] text-stone-400 block leading-none mt-0.5">
+                      {[t.assigneeName, t.assigneeDept].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </button>
+                <div className="flex-1 relative h-full">
+                  <TodayLine pct={todayPct} />
+                  {/* 사각형 마커 */}
+                  <button
+                    onClick={() => onEditTask(t)}
+                    className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 ${t.done ? 'bg-emerald-500' : 'bg-stone-400 dark:bg-stone-500'} hover:scale-150 transition-all`}
+                    style={{ left: `${tp}%` }}
+                    title={[t.title, t.assigneeName, t.memo].filter(Boolean).join(' · ')}
+                  />
+                  <span className="absolute text-[8px] text-stone-400 -translate-x-1/2" style={{ left: `${tp}%`, top: '24px' }}>
+                    {fmtDate(dateStr)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {tasks.length === 0 && (
+            <div className={`${ROW} border-b-0`}>
+              <div className="w-28 shrink-0" />
+              <button onClick={onAddTask} className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors py-1">
+                <Plus size={11} /> 업무 추가
+              </button>
+            </div>
+          )}
+
           {/* 빈 상태 */}
-          {milestones.length === 0 && docs.length === 0 && (
-            <div className="py-16 text-center text-stone-400">
-              마일스톤이나 보고서를 추가하면 여기에 표시됩니다.
+          {milestones.length === 0 && docs.length === 0 && tasks.length === 0 && (
+            <div className="py-12 text-center text-stone-400">
+              마일스톤, 보고서, 업무를 추가하면 여기에 표시됩니다.
             </div>
           )}
 
@@ -894,6 +1077,24 @@ function ProjectDetail({
   useEffect(() => {
     setLocalCols(project.kanbanColumns ?? DEFAULT_KANBAN_COLUMNS);
   }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 간트 업무
+  const [ganttTasks, setGanttTasks] = useState<ProjectItem[]>([]);
+  const [taskModal, setTaskModal] = useState<{ task?: ProjectItem } | null>(null);
+
+  const loadGanttTasks = useCallback(async () => {
+    try {
+      const snap = await getDocs(
+        query(collection(salesDb, 'project_items'),
+          where('projectId', '==', project.id),
+          where('kind', '==', 'task'))
+      );
+      setGanttTasks(snap.docs.map(d => ({ ...d.data() } as ProjectItem))
+        .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? '')));
+    } catch {}
+  }, [project.id]);
+
+  useEffect(() => { loadGanttTasks(); }, [loadGanttTasks]);
 
   type NodeActionState = { kind: 'menu'; report: Report };
   const [nodeAction, setNodeAction] = useState<NodeActionState | null>(null);
@@ -1168,8 +1369,21 @@ function ProjectDetail({
           project={project}
           docs={docs}
           columns={localCols}
+          tasks={ganttTasks}
           onEditProject={() => setShowProjectForm(true)}
           onOpenDoc={openReport}
+          onAddTask={() => setTaskModal({})}
+          onEditTask={t => setTaskModal({ task: t })}
+        />
+      )}
+
+      {/* 간트 업무 모달 */}
+      {taskModal !== null && (
+        <GanttTaskModal
+          task={taskModal.task}
+          projectId={project.id}
+          onSaved={loadGanttTasks}
+          onClose={() => setTaskModal(null)}
         />
       )}
 
