@@ -700,3 +700,73 @@ export interface ProjectItem {
   createdAt: string;
   updatedAt: string;
 }
+
+// ==========================================
+// OKR & KPI (salesDb: okr_quarters)
+// ==========================================
+export interface OKRKeyResult {
+  id: string;
+  title: string;
+  currentValue: number;
+  targetValue: number;
+  unit: string;
+}
+
+export interface OKRObjective {
+  id: string;
+  title: string;
+  ownerName?: string;
+  keyResults: OKRKeyResult[];
+}
+
+export interface OKRQuarter {
+  id: string;
+  year: number;
+  quarter: number;
+  isActive: boolean;
+  objectives: OKRObjective[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 새모양에프엔비 (salesDb: company_info, brand_milestones)
+// ==========================================
+export interface BrandMilestone {
+  id: string;
+  date: string;
+  title: string;
+  description?: string;
+  category?: string;
+}
+
+export interface MVCDoc {
+  mission: string;
+  vision: string;
+  values: string[];
+  updatedAt: string;
+}
+
+export interface CompanyProfileSection { title: string; body: string; }
+
+export interface CompanyProfileDoc {
+  sections: CompanyProfileSection[];
+  updatedAt: string;
+}
+
+// ==========================================
+// 캘린더 루틴 (salesDb: calendar_routines)
+// ==========================================
+export interface CalendarRoutine {
+  id: string;
+  title: string;
+  ownerId: string;
+  ownerName: string;
+  recurrence: 'daily' | 'weekly' | 'monthly';
+  weekdays?: number[];
+  monthDay?: number;
+  timeSlot: 'morning' | 'afternoon' | 'allday';
+  isTeamRoutine: boolean;
+  isActive: boolean;
+  createdAt: string;
+}

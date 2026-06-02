@@ -32,6 +32,8 @@ const NoticeBoard = lazy(() => import('./components/NoticeBoard').then(m => ({ d
 const DailyReportView = lazy(() => import('./components/DailyReportView').then(m => ({ default: m.DailyReportView })));
 const SopView = lazy(() => import('./components/SopView').then(m => ({ default: m.SopView })));
 const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({ default: m.ProjectsView })));
+const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: m.OKRView })));
+const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -1583,26 +1585,14 @@ export default function App() {
           {/* 에이전트 팀 */}
           {sidebar.section === 'agents' && <AgentsDashboard />}
 
-          {/* 새모양에프엔비 섹션 (준비 중) */}
+          {/* 새모양에프엔비 섹션 */}
           {(sidebar.section === 'mvc' || sidebar.section === 'brand_history' || sidebar.section === 'company_profile') && (
-            <div className="flex flex-col items-center justify-center py-32 text-center">
-              {sidebar.section === 'mvc' && <Flag size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
-              {sidebar.section === 'brand_history' && <GitBranch size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
-              {sidebar.section === 'company_profile' && <Building2 size={48} className="text-stone-300 dark:text-stone-600 mb-4" />}
-              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">
-                {sidebar.section === 'mvc' ? 'MVC' : sidebar.section === 'brand_history' ? '브랜드 연혁' : '회사 소개서'}
-              </h2>
-              <p className="text-sm text-stone-400">준비 중입니다.</p>
-            </div>
+            <CompanyInfoView section={sidebar.section} currentUser={currentUser} />
           )}
 
-          {/* OKR & KPI (준비 중) */}
+          {/* OKR & KPI */}
           {sidebar.section === 'okr' && (
-            <div className="flex flex-col items-center justify-center py-32 text-center">
-              <Target size={48} className="text-stone-300 dark:text-stone-600 mb-4" />
-              <h2 className="text-lg font-black text-stone-700 dark:text-stone-300 mb-2">OKR & KPI</h2>
-              <p className="text-sm text-stone-400">준비 중입니다.</p>
-            </div>
+            <OKRView currentUser={currentUser} />
           )}
 
           {/* 프로젝트 */}

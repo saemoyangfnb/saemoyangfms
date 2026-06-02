@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb, db } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy } from 'firebase/firestore';
-import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User } from '../types';
+import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2 } from 'lucide-react';
 
 /* ── 상수 ──────────────────────────────────────────────── */
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -97,7 +97,14 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState<EventForm>(emptyEventForm());
   const [leaveForm, setLeaveForm] = useState<LeaveForm>(emptyLeaveForm());
-  const [activeTab, setActiveTab] = useState<'calendar' | 'leave'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'leave' | 'routine'>('calendar');
+
+  // ── 루틴 상태 ──
+  const [routines, setRoutines] = useState<CalendarRoutine[]>([]);
+  const [completedToday, setCompletedToday] = useState<Set<string>>(new Set());
+  const [showRoutineForm, setShowRoutineForm] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState<CalendarRoutine | null>(null);
+  const [rForm, setRForm] = useState({ title: '', recurrence: 'daily' as CalendarRoutine['recurrence'], weekdays: [] as number[], monthDay: 1, timeSlot: 'allday' as CalendarRoutine['timeSlot'] });
   const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -182,6 +189,71 @@ export function CompanyCalendar({ currentUser }: Props) {
   };
 
   useEffect(() => { fetchData(); }, [year, month]);
+
+  /* ── 루틴 로드 ── */
+  const fetchRoutines = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const [rSnap, cSnap] = await Promise.all([
+      getDocs(query(collection(salesDb, 'calendar_routines'), where('ownerId', '==', currentUser.uid))),
+      getDocs(query(collection(salesDb, 'routine_completions'), where('ownerId', '==', currentUser.uid), where('date', '==', today))),
+    ]);
+    setRoutines(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarRoutine)).filter(r => r.isActive));
+    setCompletedToday(new Set(cSnap.docs.map(d => d.data().routineId as string)));
+  };
+  useEffect(() => { fetchRoutines(); }, []);
+
+  const isTodayRoutine = (r: CalendarRoutine) => {
+    const now = new Date();
+    if (r.recurrence === 'daily') return true;
+    if (r.recurrence === 'weekly') return (r.weekdays ?? []).includes(now.getDay());
+    if (r.recurrence === 'monthly') return r.monthDay === now.getDate();
+    return false;
+  };
+
+  const toggleRoutineComplete = async (routineId: string) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const docId = `${today}_${routineId}`;
+    if (completedToday.has(routineId)) {
+      await deleteDoc(doc(salesDb, 'routine_completions', docId));
+      setCompletedToday(prev => { const s = new Set(prev); s.delete(routineId); return s; });
+    } else {
+      await setDoc(doc(salesDb, 'routine_completions', docId), { routineId, ownerId: currentUser.uid, date: today, completedAt: new Date().toISOString() });
+      setCompletedToday(prev => new Set([...prev, routineId]));
+    }
+  };
+
+  const openRoutineForm = (r?: CalendarRoutine) => {
+    if (r) { setEditingRoutine(r); setRForm({ title: r.title, recurrence: r.recurrence, weekdays: r.weekdays ?? [], monthDay: r.monthDay ?? 1, timeSlot: r.timeSlot }); }
+    else { setEditingRoutine(null); setRForm({ title: '', recurrence: 'daily', weekdays: [], monthDay: 1, timeSlot: 'allday' }); }
+    setShowRoutineForm(true);
+  };
+
+  const saveRoutine = async () => {
+    if (!rForm.title.trim()) return;
+    const base: Omit<CalendarRoutine, 'id' | 'createdAt'> = {
+      title: rForm.title.trim(), recurrence: rForm.recurrence,
+      weekdays: rForm.recurrence === 'weekly' ? rForm.weekdays : undefined,
+      monthDay: rForm.recurrence === 'monthly' ? rForm.monthDay : undefined,
+      timeSlot: rForm.timeSlot, ownerId: currentUser.uid, ownerName: currentUser.name,
+      isTeamRoutine: false, isActive: true,
+    };
+    const scrub = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([,v]) => v !== undefined));
+    if (editingRoutine) {
+      await updateDoc(doc(salesDb, 'calendar_routines', editingRoutine.id), scrub(base as Record<string, unknown>));
+    } else {
+      const id = `rt_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      await setDoc(doc(salesDb, 'calendar_routines', id), scrub({ ...base, id, createdAt: new Date().toISOString() } as Record<string, unknown>));
+    }
+    toast.success(editingRoutine ? '수정됨' : '루틴 추가됨');
+    setShowRoutineForm(false);
+    await fetchRoutines();
+  };
+
+  const deleteRoutine = async (r: CalendarRoutine) => {
+    await updateDoc(doc(salesDb, 'calendar_routines', r.id), { isActive: false });
+    toast.success('삭제됨');
+    await fetchRoutines();
+  };
 
   /* 달력 셀 계산 */
   const calendarDays = useMemo(() => {
@@ -312,13 +384,150 @@ export function CompanyCalendar({ currentUser }: Props) {
 
       {/* 탭 */}
       <div className="flex gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
-        {(['calendar', 'leave'] as const).map(t => (
-          <button key={t} onClick={() => setActiveTab(t)}
+        {([['calendar', '달력'], ['leave', '연차 내역'], ['routine', '루틴']] as [string, string][]).map(([t, label]) => (
+          <button key={t} onClick={() => setActiveTab(t as typeof activeTab)}
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === t ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-            {t === 'calendar' ? '달력' : '연차 내역'}
+            {label}
           </button>
         ))}
       </div>
+
+      {activeTab === 'routine' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">매일/매주/매월 반복 업무를 등록하세요</p>
+            </div>
+            <button onClick={() => openRoutineForm()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
+              <Plus size={13} /> 루틴 추가
+            </button>
+          </div>
+
+          {/* 오늘 할 루틴 */}
+          {(() => {
+            const todayRoutines = routines.filter(isTodayRoutine);
+            if (todayRoutines.length === 0 && routines.length > 0) return null;
+            if (todayRoutines.length > 0) return (
+              <div className="mb-5">
+                <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">오늘 해야 할 루틴</p>
+                <div className="space-y-2">
+                  {todayRoutines.map(r => {
+                    const done = completedToday.has(r.id);
+                    return (
+                      <div key={r.id} className={`flex items-center gap-3 p-3 rounded-sm border transition-all ${done ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700'}`}>
+                        <button onClick={() => toggleRoutineComplete(r.id)}
+                          className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-all ${done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                          {done && <Check size={12} className="text-white" />}
+                        </button>
+                        <span className={`flex-1 text-sm font-medium ${done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{r.title}</span>
+                        <span className="text-[10px] text-stone-400">{r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+            return null;
+          })()}
+
+          {/* 전체 루틴 목록 */}
+          <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">등록된 루틴</p>
+          {routines.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Repeat size={32} className="text-stone-300 dark:text-stone-600 mb-3" />
+              <p className="text-sm text-stone-400">루틴이 없습니다.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {routines.map(r => {
+                const recLabel = r.recurrence === 'daily' ? '매일' : r.recurrence === 'weekly' ? `매주 ${(r.weekdays ?? []).map(d => ['일','월','화','수','목','금','토'][d]).join(',')}` : `매월 ${r.monthDay}일`;
+                return (
+                  <div key={r.id} className="flex items-center gap-3 p-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm group">
+                    <Repeat size={13} className="text-stone-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-stone-800 dark:text-stone-200">{r.title}</p>
+                      <p className="text-[10px] text-stone-400">{recLabel} · {r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</p>
+                    </div>
+                    <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => openRoutineForm(r)} className="p-1 text-stone-400 hover:text-blue-600 rounded-sm"><Edit2 size={12} /></button>
+                      <button onClick={() => deleteRoutine(r)} className="p-1 text-stone-400 hover:text-red-600 rounded-sm"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 루틴 폼 모달 */}
+          {showRoutineForm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-sm border border-stone-200 dark:border-stone-700">
+                <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
+                  <h2 className="text-sm font-black text-stone-900 dark:text-white">{editingRoutine ? '루틴 수정' : '루틴 추가'}</h2>
+                  <button onClick={() => setShowRoutineForm(false)} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1">루틴 이름 *</label>
+                    <input value={rForm.title} onChange={e => setRForm(f => ({ ...f, title: e.target.value }))}
+                      placeholder="예: 매장 재고 확인"
+                      className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" autoFocus />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">반복 주기</label>
+                      <select value={rForm.recurrence} onChange={e => setRForm(f => ({ ...f, recurrence: e.target.value as CalendarRoutine['recurrence'] }))}
+                        className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none">
+                        <option value="daily">매일</option>
+                        <option value="weekly">매주</option>
+                        <option value="monthly">매월</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">시간대</label>
+                      <select value={rForm.timeSlot} onChange={e => setRForm(f => ({ ...f, timeSlot: e.target.value as CalendarRoutine['timeSlot'] }))}
+                        className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none">
+                        <option value="morning">오전</option>
+                        <option value="afternoon">오후</option>
+                        <option value="allday">종일</option>
+                      </select>
+                    </div>
+                  </div>
+                  {rForm.recurrence === 'weekly' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">요일 선택</label>
+                      <div className="flex gap-1 flex-wrap">
+                        {['일','월','화','수','목','금','토'].map((d, i) => (
+                          <button key={i} type="button"
+                            onClick={() => setRForm(f => ({ ...f, weekdays: f.weekdays.includes(i) ? f.weekdays.filter(w => w !== i) : [...f.weekdays, i] }))}
+                            className={`w-8 h-8 text-xs font-bold rounded-sm transition-colors ${rForm.weekdays.includes(i) ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'}`}>
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {rForm.recurrence === 'monthly' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">매월 몇 일?</label>
+                      <input type="number" min={1} max={31} value={rForm.monthDay} onChange={e => setRForm(f => ({ ...f, monthDay: parseInt(e.target.value) || 1 }))}
+                        className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
+                  <button onClick={() => setShowRoutineForm(false)} className="px-4 py-2 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
+                  <button onClick={saveRoutine} disabled={!rForm.title.trim()}
+                    className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
+                    {editingRoutine ? '저장' : '추가'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'calendar' ? (
         <>

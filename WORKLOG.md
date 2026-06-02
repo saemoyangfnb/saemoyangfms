@@ -26,6 +26,26 @@
 
 ---
 
+## 2026-06-02 (5) — Claude Code
+
+### 완료
+- OKRView.tsx: 분기별 OKR 관리 (목표/KR 추가·수정·삭제, 진행률 자동계산, 이전 분기 이력)
+- CompanyInfoView.tsx: 새모양에프엔비 3개 섹션
+  - MVC (Mission·Vision·Core Values 편집)
+  - 브랜드 연혁 (타임라인 CRUD, 연도별 그룹)
+  - 회사 소개서 (섹션별 자유 문서)
+- CompanyCalendar에 루틴 탭 추가
+  - 매일/매주(요일)/매월(날짜) 반복 루틴 등록·수정·삭제
+  - 오늘 해야 할 루틴 체크 기능 (Firestore 완료 기록)
+- types.ts: OKRQuarter/OKRObjective/OKRKeyResult, BrandMilestone, MVCDoc, CompanyProfileDoc, CalendarRoutine 추가
+- App.tsx: OKRView, CompanyInfoView lazy import + 라우팅 연결
+
+### 다음에 이어할 것
+- PROJECTS_PLAN.md 기준 모든 섹션 구현 완료
+- 남은 TODO: 홈 대시보드 개편 (위젯 선택형)
+
+---
+
 ## 2026-06-02 (4) — Claude Code
 
 ### 완료
