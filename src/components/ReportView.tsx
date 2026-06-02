@@ -340,17 +340,19 @@ interface EditorState {
   type: ReportType;
   docDate: string;
   sections: ReportSection[];
-  photos: File[];         // 새로 추가할 사진
-  existingUrls: string[]; // 기존 사진 URL
+  photos: File[];
+  existingUrls: string[];
+  parentReportId?: string;
 }
 
 function ReportEditor({
-  initial, onSave, onClose, saving,
+  initial, onSave, onClose, saving, siblingReports,
 }: {
   initial?: Partial<EditorState & { id: string }>;
   onSave: (state: EditorState & { id?: string }) => Promise<void>;
   onClose: () => void;
   saving: boolean;
+  siblingReports?: { id: string; title: string }[];
 }) {
   const [state, setState] = useState<EditorState>({
     title: initial?.title ?? '',
@@ -359,6 +361,7 @@ function ReportEditor({
     sections: initial?.sections?.length ? initial.sections : [{ title: '', body: '' }],
     photos: [],
     existingUrls: initial?.existingUrls ?? [],
+    parentReportId: initial?.parentReportId ?? '',
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -397,6 +400,23 @@ function ReportEditor({
 
       {/* 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* 상위 보고서 선택 (프로젝트 내에서만) */}
+        {siblingReports && siblingReports.length > 0 && (
+          <div>
+            <label className="block text-[11px] font-bold text-stone-400 mb-1">상위 보고서 (도식화 계층)</label>
+            <select
+              value={state.parentReportId ?? ''}
+              onChange={e => update({ parentReportId: e.target.value || undefined })}
+              className="w-full px-3 py-1.5 text-xs border border-stone-200 dark:border-stone-700 rounded-lg bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 outline-none"
+            >
+              <option value="">(없음 — 최상위)</option>
+              {siblingReports.filter(r => r.id !== initial?.id).map(r => (
+                <option key={r.id} value={r.id}>{r.title}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* 제목 */}
         <input
           value={state.title}
@@ -498,9 +518,9 @@ function ReportEditor({
 }
 
 /* ── 메인 컴포넌트 ─────────────────────────────────────── */
-interface Props { currentUser: User; projectId?: string; projectTitle?: string; }
+interface Props { currentUser: User; projectId?: string; projectTitle?: string; focusReportId?: string; }
 
-export function ReportView({ currentUser, projectId, projectTitle }: Props) {
+export function ReportView({ currentUser, projectId, projectTitle, focusReportId }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const isAdmin = currentUser.role === 'admin';
@@ -520,9 +540,13 @@ export function ReportView({ currentUser, projectId, projectTitle }: Props) {
     setLoading(true);
     try {
       if (projectId) {
-        // 프로젝트 전용 — 해당 프로젝트 보고서만
         const snap = await getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', projectId)));
-        setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        setReports(list);
+        if (focusReportId) {
+          const target = list.find(r => r.id === focusReportId);
+          if (target) setDetail(target);
+        }
       } else if (isAdmin) {
         const snap = await getDocs(query(collection(salesDb, 'reports'), orderBy('updatedAt', 'desc')));
         setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
@@ -579,6 +603,7 @@ export function ReportView({ currentUser, projectId, projectTitle }: Props) {
         photoUrls,
         docDate: state.docDate,
         ...(projectId ? { projectId, projectTitle: projectTitle ?? '' } : {}),
+        ...(state.parentReportId ? { parentReportId: state.parentReportId } : {}),
         createdAt: state.id ? (detail?.createdAt ?? now) : now,
         updatedAt: now,
       };
@@ -754,6 +779,7 @@ export function ReportView({ currentUser, projectId, projectTitle }: Props) {
           onSave={handleSave}
           onClose={() => setEditing(null)}
           saving={saving}
+          siblingReports={projectId ? reports.filter(r => r.id !== editing?.id).map(r => ({ id: r.id, title: r.title })) : undefined}
         />
       )}
 

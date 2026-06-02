@@ -620,6 +620,8 @@ export interface Report {
   docDate?: string;
   projectId?: string;          // 프로젝트 연동
   projectTitle?: string;       // 표시용 프로젝트명
+  kanbanColumn?: KanbanColumn; // 프로젝트 칸반 컬럼
+  parentReportId?: string;     // 도식화 상위 보고서
 }
 
 // ==========================================
