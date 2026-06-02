@@ -459,8 +459,8 @@ function DocLinkPickerModal({
       try {
         const snap = await getDocs(query(collection(salesDb, 'reports'), orderBy('updatedAt', 'desc')));
         setDocs(snap.docs
+          .filter(d => { const r = d.data(); return !existingIds.includes(d.id) && !r.projectId; })
           .map(d => { const r = d.data(); return { id: d.id, title: r.title || '(제목없음)', author: r.authorName || '', date: r.updatedAt?.slice(0, 10) || '' }; })
-          .filter(d => !existingIds.includes(d.id))
         );
       } finally { setLoading(false); }
     })();
