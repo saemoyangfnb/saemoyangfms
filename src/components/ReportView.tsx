@@ -583,6 +583,20 @@ export function ReportView({ currentUser, projectId, projectTitle }: Props) {
         updatedAt: now,
       };
       await setDoc(doc(salesDb, 'reports', id), report);
+
+      // 프로젝트 내 새 보고서 → 칸반/도식화에도 자동 카드 생성
+      if (projectId && !state.id) {
+        const itemId = `proj_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        await setDoc(doc(salesDb, 'project_items', itemId), {
+          id: itemId, projectId,
+          title: state.title.trim(),
+          kind: 'link', linkedType: 'report', linkedId: id,
+          linkedTitle: state.title.trim(), linkedDate: now.slice(0, 10),
+          column: 'todo', order: Date.now(), priority: 'normal',
+          createdAt: now, updatedAt: now,
+        });
+      }
+
       toast.success(state.id ? '수정되었습니다' : '저장되었습니다');
       setEditing(null);
       setDetail(null);

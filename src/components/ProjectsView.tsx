@@ -418,14 +418,13 @@ function KanbanCardGhost({ item }: { item: ProjectItem }) {
 
 // ── DroppableColumn ───────────────────────────────────────
 function DroppableColumn({
-  column, items, onAddItem, onEditItem, onDeleteItem, onLinkDoc,
+  column, items, onNewReport, onEditItem, onDeleteItem,
 }: {
   column: KanbanColumn;
   items: ProjectItem[];
-  onAddItem: (col: KanbanColumn) => void;
+  onNewReport: () => void;
   onEditItem: (item: ProjectItem) => void;
   onDeleteItem: (item: ProjectItem) => void;
-  onLinkDoc: (col: KanbanColumn) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column });
   const cfg = COL_CFG[column];
@@ -450,16 +449,10 @@ function DroppableColumn({
           />
         ))}
         <button
-          onClick={() => onAddItem(column)}
+          onClick={onNewReport}
           className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/60 dark:hover:bg-stone-700/40 rounded-sm transition-colors"
         >
-          <Plus size={11} /> 추가
-        </button>
-        <button
-          onClick={() => onLinkDoc(column)}
-          className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] text-stone-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 rounded-sm transition-colors"
-        >
-          <Link size={11} /> 문서 연결
+          <Plus size={11} /> 새 보고서
         </button>
       </div>
     </div>
@@ -912,7 +905,20 @@ function ProjectDetail({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {/* 주요 액션 — 모든 탭에서 접근 가능 */}
+          <button
+            onClick={() => setView('docs')}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors"
+          >
+            <Plus size={12} /> 새 보고서
+          </button>
+          <button
+            onClick={() => setShowDocPicker(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-sm hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          >
+            <Link size={12} /> 문서 연결
+          </button>
           <button
             onClick={() => setShowProjectForm(true)}
             className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
@@ -949,7 +955,29 @@ function ProjectDetail({
 
       {/* 도식화 뷰 */}
       {view === 'diagram' && (
-        <TreeDiagram items={items} onSelect={openEditItem} />
+        items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <GitBranch size={40} className="text-stone-300 dark:text-stone-600 mb-4" />
+            <h3 className="text-sm font-black text-stone-700 dark:text-stone-300 mb-1">아직 항목이 없습니다</h3>
+            <p className="text-xs text-stone-400 mb-4">새 보고서를 작성하거나 기존 문서를 연결하세요</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setView('docs')}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors"
+              >
+                <Plus size={13} /> 새 보고서 작성
+              </button>
+              <button
+                onClick={() => setShowDocPicker(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-sm hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+              >
+                <Link size={13} /> 기존 문서 연결
+              </button>
+            </div>
+          </div>
+        ) : (
+          <TreeDiagram items={items} onSelect={openEditItem} />
+        )
       )}
 
       {/* 문서 뷰 — 프로젝트 전용 ReportView */}
@@ -975,10 +1003,9 @@ function ProjectDetail({
               key={col}
               column={col}
               items={items.filter(i => i.column === col).sort((a, b) => a.order - b.order)}
-              onAddItem={openAddItem}
+              onNewReport={() => setView('docs')}
               onEditItem={openEditItem}
               onDeleteItem={handleDeleteItem}
-              onLinkDoc={openLinkDoc}
             />
           ))}
         </div>
