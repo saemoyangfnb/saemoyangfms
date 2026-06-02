@@ -26,6 +26,23 @@
 
 ---
 
+## 2026-06-02 (12) — Claude Code
+
+### 완료
+- **보고서 양식 통일**: QuickReportModal 제거, 모든 "새 보고서" 진입점을 ReportView로 통일
+  - ProjectDetail 헤더/칸반/도식화 버튼 → `openNewReport()` → ReportView 에디터 자동 오픈
+  - 도식화 노드 "추가 보고서(형제)" / "다음 보고서(자식)" → parentReportId 전달해 ReportView 에디터 오픈
+  - ReportView에 `openNew`, `initialParentReportId`, `onNewOpened` props 추가
+- **사진 제한 5장 → 10장** (ReportView.tsx)
+- **보고서 캡처 복사**: ReportDetail 상단 📸 버튼 → html2canvas로 전체 뷰 캡처 → 클립보드 이미지 복사
+  - 클립보드 쓰기 실패 시 PNG 파일로 자동 저장 (fallback)
+- html2canvas 패키지 설치
+
+### 다음에 이어할 것
+- git commit + push → Vercel 배포 확인
+
+---
+
 ## 2026-06-02 (11) — Claude Code
 
 ### 완료

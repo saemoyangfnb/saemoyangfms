@@ -341,112 +341,6 @@ function NodeActionPopup({
   );
 }
 
-// ── 도식화에서 빠른 보고서 작성 ───────────────────────────
-function QuickReportModal({
-  project, currentUser, parentReportId, mode, parentReportTitle, onSave, onClose,
-}: {
-  project: Project;
-  currentUser: User;
-  parentReportId?: string;
-  mode: 'sibling' | 'child';
-  parentReportTitle?: string;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [column, setColumn] = useState<KanbanColumn>('todo');
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!title.trim()) return;
-    setSaving(true);
-    try {
-      const id = genId();
-      const now = ts();
-      const data: Record<string, unknown> = {
-        id,
-        title: title.trim(),
-        type: 'general',
-        sections: body.trim() ? [{ title: '', body: body.trim() }] : [],
-        photoUrls: [],
-        authorName: currentUser.name,
-        authorId: currentUser.uid,
-        approvalStatus: 'draft',
-        projectId: project.id,
-        projectTitle: project.title,
-        kanbanColumn: column,
-        createdAt: now,
-        updatedAt: now,
-      };
-      if (parentReportId) data.parentReportId = parentReportId;
-      await setDoc(doc(salesDb, 'reports', id), data);
-      toast.success('보고서 생성됨');
-      onSave();
-      onClose();
-    } catch { toast.error('생성 실패'); } finally { setSaving(false); }
-  };
-
-  const contextLabel = mode === 'child'
-    ? `"${parentReportTitle || '상위 보고서'}"의 하위`
-    : '같은 단계에 추가';
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-md border border-stone-200 dark:border-stone-700">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
-          <div>
-            <h2 className="text-sm font-black text-stone-900 dark:text-white">새 보고서</h2>
-            <p className="text-[10px] text-stone-400 mt-0.5">{contextLabel}</p>
-          </div>
-          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
-        </div>
-        <div className="p-5 space-y-3">
-          <div>
-            <label className="block text-[11px] font-bold text-stone-500 mb-1">제목 *</label>
-            <input
-              value={title} onChange={e => setTitle(e.target.value)} autoFocus
-              placeholder="보고서 제목"
-              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-stone-500"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-stone-500 mb-1">내용 (선택)</label>
-            <textarea
-              value={body} onChange={e => setBody(e.target.value)} rows={3}
-              placeholder="보고서 내용..."
-              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-stone-500 mb-1">상태</label>
-            <div className="flex gap-2">
-              {COLS.map(col => (
-                <button key={col} onClick={() => setColumn(col)}
-                  className={`flex-1 py-1.5 text-[11px] font-bold rounded-sm transition-colors border-2 ${
-                    column === col
-                      ? `${COL_CFG[col].headCls} border-current bg-white dark:bg-stone-800`
-                      : 'border-stone-200 dark:border-stone-700 text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'
-                  }`}>
-                  {COL_CFG[col].label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
-          <button onClick={onClose} className="px-4 py-2 text-xs text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
-          <button onClick={handleSubmit} disabled={!title.trim() || saving}
-            className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
-            {saving ? '저장 중...' : '작성'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── 문서 연결 피커 ────────────────────────────────────────
 function DocLinkPickerModal({
   existingIds, onLink, onClose,
@@ -510,7 +404,10 @@ function DocLinkPickerModal({
                 <p className="text-[10px] text-stone-400">{d.author} · {d.date}</p>
               </div>
               <button
-                onClick={() => onLink(d.id)}
+                onClick={() => {
+                  setDocs(prev => prev.filter(x => x.id !== d.id));
+                  onLink(d.id);
+                }}
                 className="shrink-0 px-3 py-1.5 text-[11px] font-bold bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 rounded-sm hover:bg-stone-600 transition-colors"
               >
                 연결
@@ -648,10 +545,10 @@ function ProjectDetail({
   const [focusReportId, setFocusReportId] = useState<string | undefined>();
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
+  const [docViewOpenNew, setDocViewOpenNew] = useState(false);
+  const [docViewParentId, setDocViewParentId] = useState<string | undefined>();
 
-  type NodeActionState =
-    | { kind: 'menu'; report: Report }
-    | { kind: 'quick'; report: Report; mode: 'sibling' | 'child' };
+  type NodeActionState = { kind: 'menu'; report: Report };
   const [nodeAction, setNodeAction] = useState<NodeActionState | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -664,6 +561,14 @@ function ProjectDetail({
   const openReport = (report: Report) => {
     setNodeAction(null);
     setFocusReportId(report.id);
+    setView('docs');
+  };
+
+  const openNewReport = (parentReportId?: string) => {
+    setNodeAction(null);
+    setFocusReportId(undefined);
+    setDocViewParentId(parentReportId);
+    setDocViewOpenNew(true);
     setView('docs');
   };
 
@@ -760,7 +665,7 @@ function ProjectDetail({
         </div>
         {/* 주요 액션 — 모든 탭에서 접근 가능 */}
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          <button onClick={() => setView('docs')}
+          <button onClick={() => openNewReport()}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
             <Plus size={12} /> 새 보고서
           </button>
@@ -803,7 +708,7 @@ function ProjectDetail({
             <h3 className="text-sm font-black text-stone-700 dark:text-stone-300 mb-1">아직 보고서가 없습니다</h3>
             <p className="text-xs text-stone-400 mb-4">새 보고서를 작성하거나 기존 보고서를 연결하세요</p>
             <div className="flex gap-2">
-              <button onClick={() => setView('docs')}
+              <button onClick={() => openNewReport()}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
                 <Plus size={13} /> 새 보고서 작성
               </button>
@@ -824,7 +729,7 @@ function ProjectDetail({
           <div className="flex gap-4 overflow-x-auto pb-2">
             {COLS.map(col => (
               <DroppableColumn key={col} column={col} docs={docs}
-                onNewReport={() => setView('docs')}
+                onNewReport={() => openNewReport()}
                 onOpenDoc={openReport}
                 onUnlinkDoc={handleUnlink}
               />
@@ -845,6 +750,9 @@ function ProjectDetail({
             projectTitle={project.title}
             focusReportId={focusReportId}
             onDataChange={onDocsChange}
+            openNew={docViewOpenNew}
+            initialParentReportId={docViewParentId}
+            onNewOpened={() => setDocViewOpenNew(false)}
           />
         </Suspense>
       )}
@@ -854,24 +762,12 @@ function ProjectDetail({
         <NodeActionPopup
           report={nodeAction.report}
           onView={() => openReport(nodeAction.report)}
-          onAddSibling={() => setNodeAction({ kind: 'quick', report: nodeAction.report, mode: 'sibling' })}
-          onAddChild={() => setNodeAction({ kind: 'quick', report: nodeAction.report, mode: 'child' })}
+          onAddSibling={() => openNewReport(nodeAction.report.parentReportId)}
+          onAddChild={() => openNewReport(nodeAction.report.id)}
           onClose={() => setNodeAction(null)}
         />
       )}
 
-      {/* 도식화에서 빠른 보고서 작성 */}
-      {nodeAction?.kind === 'quick' && (
-        <QuickReportModal
-          project={project}
-          currentUser={currentUser}
-          parentReportId={nodeAction.mode === 'child' ? nodeAction.report.id : nodeAction.report.parentReportId}
-          mode={nodeAction.mode}
-          parentReportTitle={nodeAction.report.title}
-          onSave={() => { setNodeAction(null); onDocsChange(); }}
-          onClose={() => setNodeAction(null)}
-        />
-      )}
 
       {/* 문서 연결 모달 */}
       {showDocPicker && (
@@ -1080,7 +976,8 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
 
   const handleUpdateProject = async (updated: Project) => {
     try {
-      await updateDoc(doc(salesDb, 'projects', updated.id), scrub({ ...updated, updatedAt: ts() }));
+      const { id: _id, createdAt: _ca, ...fields } = updated;
+      await updateDoc(doc(salesDb, 'projects', updated.id), scrub({ ...fields, updatedAt: ts() }));
       setSelectedProject(updated);
       setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
       toast.success('수정됨');
@@ -1346,8 +1243,8 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
           currentUser={currentUser}
           initialTitle={meetingToConvert?.title}
           initialDescription={meetingToConvert?.agendas?.map(a => a.title).filter(Boolean).join(' / ')}
-          onSave={data => {
-            handleCreateProject(data);
+          onSave={async data => {
+            await handleCreateProject(data);
             setMeetingToConvert(null);
           }}
           onClose={() => {
