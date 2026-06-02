@@ -618,6 +618,8 @@ export interface Report {
   htmlContent?: string;        // 구 버전 호환용
   activeTab?: string;
   docDate?: string;
+  projectId?: string;          // 프로젝트 연동
+  projectTitle?: string;       // 표시용 프로젝트명
 }
 
 // ==========================================
@@ -683,14 +685,16 @@ export interface ProjectItem {
   order: number;
   priority: ProjectItemPriority;
   kind: 'task' | 'link';
+  parentId?: string;              // 도식화 트리 부모
   // kind='link'
-  linkedType?: 'report' | 'meeting' | 'daily' | 'weekly';
+  linkedType?: 'report' | 'meeting' | 'daily' | 'weekly' | 'task';
   linkedId?: string;
   linkedTitle?: string;
   linkedDate?: string;
   // 담당자/확인자/요청자
   assigneeId?: string;
   assigneeName?: string;
+  assigneeDept?: string;          // 도식화 표시용 부서명
   accountableId?: string;
   accountableName?: string;
   requesterId?: string;

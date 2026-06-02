@@ -26,6 +26,42 @@
 
 ---
 
+## 2026-06-02 (7) — Claude Code
+
+### 완료
+- 프로젝트 ↔ 보고서 양방향 연동
+  - Report 타입에 projectId, projectTitle 추가
+  - ReportView: projectId prop 추가 → 해당 프로젝트 보고서만 필터링
+  - 프로젝트 내 보고서 작성 시 자동으로 projectId 태깅
+  - 결재보고센터 목록/상세에 "📁 프로젝트명" 뱃지 표시
+- 프로젝트 상세에 '문서' 탭 추가 (칸반 | 문서 | 도식화)
+  - 문서 탭: 프로젝트 전용 ReportView 임베드
+  - 기존 보고서 작성 에디터 그대로 사용 (결재 워크플로 포함)
+- 업무(Tasks) 문서 연결 탭 추가
+- 도식화 트리: 부모항목 + 부서명 + 담당자 표시
+- ProjectItem: parentId, assigneeDept 필드 추가
+
+---
+
+## 2026-06-02 (6) — Claude Code
+
+### 완료
+- 프로젝트 업무(Tasks) 연결: DocPickerModal에 '업무' 탭 추가 (salesDb > tasks)
+- 프로젝트 도식화(마인드맵) 뷰:
+  - 칸반 ↔ 도식화 탭 토글
+  - ProjectItem에 parentId(부모항목), assigneeDept(부서명) 필드 추가
+  - 부모-자식 관계 기반 트리 다이어그램 렌더링
+  - 각 노드: 제목 / 부서 / 담당자명 / 진행상태 색상 표시
+  - 클릭 시 항목 편집 모달 오픈
+- ItemFormModal: 담당자 선택 시 부서 자동입력 + 부모항목 선택 드롭다운
+- 부서 목록(salesDb > departments) 자동 로드
+
+### 주의
+- 도식화는 parentId가 없는 항목을 루트로 인식 — 기존 항목은 전부 루트로 표시됨
+- 부모-자식 관계는 항목 편집에서 수동으로 설정
+
+---
+
 ## 2026-06-02 (5) — Claude Code
 
 ### 완료

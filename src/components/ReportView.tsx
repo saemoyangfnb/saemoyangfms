@@ -158,6 +158,12 @@ function ReportCard({ report, onTap, isMe }: { report: Report; onTap: () => void
           <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${TYPE_CLS[report.type]}`}>{report.type}</span>
           <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${ap.cls}`}>{ap.icon}{ap.label}</span>
         </div>
+        {/* 프로젝트 뱃지 */}
+        {report.projectTitle && (
+          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full mb-1">
+            📁 {report.projectTitle}
+          </span>
+        )}
         {/* 제목 */}
         <p className="text-sm font-black text-stone-900 dark:text-stone-100 mb-1">{report.title || '(제목 없음)'}</p>
         {/* 내용 미리보기 */}
@@ -195,7 +201,14 @@ function ReportDetail({
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-black text-stone-900 dark:text-stone-100 truncate">{report.title || '(제목 없음)'}</p>
-          <p className="text-[10px] text-stone-400">{report.authorName} · {fmtDate(report.updatedAt)}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-[10px] text-stone-400">{report.authorName} · {fmtDate(report.updatedAt)}</p>
+            {report.projectTitle && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full">
+                📁 {report.projectTitle}
+              </span>
+            )}
+          </div>
         </div>
         <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${ap.cls}`}>{ap.icon}{ap.label}</span>
         {/* 상시 카톡 공유 */}
@@ -485,9 +498,9 @@ function ReportEditor({
 }
 
 /* ── 메인 컴포넌트 ─────────────────────────────────────── */
-interface Props { currentUser: User }
+interface Props { currentUser: User; projectId?: string; projectTitle?: string; }
 
-export function ReportView({ currentUser }: Props) {
+export function ReportView({ currentUser, projectId, projectTitle }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const isAdmin = currentUser.role === 'admin';
@@ -506,7 +519,11 @@ export function ReportView({ currentUser }: Props) {
   const fetchReports = useCallback(async () => {
     setLoading(true);
     try {
-      if (isAdmin) {
+      if (projectId) {
+        // 프로젝트 전용 — 해당 프로젝트 보고서만
+        const snap = await getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', projectId)));
+        setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      } else if (isAdmin) {
         const snap = await getDocs(query(collection(salesDb, 'reports'), orderBy('updatedAt', 'desc')));
         setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
       } else {
@@ -524,7 +541,7 @@ export function ReportView({ currentUser }: Props) {
       setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [isAdmin, currentUser.uid]);
+  }, [isAdmin, currentUser.uid, projectId]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
@@ -561,6 +578,7 @@ export function ReportView({ currentUser }: Props) {
         sections: state.sections.filter(s => s.body.trim()),
         photoUrls,
         docDate: state.docDate,
+        ...(projectId ? { projectId, projectTitle: projectTitle ?? '' } : {}),
         createdAt: state.id ? (detail?.createdAt ?? now) : now,
         updatedAt: now,
       };

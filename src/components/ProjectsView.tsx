@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { ReportView } from './ReportView';
 import { salesDb, db } from '../firebase';
 import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
@@ -9,7 +10,7 @@ import {
   DragEndEvent, DragStartEvent, useDroppable, useDraggable,
 } from '@dnd-kit/core';
 import {
-  User, Employee, Project, ProjectItem, ProjectStatus,
+  User, Employee, Department, Project, ProjectItem, ProjectStatus,
   KanbanColumn, ProjectItemPriority,
 } from '../types';
 import { useToast } from './Toast';
@@ -17,6 +18,7 @@ import { useConfirm } from './ConfirmModal';
 import {
   Plus, ChevronLeft, Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, ExternalLink, Link, Search,
+  Kanban, GitBranch,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -62,6 +64,7 @@ const LINK_TYPE_CFG: Record<NonNullable<ProjectItem['linkedType']>, { label: str
   meeting: { label: '회의록',  cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
   daily:   { label: '일일보고', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
   weekly:  { label: '주간보고', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  task:    { label: '업무',    cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
 };
 
 // ── DocPickerModal ────────────────────────────────────────
@@ -105,11 +108,18 @@ function DocPickerModal({
             const typeLabel = r.type === 'morning' ? '출근' : '퇴근';
             return { id: d.id, title: `[${typeLabel}] ${r.employeeName}`, sub: r.date ?? '', linkedType: 'daily', date: r.date ?? '' };
           }));
-        } else {
+        } else if (activeTab === 'weekly') {
           const snap = await getDocs(query(collection(salesDb, 'weekly_reports'), orderBy('weekStart', 'desc')));
           setDocs(snap.docs.slice(0, 100).map(d => {
             const r = d.data();
             return { id: d.id, title: r.employeeName ?? '(이름없음)', sub: `${r.weekStart ?? ''} 주간`, linkedType: 'weekly', date: r.weekStart ?? '' };
+          }));
+        } else {
+          const snap = await getDocs(query(collection(salesDb, 'tasks'), orderBy('createdAt', 'desc')));
+          setDocs(snap.docs.slice(0, 100).map(d => {
+            const t = d.data();
+            const statusLabel = t.status === 'done' ? '완료' : t.status === 'in_progress' ? '진행중' : t.status === 'rejected' ? '반려' : '대기';
+            return { id: d.id, title: t.title ?? '(제목없음)', sub: `${t.assigneeName ?? ''} · ${statusLabel}`, linkedType: 'task', date: t.createdAt?.slice(0, 10) ?? '' };
           }));
         }
       } finally {
@@ -127,6 +137,7 @@ function DocPickerModal({
   const tabs: { key: NonNullable<ProjectItem['linkedType']>; label: string }[] = [
     { key: 'report',  label: '보고서' },
     { key: 'meeting', label: '회의록' },
+    { key: 'task',    label: '업무' },
     { key: 'daily',   label: '일일보고' },
     { key: 'weekly',  label: '주간보고' },
   ];
@@ -217,6 +228,100 @@ function DocPickerModal({
             })
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 도식화 트리 ───────────────────────────────────────────
+function DiagramNode({
+  item, allItems, onSelect, depth,
+}: {
+  item: ProjectItem;
+  allItems: ProjectItem[];
+  onSelect: (item: ProjectItem) => void;
+  depth: number;
+}) {
+  const children = allItems.filter(i => i.parentId === item.id);
+  const borderCls =
+    item.column === 'done'  ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' :
+    item.column === 'doing' ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' :
+                              'border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800';
+  const statusCls =
+    item.column === 'done'  ? 'text-emerald-600 dark:text-emerald-400' :
+    item.column === 'doing' ? 'text-amber-600 dark:text-amber-400' :
+                              'text-stone-400';
+
+  return (
+    <div className="flex flex-col items-center select-none">
+      <button
+        onClick={() => onSelect(item)}
+        className={`border-2 rounded-sm p-2.5 w-36 text-left hover:shadow-lg hover:-translate-y-0.5 transition-all ${borderCls}`}
+      >
+        <p className="text-[11px] font-bold text-stone-800 dark:text-stone-200 leading-tight mb-1">{item.title}</p>
+        {item.assigneeDept && (
+          <p className="text-[10px] text-stone-400 leading-none mb-0.5">{item.assigneeDept}</p>
+        )}
+        {item.assigneeName && (
+          <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-none">{item.assigneeName}</p>
+        )}
+        <p className={`text-[10px] font-bold mt-1.5 ${statusCls}`}>
+          {COL_CFG[item.column].label}
+        </p>
+      </button>
+
+      {children.length > 0 && (
+        <>
+          <div className="w-px h-5 bg-stone-300 dark:bg-stone-600" />
+          <div className="relative flex items-start gap-6">
+            {children.length > 1 && (
+              <div
+                className="absolute top-0 h-px bg-stone-300 dark:bg-stone-600"
+                style={{ left: '50%', transform: 'translateX(-50%)', width: `calc(100% - ${144 / children.length}px)` }}
+              />
+            )}
+            {children.map(child => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div className="w-px h-5 bg-stone-300 dark:bg-stone-600" />
+                <DiagramNode item={child} allItems={allItems} onSelect={onSelect} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TreeDiagram({
+  items, onSelect,
+}: {
+  items: ProjectItem[];
+  onSelect: (item: ProjectItem) => void;
+}) {
+  const roots = items.filter(i => !i.parentId);
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-stone-400">
+        <GitBranch size={32} className="mb-3 text-stone-300 dark:text-stone-600" />
+        <p className="text-sm">항목을 추가하면 도식화가 표시됩니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-auto py-6 px-4">
+      <div className="flex gap-10 items-start justify-center min-w-max mx-auto">
+        {roots.length > 0 ? (
+          roots.map(root => (
+            <DiagramNode key={root.id} item={root} allItems={items} onSelect={onSelect} depth={0} />
+          ))
+        ) : (
+          <div className="text-center py-10 text-stone-400">
+            <p className="text-sm">항목 편집에서 '부모 항목'을 지정하면 트리가 구성됩니다.</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -498,12 +603,14 @@ function ProjectFormModal({
 
 // ── ItemFormModal ─────────────────────────────────────────
 function ItemFormModal({
-  item, projectId, defaultColumn, employees, onSave, onClose,
+  item, projectId, defaultColumn, employees, departments, existingItems, onSave, onClose,
 }: {
   item?: ProjectItem;
   projectId: string;
   defaultColumn: KanbanColumn;
   employees: Employee[];
+  departments: Department[];
+  existingItems: ProjectItem[];
   onSave: (data: Omit<ProjectItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onClose: () => void;
 }) {
@@ -511,11 +618,27 @@ function ItemFormModal({
   const [priority, setPriority] = useState<ProjectItemPriority>(item?.priority ?? 'normal');
   const [column, setColumn] = useState<KanbanColumn>(item?.column ?? defaultColumn);
   const [assigneeId, setAssigneeId] = useState(item?.assigneeId ?? '');
+  const [assigneeDept, setAssigneeDept] = useState(item?.assigneeDept ?? '');
   const [requesterId, setRequesterId] = useState(item?.requesterId ?? '');
   const [requesterNote, setRequesterNote] = useState(item?.requesterNote ?? '');
   const [dueDate, setDueDate] = useState(item?.dueDate ?? '');
+  const [parentId, setParentId] = useState(item?.parentId ?? '');
+
+  const getDeptName = (empId: string) => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return '';
+    return departments.find(d => d.id === emp.departmentId)?.name ?? '';
+  };
+
+  const handleAssigneeChange = (id: string) => {
+    setAssigneeId(id);
+    if (id) setAssigneeDept(getDeptName(id));
+    else setAssigneeDept('');
+  };
 
   const getEmpName = (id: string) => employees.find(e => e.id === id)?.name ?? '';
+
+  const selectableParents = existingItems.filter(i => i.id !== item?.id);
 
   const handleSubmit = () => {
     if (!title.trim()) return;
@@ -526,8 +649,10 @@ function ItemFormModal({
       column,
       order: item?.order ?? Date.now(),
       kind: 'task' as const,
+      parentId: parentId || undefined,
       assigneeId: assigneeId || undefined,
       assigneeName: assigneeId ? getEmpName(assigneeId) : undefined,
+      assigneeDept: assigneeDept.trim() || undefined,
       requesterId: requesterId || undefined,
       requesterName: requesterId ? getEmpName(requesterId) : undefined,
       requesterNote: requesterNote.trim() || undefined,
@@ -580,16 +705,33 @@ function ItemFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1">담당자</label>
-              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={selectCls}>
+              <select value={assigneeId} onChange={e => handleAssigneeChange(e.target.value)} className={selectCls}>
                 <option value="">선택 안함</option>
                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
               </select>
             </div>
             <div>
+              <label className="block text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1">부서</label>
+              <input value={assigneeDept} onChange={e => setAssigneeDept(e.target.value)}
+                placeholder="자동 또는 직접입력"
+                className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1">요청자</label>
               <select value={requesterId} onChange={e => setRequesterId(e.target.value)} className={selectCls}>
                 <option value="">선택 안함</option>
                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-stone-500 dark:text-stone-400 mb-1 flex items-center gap-1">
+                <GitBranch size={10} /> 부모 항목
+              </label>
+              <select value={parentId} onChange={e => setParentId(e.target.value)} className={selectCls}>
+                <option value="">(없음 — 최상위)</option>
+                {selectableParents.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </div>
           </div>
@@ -627,12 +769,13 @@ function ItemFormModal({
 
 // ── ProjectDetail (칸반) ──────────────────────────────────
 function ProjectDetail({
-  project, items, employees, currentUser, onBack,
+  project, items, employees, departments, currentUser, onBack,
   onUpdateProject, onDeleteProject, onItemsChange,
 }: {
   project: Project;
   items: ProjectItem[];
   employees: Employee[];
+  departments: Department[];
   currentUser: User;
   onBack: () => void;
   onUpdateProject: (p: Project) => void;
@@ -642,6 +785,7 @@ function ProjectDetail({
   const toast = useToast();
   const confirm = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [view, setView] = useState<'kanban' | 'docs' | 'diagram'>('kanban');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
@@ -786,8 +930,41 @@ function ProjectDetail({
         </div>
       </div>
 
+      {/* 뷰 토글 */}
+      <div className="flex items-center gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
+        {([
+          { key: 'kanban',  icon: <Kanban size={12} />,    label: '칸반' },
+          { key: 'docs',    icon: <ExternalLink size={12} />, label: '문서' },
+          { key: 'diagram', icon: <GitBranch size={12} />, label: '도식화' },
+        ] as { key: 'kanban' | 'docs' | 'diagram'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${view === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+          >
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 도식화 뷰 */}
+      {view === 'diagram' && (
+        <TreeDiagram items={items} onSelect={openEditItem} />
+      )}
+
+      {/* 문서 뷰 — 프로젝트 전용 ReportView */}
+      {view === 'docs' && (
+        <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
+          <ReportView
+            currentUser={currentUser}
+            projectId={project.id}
+            projectTitle={project.title}
+          />
+        </Suspense>
+      )}
+
       {/* 칸반 */}
-      <DndContext
+      {view === 'kanban' && <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -808,7 +985,7 @@ function ProjectDetail({
         <DragOverlay>
           {activeItem && <KanbanCardGhost item={activeItem} />}
         </DragOverlay>
-      </DndContext>
+      </DndContext>}
 
       {/* 프로젝트 수정 모달 */}
       {showProjectForm && (
@@ -831,6 +1008,8 @@ function ProjectDetail({
           projectId={project.id}
           defaultColumn={defaultCol}
           employees={employees}
+          departments={departments}
+          existingItems={items}
           onSave={editingItem ? handleEditItem : handleAddItem}
           onClose={() => { setShowItemForm(false); setEditingItem(undefined); }}
         />
@@ -928,6 +1107,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectItems, setProjectItems] = useState<ProjectItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'active' | 'all' | 'visual'>('active');
@@ -954,8 +1134,12 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   }, []);
 
   const loadEmployees = useCallback(async () => {
-    const snap = await getDocs(query(collection(salesDb, 'employees'), orderBy('name')));
-    setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
+    const [empSnap, deptSnap] = await Promise.all([
+      getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
+      getDocs(collection(salesDb, 'departments')),
+    ]);
+    setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
+    setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
   }, []);
 
   const loadProjectItems = useCallback(async (projectId: string) => {
@@ -1038,6 +1222,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
         project={selectedProject}
         items={projectItems}
         employees={employees}
+        departments={departments}
         currentUser={currentUser}
         onBack={() => setSelectedProject(null)}
         onUpdateProject={handleUpdateProject}
