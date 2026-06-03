@@ -1065,6 +1065,7 @@ function ProjectDetail({
   const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<'diagram' | 'kanban' | 'gantt' | 'docs'>('diagram');
+  const [prevView, setPrevView] = useState<'diagram' | 'kanban' | 'gantt'>('diagram');
   const [focusReportId, setFocusReportId] = useState<string | undefined>();
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
@@ -1164,6 +1165,7 @@ function ProjectDetail({
   const openReport = (report: Report) => {
     setNodeAction(null);
     setFocusReportId(report.id);
+    if (view !== 'docs') setPrevView(view as 'diagram' | 'kanban' | 'gantt');
     setView('docs');
   };
 
@@ -1172,6 +1174,7 @@ function ProjectDetail({
     setFocusReportId(undefined);
     setDocViewParentId(parentReportId);
     setDocViewOpenNew(true);
+    if (view !== 'docs') setPrevView(view as 'diagram' | 'kanban' | 'gantt');
     setView('docs');
   };
 
@@ -1392,18 +1395,27 @@ function ProjectDetail({
 
       {/* 문서 조회 (탭 없이 카드 클릭으로만 진입) */}
       {view === 'docs' && (
-        <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
-          <ReportView
-            currentUser={currentUser}
-            projectId={project.id}
-            projectTitle={project.title}
-            focusReportId={focusReportId}
-            onDataChange={onDocsChange}
-            openNew={docViewOpenNew}
-            initialParentReportId={docViewParentId}
-            onNewOpened={() => setDocViewOpenNew(false)}
-          />
-        </Suspense>
+        <>
+          <button
+            onClick={() => { setView(prevView); setFocusReportId(undefined); }}
+            className="flex items-center gap-1.5 mb-3 px-2 py-1.5 text-xs font-bold text-stone-500 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+          >
+            <ChevronLeft size={14} />
+            {prevView === 'kanban' ? '칸반으로' : prevView === 'gantt' ? '간트로' : '도식화로'} 돌아가기
+          </button>
+          <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
+            <ReportView
+              currentUser={currentUser}
+              projectId={project.id}
+              projectTitle={project.title}
+              focusReportId={focusReportId}
+              onDataChange={onDocsChange}
+              openNew={docViewOpenNew}
+              initialParentReportId={docViewParentId}
+              onNewOpened={() => setDocViewOpenNew(false)}
+            />
+          </Suspense>
+        </>
       )}
 
       {/* 도식화 노드 팝업 */}
