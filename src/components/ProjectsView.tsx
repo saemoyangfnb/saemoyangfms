@@ -1105,10 +1105,6 @@ function ProjectDetail({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // 문서 탭을 벗어나면 focusReportId 초기화
-  useEffect(() => {
-    if (view !== 'docs') setFocusReportId(undefined);
-  }, [view]);
 
   // 컬럼 설정 저장 (Firestore + 로컬 상태)
   const saveColumns = useCallback(async (newCols: KanbanColumnDef[]) => {
