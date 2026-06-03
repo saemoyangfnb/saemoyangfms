@@ -1064,13 +1064,13 @@ function ProjectDetail({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'diagram' | 'kanban' | 'gantt' | 'docs'>('diagram');
-  const [prevView, setPrevView] = useState<'diagram' | 'kanban' | 'gantt'>('diagram');
-  const [focusReportId, setFocusReportId] = useState<string | undefined>();
+  const [view, setView] = useState<'diagram' | 'kanban' | 'gantt'>('diagram');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
-  const [docViewOpenNew, setDocViewOpenNew] = useState(false);
-  const [docViewParentId, setDocViewParentId] = useState<string | undefined>();
+  // 보고서 팝업 모달 상태
+  const [reportModal, setReportModal] = useState<{
+    openNew?: boolean; focusReportId?: string; parentId?: string;
+  } | null>(null);
 
   // 동적 칸반 컬럼 상태
   const [localCols, setLocalCols] = useState<KanbanColumnDef[]>(
@@ -1164,18 +1164,12 @@ function ProjectDetail({
 
   const openReport = (report: Report) => {
     setNodeAction(null);
-    setFocusReportId(report.id);
-    if (view !== 'docs') setPrevView(view as 'diagram' | 'kanban' | 'gantt');
-    setView('docs');
+    setReportModal({ focusReportId: report.id });
   };
 
   const openNewReport = (parentReportId?: string) => {
     setNodeAction(null);
-    setFocusReportId(undefined);
-    setDocViewParentId(parentReportId);
-    setDocViewOpenNew(true);
-    if (view !== 'docs') setPrevView(view as 'diagram' | 'kanban' | 'gantt');
-    setView('docs');
+    setReportModal({ openNew: true, parentId: parentReportId });
   };
 
   const handleNodeClick = (report: Report) => {
@@ -1393,29 +1387,25 @@ function ProjectDetail({
         />
       )}
 
-      {/* 문서 조회 (탭 없이 카드 클릭으로만 진입) */}
-      {view === 'docs' && (
-        <>
-          <button
-            onClick={() => { setView(prevView); setFocusReportId(undefined); }}
-            className="flex items-center gap-1.5 mb-3 px-2 py-1.5 text-xs font-bold text-stone-500 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-          >
-            <ChevronLeft size={14} />
-            {prevView === 'kanban' ? '칸반으로' : prevView === 'gantt' ? '간트로' : '도식화로'} 돌아가기
-          </button>
-          <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
-            <ReportView
-              currentUser={currentUser}
-              projectId={project.id}
-              projectTitle={project.title}
-              focusReportId={focusReportId}
-              onDataChange={onDocsChange}
-              openNew={docViewOpenNew}
-              initialParentReportId={docViewParentId}
-              onNewOpened={() => setDocViewOpenNew(false)}
-            />
-          </Suspense>
-        </>
+      {/* 보고서 팝업 모달 */}
+      {reportModal !== null && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-2 sm:p-4" onClick={() => setReportModal(null)}>
+          <div className="bg-[#FDFBF7] dark:bg-stone-900 w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-sm shadow-2xl border border-stone-300 dark:border-stone-700" onClick={e => e.stopPropagation()}>
+            <Suspense fallback={<div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" /></div>}>
+              <ReportView
+                currentUser={currentUser}
+                projectId={project.id}
+                projectTitle={project.title}
+                focusReportId={reportModal.focusReportId}
+                onDataChange={onDocsChange}
+                openNew={reportModal.openNew}
+                initialParentReportId={reportModal.parentId}
+                onNewOpened={() => setReportModal(prev => prev ? { ...prev, openNew: false } : null)}
+                onDismiss={() => setReportModal(null)}
+              />
+            </Suspense>
+          </div>
+        </div>
       )}
 
       {/* 도식화 노드 팝업 */}

@@ -514,9 +514,9 @@ function ReportEditor({
 }
 
 /* ── 메인 컴포넌트 ─────────────────────────────────────── */
-interface Props { currentUser: User; projectId?: string; projectTitle?: string; focusReportId?: string; onDataChange?: () => void; openNew?: boolean; initialParentReportId?: string; onNewOpened?: () => void; }
+interface Props { currentUser: User; projectId?: string; projectTitle?: string; focusReportId?: string; onDataChange?: () => void; openNew?: boolean; initialParentReportId?: string; onNewOpened?: () => void; onDismiss?: () => void; }
 
-export function ReportView({ currentUser, projectId, projectTitle, focusReportId, onDataChange, openNew, initialParentReportId, onNewOpened }: Props) {
+export function ReportView({ currentUser, projectId, projectTitle, focusReportId, onDataChange, openNew, initialParentReportId, onNewOpened, onDismiss }: Props) {
   const toast = useToast();
   const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
@@ -631,6 +631,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
       setDetail(null);
       fetchReports();
       onDataChange?.();
+      onDismiss?.();
     } catch (e) { toast.error('저장 실패'); console.error(e); }
     finally { setSaving(false); }
   };
@@ -760,7 +761,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
           isAdmin={isAdmin}
           isMe={detail.authorId === currentUser.uid}
           currentUser={currentUser}
-          onClose={() => setDetail(null)}
+          onClose={() => { setDetail(null); onDismiss?.(); }}
           onEdit={() => {
             setEditing({
               id: detail.id,
@@ -783,7 +784,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
         <ReportEditor
           initial={editing}
           onSave={handleSave}
-          onClose={() => setEditing(null)}
+          onClose={() => { setEditing(null); onDismiss?.(); }}
           saving={saving}
           siblingReports={projectId ? reports.filter(r => r.id !== editing?.id).map(r => ({ id: r.id, title: r.title })) : undefined}
         />
