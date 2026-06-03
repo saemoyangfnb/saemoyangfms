@@ -11,24 +11,23 @@
 
 ---
 
-## 2026-06-02 (15) — Claude Code
+## 2026-06-03 — Claude Code
 
 ### 완료
-- **`useConfirm()` 전면 수정** — `const confirm = useConfirm()` → `const { confirm } = useConfirm()` 9개 파일
-  - 영향 파일: CompanyCalendar, CompanyInfoView, EmployeeDirectory, NoticeBoard, MeetingView, OKRView, ReportView, ProjectsView(×2)
-  - 이 버그로 인해 삭제/확인 팝업이 뜨더라도 기능이 동작하지 않았음 (TypeError: confirm is not a function, 무음 실패)
-  - MVC/브랜드 연혁/OKR/회의록/공지사항/보고서/프로젝트 항목 삭제 전부 복구
-  - 캘린더 일정 삭제 기능 복구
-
-### 미완 / 진행 중
-- 없음
+- **`useConfirm()` 전면 수정** — 9개 파일 `const confirm` → `const { confirm }` (TypeError 무음 실패 복구)
+  - 복구된 기능: 캘린더 삭제, MVC·연혁·OKR·회의록·공지·보고서·프로젝트 항목 삭제
+- **MVC Core Values 미표시 버그** — Firestore 문서에 `values` 필드 없을 때 undefined 방어 처리
+- **보고서를 팝업 모달로 전환** — 칸반/도식화/간트에서 보고서 열면 fixed 오버레이 모달로 표시
+  - 저장·취소·닫기 → `onDismiss` → 자동 원래 뷰 복귀
+  - `view='docs'` 탭 전환 방식 완전 제거, `setFocusReportId` 잔여 참조 핫픽스
 
 ### 다음에 이어할 것
-- 배포 (git add src/ → commit → push)
+- **SaaS 프로젝트 (malang-fnb)** 전환
+- 인트라넷 잔여: 칸반 도움말 모달 (`?` 버튼)
 
 ### 주의
-- Vite는 TypeScript 타입 에러가 있어도 빌드 통과 (esbuild 사용). tsc --noEmit 별도 확인 필요
-- `useConfirm()`은 `{ confirm }` 객체 반환 — 반드시 비구조화 할당으로 사용
+- `useConfirm()`은 `{ confirm }` 객체 반환 — 반드시 비구조화 할당 사용
+- Vite는 TypeScript 타입 에러가 있어도 빌드 통과 (esbuild 사용)
 
 ---
 
