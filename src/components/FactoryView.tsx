@@ -3,11 +3,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { salesDb } from '../firebase';
 import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
-  getDoc, query, orderBy, where,
+  getDoc, query, orderBy,
 } from 'firebase/firestore';
 import { FactoryItem, FactoryDailyRecord, User } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
+import { shareKakao } from '../utils/kakao';
 import {
   Plus, X, Edit2, ChevronUp, ChevronDown,
   AlertTriangle, CheckCircle2, Clock, Store,
@@ -21,6 +22,9 @@ const todayYMD = () => toYMD(new Date());
 const ts = () => new Date().toISOString();
 const genId = () => `fi_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const fmt = (n: number, unit: string) => `${n % 1 === 0 ? n : n.toFixed(1)}${unit}`;
+// Firestore는 undefined 값을 거부 — 저장 전 제거
+const scrub = (o: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 function fmtDate(ymd: string) {
   const d = new Date(ymd + 'T00:00:00');
@@ -333,18 +337,23 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
   const handleSaveItem = async (data: Omit<FactoryItem, 'id' | 'order' | 'createdAt' | 'updatedAt'>) => {
     try {
       if (editingItem) {
-        await updateDoc(doc(salesDb, 'factory_items', editingItem.id), { ...data, updatedAt: ts() });
+        await updateDoc(doc(salesDb, 'factory_items', editingItem.id),
+          scrub({ ...data, updatedAt: ts() } as Record<string, unknown>));
         toast.success('수정됨');
       } else {
         const maxOrder = items.reduce((m, i) => Math.max(m, i.order), -1);
         const id = genId();
-        await setDoc(doc(salesDb, 'factory_items', id), { ...data, id, order: maxOrder + 1, createdAt: ts(), updatedAt: ts() });
+        await setDoc(doc(salesDb, 'factory_items', id),
+          scrub({ ...data, id, order: maxOrder + 1, createdAt: ts(), updatedAt: ts() } as Record<string, unknown>));
         toast.success('품목 추가됨');
       }
       setShowItemForm(false);
       setEditingItem(null);
       await loadAll();
-    } catch { toast.error('저장 실패'); }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`저장 실패: ${msg}`);
+    }
   };
 
   const handleDeleteItem = async (item: FactoryItem) => {
@@ -377,20 +386,25 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
     try {
       await Promise.all(entries.map(e => {
         const id = `${e.itemId}_${date}`;
-        return setDoc(doc(salesDb, 'factory_daily', id), {
-          id, itemId: e.itemId, date,
-          closingStock: e.closingStock,
-          produced: e.produced,
-          storeCount: sc,
-          note: e.note || undefined,
-          createdAt: ts(), updatedAt: ts(),
-        }, { merge: true });
+        return setDoc(doc(salesDb, 'factory_daily', id),
+          scrub({
+            id, itemId: e.itemId, date,
+            closingStock: e.closingStock,
+            produced: e.produced,
+            storeCount: sc,
+            note: e.note || undefined,
+            createdAt: ts(), updatedAt: ts(),
+          } as Record<string, unknown>),
+          { merge: true });
       }));
       if (sc !== storeCount) await saveStoreCount(sc);
       toast.success(`${date} 실사 저장됨`);
       setShowDailyInput(false);
       await loadAll();
-    } catch { toast.error('저장 실패'); }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(`저장 실패: ${msg}`);
+    }
   };
 
   // ── 통계 계산 ──────────────────────────────────────────
