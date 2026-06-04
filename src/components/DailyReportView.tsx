@@ -57,7 +57,7 @@ const genId = () => `dr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactNode; cls: string }> = {
   pending:    { label: '진행 중', icon: <Clock size={13} />,        cls: 'text-amber-600 dark:text-amber-400' },
   done:       { label: '완료',    icon: <CheckCircle size={13} />,  cls: 'text-emerald-600 dark:text-emerald-400' },
-  incomplete: { label: '미완료',  icon: <XCircle size={13} />,      cls: 'text-red-500 dark:text-red-400' },
+  incomplete: { label: '진행중',  icon: <Clock size={13} />,        cls: 'text-amber-600 dark:text-amber-400' },
 };
 
 /* ── 미니 진행률 피커 ───────────────────────────────────── */
@@ -199,7 +199,7 @@ function MorningForm({
         <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
-              <XCircle size={11} /> 어제 미완료 항목 — 이월할 항목을 선택하세요
+              <XCircle size={11} /> 어제 진행중 항목 — 이월할 항목을 선택하세요
             </p>
             <button onClick={() => setSelectedCarry(selectedCarry.size === carryItems.length ? new Set() : new Set(carryItems.map((_, i) => i)))}
               className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline">
@@ -334,14 +334,14 @@ function EveningForm({
                 )}
               </div>
 
-              {/* 미완료 사유 */}
+              {/* 이월 메모 */}
               {it.status === 'incomplete' && (
                 <div className="ml-8 mt-1.5">
                   <input
                     value={it.note ?? ''}
                     onChange={e => setItems(p => p.map((x, idx) => idx === i ? { ...x, note: e.target.value } : x))}
-                    placeholder="미완료 사유 (선택)"
-                    className="w-full px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-red-400 placeholder:text-red-300"
+                    placeholder="이월 메모 / 특이사항 (선택)"
+                    className="w-full px-3 py-1.5 text-xs border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-amber-400 placeholder:text-amber-400"
                   />
                 </div>
               )}
@@ -655,7 +655,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           const delta = ep - mp;
           const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
           if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
-          return `${it.text} — 미완료${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+          return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
         }),
       });
     }
@@ -1064,7 +1064,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                       const delta = ep - mp;
                       const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
                       if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
-                      return `${it.text} — 미완료${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+                      return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
                     }),
                     onCopied: toast.success,
                   })}
