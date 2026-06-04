@@ -267,50 +267,87 @@ function MorningForm({
 }
 
 /* ── 개인 퇴근 보고 폼 ─────────────────────────────────── */
-function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (items: DailyReportItem[]) => void }) {
+function EveningForm({
+  morning, editItems, onSubmit,
+}: {
+  morning: DailyReport;
+  editItems?: DailyReportItem[]; // 수정 모드: 기존 저녁 항목
+  onSubmit: (items: DailyReportItem[]) => void;
+}) {
   const [items, setItems] = useState<DailyReportItem[]>(
-    morning.items.map(it => ({ text: it.text, status: 'done' as DailyItemStatus, note: '' }))
+    (editItems ?? morning.items).map((it, i) => ({
+      text: morning.items[i]?.text ?? it.text,
+      status: it.status ?? ('done' as DailyItemStatus),
+      note: it.note ?? '',
+      progress: it.progress ?? morning.items[i]?.progress ?? 0,
+    }))
   );
 
   const toggleStatus = (i: number) => {
-    setItems(p => p.map((it, idx) => idx === i
-      ? { ...it, status: it.status === 'done' ? 'incomplete' : 'done' }
-      : it
-    ));
+    setItems(p => p.map((it, idx) => {
+      if (idx !== i) return it;
+      const next = it.status === 'done' ? 'incomplete' : 'done';
+      return { ...it, status: next, progress: next === 'done' ? 100 : it.progress };
+    }));
   };
+
+  const updateProgress = (i: number, v: number) =>
+    setItems(p => p.map((it, idx) => idx === i ? { ...it, progress: v } : it));
 
   return (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-6">
       <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-4">퇴근 보고</p>
-      <div className="space-y-3 mb-5">
-        {items.map((it, i) => (
-          <div key={i}>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">{i + 1}.</span>
-              <span className={`flex-1 text-sm ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'} font-semibold`}>
-                {it.text}
-              </span>
-              <button
-                onClick={() => toggleStatus(i)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-colors ${STATUS_CONFIG[it.status].cls} bg-current/10`}
-                style={{ background: 'transparent' }}
-              >
-                {STATUS_CONFIG[it.status].icon}
-                <span className="hidden sm:inline">{STATUS_CONFIG[it.status].label}</span>
-              </button>
-            </div>
-            {it.status === 'incomplete' && (
-              <div className="ml-14 mt-1.5">
-                <input
-                  value={it.note ?? ''}
-                  onChange={e => setItems(p => p.map((x, idx) => idx === i ? { ...x, note: e.target.value } : x))}
-                  placeholder="미완료 사유 (선택)"
-                  className="w-full px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-red-400 placeholder:text-red-300"
-                />
+      <div className="space-y-4 mb-5">
+        {items.map((it, i) => {
+          const morningProg = morning.items[i]?.progress ?? 0;
+          const eveningProg = it.progress ?? 0;
+          const delta = eveningProg - morningProg;
+
+          return (
+            <div key={i}>
+              {/* 업무명 + 상태 토글 */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">{i + 1}.</span>
+                <span className={`flex-1 text-sm font-semibold ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>
+                  {it.text}
+                </span>
+                <button
+                  onClick={() => toggleStatus(i)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-colors ${STATUS_CONFIG[it.status].cls}`}
+                  style={{ background: 'transparent' }}
+                >
+                  {STATUS_CONFIG[it.status].icon}
+                  <span className="hidden sm:inline">{STATUS_CONFIG[it.status].label}</span>
+                </button>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* 진행률 행 */}
+              <div className="ml-8 mt-1.5 flex items-center gap-2 flex-wrap">
+                {morningProg > 0 && (
+                  <span className="text-[10px] text-stone-400 shrink-0">출근 {morningProg}% →</span>
+                )}
+                <MiniProgressPicker value={eveningProg} onChange={v => updateProgress(i, v)} />
+                {delta !== 0 && (
+                  <span className={`text-[10px] font-black shrink-0 ${delta > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                    {delta > 0 ? `+${delta}%` : `${delta}%`}
+                  </span>
+                )}
+              </div>
+
+              {/* 미완료 사유 */}
+              {it.status === 'incomplete' && (
+                <div className="ml-8 mt-1.5">
+                  <input
+                    value={it.note ?? ''}
+                    onChange={e => setItems(p => p.map((x, idx) => idx === i ? { ...x, note: e.target.value } : x))}
+                    placeholder="미완료 사유 (선택)"
+                    className="w-full px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 text-stone-800 dark:text-stone-200 outline-none focus:border-red-400 placeholder:text-red-300"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div className="flex justify-end">
         <button onClick={() => onSubmit(items)} className="flex items-center gap-2 px-5 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
@@ -322,8 +359,10 @@ function EveningForm({ morning, onSubmit }: { morning: DailyReport; onSubmit: (i
 }
 
 /* ── 보고서 카드 (완료된 보고) ─────────────────────────── */
-function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCreateReport, onShare }: {
-  report: DailyReport; showName?: boolean;
+function ReportCard({ report, morningReport, showName = false, onEdit, onConfirm, isAdmin, onCreateReport, onShare }: {
+  report: DailyReport;
+  morningReport?: DailyReport; // 퇴근 카드에서 출근 데이터 참조용
+  showName?: boolean;
   onEdit?: () => void;
   onConfirm?: () => void;
   isAdmin?: boolean;
@@ -334,6 +373,11 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCr
   const doneCount = report.items.filter(it => it.status === 'done').length;
   const total = report.items.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
+  // 퇴근 보고: 평균 진행률
+  const hasProgress = report.type === 'evening' && report.items.some(it => (it.progress ?? 0) > 0);
+  const avgProgress = hasProgress
+    ? Math.round(report.items.reduce((s, it) => s + (it.progress ?? 0), 0) / report.items.length)
+    : pct;
 
   return (
     <div className={`bg-white dark:bg-stone-900 border rounded-xl overflow-hidden ${report.type === 'evening' ? 'border-stone-200 dark:border-stone-700' : 'border-stone-100 dark:border-stone-800'}`}>
@@ -347,8 +391,8 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCr
           {report.items.length > 2 && ` 외 ${report.items.length - 2}건`}
         </span>
         {report.type === 'evening' && (
-          <span className={`text-[11px] font-bold shrink-0 ${pct === 100 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
-            {pct}%
+          <span className={`text-[11px] font-bold shrink-0 ${avgProgress === 100 ? 'text-emerald-600' : avgProgress >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+            {avgProgress}%
           </span>
         )}
         {onShare && (
@@ -380,22 +424,41 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCr
 
       {open && (
         <div className="px-4 pb-3 pt-0 border-t border-stone-100 dark:border-stone-800 space-y-2">
-          {report.items.map((it, i) => (
-            <div key={i}>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-stone-400 w-4 text-right font-bold">{i + 1}.</span>
-                <span className={`${STATUS_CONFIG[it.status].cls} shrink-0`}>{STATUS_CONFIG[it.status].icon}</span>
-                <span className={`text-xs flex-1 ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'} font-semibold`}>{it.text}</span>
-                {(it.progress ?? 0) > 0 && (
-                  <span className="text-[10px] font-bold tabular-nums shrink-0 text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
-                    {it.progress}%
-                  </span>
-                )}
-                <span className={`text-[10px] font-bold shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].label}</span>
+          {report.items.map((it, i) => {
+            const morningProg = morningReport?.items[i]?.progress ?? 0;
+            const eveningProg = it.progress ?? 0;
+            const delta = report.type === 'evening' ? eveningProg - morningProg : 0;
+            return (
+              <div key={i}>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className="text-xs text-stone-400 w-4 text-right font-bold shrink-0">{i + 1}.</span>
+                  <span className={`${STATUS_CONFIG[it.status].cls} shrink-0`}>{STATUS_CONFIG[it.status].icon}</span>
+                  <span className={`text-xs flex-1 min-w-0 ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'} font-semibold`}>{it.text}</span>
+                  {/* 진행률 표시 */}
+                  {report.type === 'evening' && eveningProg > 0 && (
+                    <span className="flex items-center gap-1 shrink-0">
+                      {morningProg > 0 && (
+                        <span className="text-[9px] text-stone-400">{morningProg}%→</span>
+                      )}
+                      <span className="text-[10px] font-bold tabular-nums text-stone-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+                        {eveningProg}%
+                      </span>
+                      {delta > 0 && (
+                        <span className="text-[9px] font-black text-emerald-500">+{delta}%</span>
+                      )}
+                    </span>
+                  )}
+                  {report.type === 'morning' && (it.progress ?? 0) > 0 && (
+                    <span className="text-[10px] font-bold tabular-nums shrink-0 text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+                      {it.progress}%
+                    </span>
+                  )}
+                  <span className={`text-[10px] font-bold shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].label}</span>
+                </div>
+                {it.note && <p className="ml-10 text-[11px] text-stone-400 mt-0.5">{it.note}</p>}
               </div>
-              {it.note && <p className="ml-10 text-[11px] text-stone-400 mt-0.5">{it.note}</p>}
-            </div>
-          ))}
+            );
+          })}
           {onCreateReport && (
             <div className="pt-2 border-t border-stone-100 dark:border-stone-800">
               <button onClick={onCreateReport}
@@ -584,11 +647,17 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         items, updatedAt: new Date().toISOString(),
       });
       toast.success('퇴근 보고 완료');
-      setKakaoTarget({ type: 'evening', items: items.map(i =>
-        i.status === 'done'
-          ? `${i.text} - 완료`
-          : `${i.text} - 미완료${i.note ? `[${i.note}]` : ''}`
-      ) });
+      setKakaoTarget({
+        type: 'evening',
+        items: items.map((it, idx) => {
+          const mp = myMorning?.items[idx]?.progress ?? 0;
+          const ep = it.progress ?? 0;
+          const delta = ep - mp;
+          const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
+          if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
+          return `${it.text} — 미완료${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+        }),
+      });
     }
     fetchData();
   };
@@ -969,16 +1038,37 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                 })} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
-                isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (
+                isToday ? (
+                  <EveningForm
+                    key={isEditingEvening ? 'edit' : 'new'}
+                    morning={myMorning}
+                    editItems={isEditingEvening ? myEvening?.items : undefined}
+                    onSubmit={submitEvening}
+                  />
+                ) : (
                   <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
                 )
               ) : (
-                <ReportCard report={myEvening} onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined} onCreateReport={onNavigateToReports}
-                  onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'evening', items: myEvening.items.map(i =>
-                    i.status === 'done'
-                      ? `${i.text} - 완료`
-                      : `${i.text} - 미완료${i.note ? `[${i.note}]` : ''}`
-                  ), onCopied: toast.success })} />
+                <ReportCard
+                  report={myEvening}
+                  morningReport={myMorning}
+                  onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined}
+                  isAdmin={isAdmin}
+                  onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined}
+                  onCreateReport={onNavigateToReports}
+                  onShare={() => shareDailyReport({
+                    name: currentUser.name, date, type: 'evening',
+                    items: myEvening.items.map((it, idx) => {
+                      const mp = myMorning?.items[idx]?.progress ?? 0;
+                      const ep = it.progress ?? 0;
+                      const delta = ep - mp;
+                      const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
+                      if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
+                      return `${it.text} — 미완료${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+                    }),
+                    onCopied: toast.success,
+                  })}
+                />
               )}
             </>
           )}
