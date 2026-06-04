@@ -414,12 +414,24 @@ function ReportEditor({
         )}
 
         {/* 제목 */}
-        <input
-          value={state.title}
-          onChange={e => update({ title: e.target.value })}
-          placeholder="제목을 입력하세요"
-          className="w-full text-lg font-black bg-transparent outline-none text-stone-900 dark:text-stone-100 placeholder:text-stone-300 dark:placeholder:text-stone-600 border-b-2 border-stone-200 dark:border-stone-700 pb-2 focus:border-stone-800 dark:focus:border-stone-300 transition-colors"
-        />
+        <div className="relative">
+          <input
+            value={state.title}
+            onChange={e => update({ title: e.target.value })}
+            placeholder={`예: ${new Date().toISOString().slice(0, 10)}-보고서명-v1`}
+            className="w-full text-lg font-black bg-transparent outline-none text-stone-900 dark:text-stone-100 placeholder:text-stone-300 dark:placeholder:text-stone-600 border-b-2 border-stone-200 dark:border-stone-700 pb-2 pr-24 focus:border-stone-800 dark:focus:border-stone-300 transition-colors"
+          />
+          {!state.title && (
+            <button
+              type="button"
+              onClick={() => update({ title: `${new Date().toISOString().slice(0, 10)}-` })}
+              className="absolute right-0 bottom-2.5 text-[10px] font-bold px-2 py-0.5 bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-sm transition-colors"
+              title="날짜-이름-버전 양식 사용"
+            >
+              날짜 자동입력
+            </button>
+          )}
+        </div>
 
         {/* 유형 + 날짜 */}
         <div className="flex gap-2 flex-wrap">

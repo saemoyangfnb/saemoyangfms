@@ -12,13 +12,15 @@ import {
 import {
   User, Employee, Department, Project, Report, ProjectStatus,
   KanbanColumnDef, KanbanColumnColor, DEFAULT_KANBAN_COLUMNS, ProjectItem,
+  ProjectFolder,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
-  Plus, ChevronLeft, ChevronRight, Trash2, Edit2, X, Users, Calendar,
+  Plus, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
+  Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
-  Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2,
+  Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2, Folder, FolderOpen,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -545,13 +547,176 @@ function DocLinkPickerModal({
   );
 }
 
+// ── 진행률 수동 설정 ──────────────────────────────────────
+function ProgressPicker({
+  value, onChange, compact = false,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  compact?: boolean;
+}) {
+  const [hovering, setHovering] = useState<number | null>(null);
+  const steps = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  const display = hovering ?? value;
+
+  const colorCls = (step: number) => {
+    if (display >= step) {
+      if (display === 100) return 'bg-blue-500';
+      if (display >= 70) return 'bg-emerald-500';
+      if (display >= 40) return 'bg-amber-400';
+      return 'bg-stone-400';
+    }
+    return 'bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 dark:hover:bg-stone-600';
+  };
+
+  const segW = compact ? 'w-4 h-2.5' : 'w-6 h-3.5';
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-0.5" onMouseLeave={() => setHovering(null)}>
+        {steps.map(s => (
+          <button
+            key={s}
+            onClick={() => onChange(value === s ? 0 : s)}
+            onMouseEnter={() => setHovering(s)}
+            className={`${segW} rounded-sm transition-colors cursor-pointer ${colorCls(s)}`}
+            title={`${s}%`}
+          />
+        ))}
+      </div>
+      <span className={`font-bold tabular-nums ${compact ? 'text-[10px] text-stone-500 dark:text-stone-400 w-6' : 'text-xs text-stone-600 dark:text-stone-300 w-8'}`}>
+        {display}%
+      </span>
+    </div>
+  );
+}
+
+// ── 폴더 생성/수정 폼 ─────────────────────────────────────
+function FolderFormModal({
+  folder, onSave, onClose,
+}: {
+  folder?: ProjectFolder;
+  onSave: (data: Omit<ProjectFolder, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(folder?.name ?? '');
+  const [description, setDescription] = useState(folder?.description ?? '');
+  const [color, setColor] = useState<KanbanColumnColor>(folder?.color ?? 'stone');
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-sm border border-stone-200 dark:border-stone-700">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
+          <h2 className="text-sm font-black text-stone-900 dark:text-white flex items-center gap-2">
+            <Folder size={14} /> {folder ? '폴더 수정' : '새 폴더'}
+          </h2>
+          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">폴더명 *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 2026년 마케팅" autoFocus
+              onKeyDown={e => e.key === 'Enter' && name.trim() && onSave({ name: name.trim(), description: description.trim() || undefined, color })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-stone-500" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">설명</label>
+            <input value={description} onChange={e => setDescription(e.target.value)} placeholder="간략한 설명 (선택)"
+              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-2">색상</label>
+            <div className="flex gap-2">
+              {COLOR_ORDER.map(c => (
+                <button key={c} onClick={() => setColor(c as KanbanColumnColor)}
+                  className={`w-6 h-6 rounded-full ${COLOR_CFG[c].dotCls} transition-transform hover:scale-110 ${color === c ? 'ring-2 ring-offset-2 ring-stone-500' : ''}`} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
+          <button onClick={onClose} className="px-4 py-2 text-xs text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
+          <button onClick={() => name.trim() && onSave({ name: name.trim(), description: description.trim() || undefined, color })}
+            disabled={!name.trim()}
+            className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
+            {folder ? '저장' : '만들기'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 폴더 카드 ─────────────────────────────────────────────
+function FolderCard({
+  folder, projectCount, isFirst, isLast, onOpen, onEdit, onDelete, onMoveUp, onMoveDown,
+}: {
+  folder: ProjectFolder;
+  projectCount: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const cfg = COLOR_CFG[folder.color] ?? COLOR_CFG.stone;
+
+  return (
+    <div className={`bg-white dark:bg-stone-900 border-2 ${cfg.cardBorderCls} rounded-sm hover:shadow-md transition-all group`}>
+      <div onClick={onOpen} className="p-4 cursor-pointer">
+        <div className="flex items-start gap-3 mb-3">
+          <div className={`w-9 h-9 rounded-sm ${cfg.bgCls} flex items-center justify-center shrink-0`}>
+            <Folder size={18} className={cfg.headCls} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-black text-stone-900 dark:text-white leading-snug truncate group-hover:text-stone-700 dark:group-hover:text-stone-200">
+              {folder.name}
+            </h3>
+            {folder.description && (
+              <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5 truncate">{folder.description}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-stone-400">
+          <FolderKanban size={11} />
+          <span>{projectCount}개 프로젝트</span>
+        </div>
+      </div>
+      <div className="px-4 pb-3 pt-1 border-t border-stone-100 dark:border-stone-800/50 flex items-center gap-1">
+        <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst}
+          className="p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 disabled:opacity-20 rounded-sm transition-colors">
+          <ChevronUp size={12} />
+        </button>
+        <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast}
+          className="p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 disabled:opacity-20 rounded-sm transition-colors">
+          <ChevronDown size={12} />
+        </button>
+        <div className="flex-1" />
+        <button onClick={e => { e.stopPropagation(); onEdit(); }}
+          className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors">
+          <Edit2 size={12} />
+        </button>
+        <button onClick={e => { e.stopPropagation(); onDelete(); }}
+          className="p-1.5 text-stone-300 dark:text-stone-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-sm transition-colors">
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── 프로젝트 생성/수정 폼 ─────────────────────────────────
 function ProjectFormModal({
-  project, employees, currentUser, initialTitle, initialDescription, onSave, onClose,
+  project, employees, currentUser, folders, defaultFolderId,
+  initialTitle, initialDescription, onSave, onClose,
 }: {
   project?: Project;
   employees: Employee[];
   currentUser: User;
+  folders: ProjectFolder[];
+  defaultFolderId?: string;
   initialTitle?: string;
   initialDescription?: string;
   onSave: (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -563,6 +728,7 @@ function ProjectFormModal({
   const [startDate, setStartDate] = useState(project?.startDate ?? '');
   const [endDate, setEndDate] = useState(project?.endDate ?? '');
   const [memberIds, setMemberIds] = useState<string[]>(project?.memberIds ?? []);
+  const [folderId, setFolderId] = useState<string>(project?.folderId ?? defaultFolderId ?? '');
 
   const toggleMember = (emp: Employee) =>
     setMemberIds(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id]);
@@ -575,6 +741,8 @@ function ProjectFormModal({
       status, ownerId: currentUser.uid, ownerName: currentUser.name,
       memberIds, memberNames, startDate: startDate || undefined, endDate: endDate || undefined,
       milestones: project?.milestones ?? [],
+      folderId: folderId || undefined,
+      folderOrder: project?.folderOrder,
     }) as Omit<Project, 'id' | 'createdAt' | 'updatedAt'>);
   };
 
@@ -595,6 +763,15 @@ function ProjectFormModal({
             <label className="block text-[11px] font-bold text-stone-500 mb-1">설명</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
               className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none resize-none" />
+          </div>
+          {/* 폴더 선택 */}
+          <div>
+            <label className="block text-[11px] font-bold text-stone-500 mb-1">폴더</label>
+            <select value={folderId} onChange={e => setFolderId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none">
+              <option value="">미분류</option>
+              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1050,7 +1227,7 @@ function ProjectGanttView({
 // ── 프로젝트 상세 ─────────────────────────────────────────
 function ProjectDetail({
   project, docs, employees, currentUser, onBack,
-  onUpdateProject, onDeleteProject, onDocsChange,
+  onUpdateProject, onDeleteProject, onDocsChange, onProgressChange,
 }: {
   project: Project;
   docs: Report[];
@@ -1060,6 +1237,7 @@ function ProjectDetail({
   onUpdateProject: (p: Project) => void;
   onDeleteProject: (id: string) => void;
   onDocsChange: () => void;
+  onProgressChange: (v: number) => void;
 }) {
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -1224,9 +1402,7 @@ function ProjectDetail({
   }, [docs, localCols, onDocsChange, toast]);
 
   const activeDoc = activeId ? docs.find(d => d.id === activeId) : null;
-  const doneColId = localCols.length > 0 ? localCols[localCols.length - 1].id : 'done';
-  const doneCount = docs.filter(d => (d.kanbanColumn ?? localCols[0]?.id ?? 'todo') === doneColId).length;
-  const progress = docs.length > 0 ? Math.round((doneCount / docs.length) * 100) : 0;
+  const progress = project.progress ?? 0;
   const statusCfg = STATUS_CFG[project.status];
 
   return (
@@ -1243,14 +1419,7 @@ function ProjectDetail({
           </div>
           {project.description && <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5 truncate">{project.description}</p>}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            {docs.length > 0 && (
-              <div className="flex items-center gap-2">
-                <div className="w-32 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-                </div>
-                <span className="text-[11px] text-stone-500 tabular-nums">{doneCount}/{docs.length} ({progress}%)</span>
-              </div>
-            )}
+            <ProgressPicker value={progress} onChange={onProgressChange} />
             {project.endDate && (
               <span className="text-[11px] text-stone-400 flex items-center gap-1"><Calendar size={11} /> 마감 {fmtDate(project.endDate)}</span>
             )}
@@ -1469,13 +1638,18 @@ function MeetingMiniCard({ meeting, onCreateProject }: {
 }
 
 // ── 프로젝트 목록 카드 ────────────────────────────────────
-function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: {
-  project: Project; docCount: number; doneCount: number; onClick: () => void;
+function ProjectCard({ project, isFirst, isLast, onClick, onStatusChange, onProgressChange, onMoveUp, onMoveDown }: {
+  project: Project;
+  isFirst: boolean; isLast: boolean;
+  onClick: () => void;
   onStatusChange: (status: ProjectStatus) => void;
+  onProgressChange: (v: number) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const statusCfg = STATUS_CFG[project.status];
-  const progress = docCount > 0 ? Math.round((doneCount / docCount) * 100) : 0;
+  const progress = project.progress ?? 0;
   const isEndingSoon = project.endDate && project.status === 'active' &&
     new Date(project.endDate) > new Date() && new Date(project.endDate) < new Date(Date.now() + 7 * 86400000);
   const isArchived = project.status === 'completed' || project.status === 'archived';
@@ -1487,18 +1661,7 @@ function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: 
           <h3 className="text-sm font-black text-stone-900 dark:text-white group-hover:text-stone-700 dark:group-hover:text-stone-200 leading-snug flex-1 min-w-0 truncate">{project.title}</h3>
           <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
         </div>
-        {project.description && <p className="text-xs text-stone-500 dark:text-stone-400 mb-3 line-clamp-2 leading-snug">{project.description}</p>}
-        {docCount > 0 && (
-          <div className="mb-2">
-            <div className="flex justify-between text-[10px] text-stone-400 mb-1">
-              <span>진행률</span>
-              <span className="tabular-nums">{doneCount}/{docCount} ({progress}%)</span>
-            </div>
-            <div className="h-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${project.status === 'completed' ? 'bg-blue-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        )}
+        {project.description && <p className="text-xs text-stone-500 dark:text-stone-400 mb-2 line-clamp-2 leading-snug">{project.description}</p>}
         <div className="flex items-center gap-3 text-[10px] text-stone-400 flex-wrap">
           {project.memberNames.length > 0 && (
             <span className="flex items-center gap-0.5">
@@ -1512,14 +1675,30 @@ function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: 
           )}
         </div>
       </div>
+
+      {/* 진행률 설정 */}
+      <div className="px-4 py-2 border-t border-stone-100 dark:border-stone-800/50"
+        onClick={e => e.stopPropagation()}>
+        <ProgressPicker value={progress} onChange={onProgressChange} compact />
+      </div>
+
       {/* 빠른 액션 풋터 */}
-      <div className="px-4 pb-3 border-t border-stone-100 dark:border-stone-800/50 pt-2">
+      <div className="px-4 pb-3 pt-1 border-t border-stone-100 dark:border-stone-800/50 flex items-center gap-1">
+        <button onClick={e => { e.stopPropagation(); onMoveUp(); }} disabled={isFirst}
+          className="p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 disabled:opacity-20 rounded-sm transition-colors">
+          <ChevronUp size={12} />
+        </button>
+        <button onClick={e => { e.stopPropagation(); onMoveDown(); }} disabled={isLast}
+          className="p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 disabled:opacity-20 rounded-sm transition-colors">
+          <ChevronDown size={12} />
+        </button>
+        <div className="flex-1" />
         {isArchived ? (
           <button
-            onClick={() => onStatusChange('active')}
+            onClick={e => { e.stopPropagation(); onStatusChange('active'); }}
             className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
-            <RotateCcw size={9} /> 진행중으로 복구
+            <RotateCcw size={9} /> 복구
           </button>
         ) : (
           <div className="relative">
@@ -1530,7 +1709,7 @@ function ProjectCard({ project, docCount, doneCount, onClick, onStatusChange }: 
               <Archive size={9} /> 종료
             </button>
             {showMenu && (
-              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm shadow-lg z-20 py-1 min-w-[7rem]">
+              <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm shadow-lg z-20 py-1 min-w-[7rem]">
                 <button
                   onClick={() => { onStatusChange('completed'); setShowMenu(false); }}
                   className="w-full text-left px-3 py-2 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center gap-2"
@@ -1557,38 +1736,37 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
   const toast = useToast();
   const { confirm } = useConfirm();
 
+  // 폴더 상태
+  const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null); // null=폴더목록, 'unclassified'=미분류, 폴더id=해당폴더
+  const [showFolderForm, setShowFolderForm] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<ProjectFolder | null>(null);
+
+  // 프로젝트 상태
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectDocs, setProjectDocs] = useState<Report[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'active' | 'all' | 'archived' | 'visual'>('active');
+  const [tab, setTab] = useState<'active' | 'all' | 'archived'>('active');
   const [search, setSearch] = useState('');
   const [showProjectForm, setShowProjectForm] = useState(false);
-  const [docStats, setDocStats] = useState<Record<string, { total: number; done: number }>>({});
+
+  // 회의록 패널
   const [showMeetings, setShowMeetings] = useState(false);
   const [meetings, setMeetings] = useState<SimpleMeeting[]>([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [meetingToConvert, setMeetingToConvert] = useState<SimpleMeeting | null>(null);
 
+  // ── 데이터 로드 ───────────────────────────────────────────
+  const loadFolders = useCallback(async () => {
+    const snap = await getDocs(query(collection(salesDb, 'project_folders'), orderBy('order')));
+    setFolders(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProjectFolder)));
+  }, []);
+
   const loadProjects = useCallback(async () => {
     const snap = await getDocs(query(collection(salesDb, 'projects'), orderBy('updatedAt', 'desc')));
     setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
-  }, []);
-
-  const loadDocStats = useCallback(async () => {
-    try {
-      const snap = await getDocs(query(collection(salesDb, 'reports'), where('projectId', '!=', null)));
-      const stats: Record<string, { total: number; done: number }> = {};
-      snap.docs.forEach(d => {
-        const r = d.data() as Report;
-        if (!r.projectId) return;
-        if (!stats[r.projectId]) stats[r.projectId] = { total: 0, done: 0 };
-        stats[r.projectId].total += 1;
-        if (r.kanbanColumn === 'done') stats[r.projectId].done += 1;
-      });
-      setDocStats(stats);
-    } catch {}
   }, []);
 
   const loadEmployees = useCallback(async () => {
@@ -1600,22 +1778,94 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     try {
       const snap = await getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', projectId)));
       setProjectDocs(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-    } catch (e) { console.error('loadProjectDocs 오류:', e); }
+    } catch {}
   }, []);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([loadProjects(), loadDocStats(), loadEmployees()]);
+      await Promise.all([loadFolders(), loadProjects(), loadEmployees()]);
       setLoading(false);
     })();
-  }, [loadProjects, loadDocStats, loadEmployees]);
+  }, [loadFolders, loadProjects, loadEmployees]);
 
+  // ── 폴더 CRUD ─────────────────────────────────────────────
+  const handleCreateFolder = async (data: Omit<ProjectFolder, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
+    const id = `folder_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+    const now = ts();
+    const maxOrder = folders.reduce((max, f) => Math.max(max, f.order), -1);
+    try {
+      await setDoc(doc(salesDb, 'project_folders', id), { ...data, id, order: maxOrder + 1, createdAt: now, updatedAt: now });
+      toast.success('폴더 생성됨');
+      await loadFolders();
+      setShowFolderForm(false);
+    } catch { toast.error('생성 실패'); }
+  };
+
+  const handleUpdateFolder = async (folder: ProjectFolder, data: Omit<ProjectFolder, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
+    try {
+      await updateDoc(doc(salesDb, 'project_folders', folder.id), { ...data, updatedAt: ts() });
+      toast.success('수정됨');
+      await loadFolders();
+      setEditingFolder(null);
+    } catch { toast.error('수정 실패'); }
+  };
+
+  const handleDeleteFolder = async (folder: ProjectFolder) => {
+    const projectsInFolder = projects.filter(p => p.folderId === folder.id);
+    const ok = await confirm({
+      title: '폴더 삭제',
+      message: `"${folder.name}" 폴더를 삭제할까요?${projectsInFolder.length > 0 ? `\n폴더 안의 프로젝트 ${projectsInFolder.length}개는 미분류로 이동됩니다.` : ''}`,
+      confirmLabel: '삭제',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      if (projectsInFolder.length > 0) {
+        await Promise.all(projectsInFolder.map(p =>
+          updateDoc(doc(salesDb, 'projects', p.id), { folderId: deleteField(), folderOrder: deleteField(), updatedAt: ts() })
+        ));
+      }
+      await deleteDoc(doc(salesDb, 'project_folders', folder.id));
+      toast.success('삭제됨');
+      if (selectedFolderId === folder.id) setSelectedFolderId(null);
+      await Promise.all([loadFolders(), loadProjects()]);
+    } catch { toast.error('삭제 실패'); }
+  };
+
+  const handleMoveFolderUp = async (idx: number) => {
+    if (idx === 0) return;
+    const newFolders = [...folders];
+    [newFolders[idx - 1], newFolders[idx]] = [newFolders[idx], newFolders[idx - 1]];
+    setFolders(newFolders);
+    try {
+      await Promise.all(newFolders.map((f, i) =>
+        updateDoc(doc(salesDb, 'project_folders', f.id), { order: i, updatedAt: ts() })
+      ));
+    } catch { toast.error('순서 변경 실패'); await loadFolders(); }
+  };
+
+  const handleMoveFolderDown = async (idx: number) => {
+    if (idx >= folders.length - 1) return;
+    const newFolders = [...folders];
+    [newFolders[idx], newFolders[idx + 1]] = [newFolders[idx + 1], newFolders[idx]];
+    setFolders(newFolders);
+    try {
+      await Promise.all(newFolders.map((f, i) =>
+        updateDoc(doc(salesDb, 'project_folders', f.id), { order: i, updatedAt: ts() })
+      ));
+    } catch { toast.error('순서 변경 실패'); await loadFolders(); }
+  };
+
+  // ── 프로젝트 CRUD ─────────────────────────────────────────
   const handleCreateProject = async (data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
     const id = genId();
     const now = ts();
     try {
-      await setDoc(doc(salesDb, 'projects', id), scrub({ ...data, id, createdAt: now, updatedAt: now }));
+      // folderOrder = 현재 폴더 내 최대 순서 + 1
+      const folderProjects = projects.filter(p => p.folderId === data.folderId);
+      const maxOrder = folderProjects.reduce((max, p) => Math.max(max, p.folderOrder ?? 0), -1);
+      await setDoc(doc(salesDb, 'projects', id), scrub({ ...data, id, folderOrder: maxOrder + 1, createdAt: now, updatedAt: now }));
       toast.success('프로젝트 생성됨');
       await loadProjects();
       setShowProjectForm(false);
@@ -1657,6 +1907,39 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     } catch { toast.error('상태 변경 실패'); }
   };
 
+  const handleProgressChange = async (projectId: string, progress: number) => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, progress } : p));
+    if (selectedProject?.id === projectId) setSelectedProject(prev => prev ? { ...prev, progress } : prev);
+    try {
+      await updateDoc(doc(salesDb, 'projects', projectId), { progress, updatedAt: ts() });
+    } catch { toast.error('진행률 저장 실패'); }
+  };
+
+  // 폴더 내 프로젝트 순서 변경
+  const handleMoveProjectInFolder = async (projectId: string, dir: 'up' | 'down', inFolderProjects: Project[]) => {
+    const idx = inFolderProjects.findIndex(p => p.id === projectId);
+    if (idx < 0) return;
+    const newIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= inFolderProjects.length) return;
+    const newList = [...inFolderProjects];
+    [newList[idx], newList[newIdx]] = [newList[newIdx], newList[idx]];
+    // 로컬 상태 즉시 반영
+    setProjects(prev => {
+      const updated = [...prev];
+      newList.forEach((p, i) => {
+        const gi = updated.findIndex(x => x.id === p.id);
+        if (gi >= 0) updated[gi] = { ...updated[gi], folderOrder: i };
+      });
+      return updated;
+    });
+    try {
+      await Promise.all(newList.map((p, i) =>
+        updateDoc(doc(salesDb, 'projects', p.id), { folderOrder: i, updatedAt: ts() })
+      ));
+    } catch { toast.error('순서 변경 실패'); await loadProjects(); }
+  };
+
+  // ── 회의록 ────────────────────────────────────────────────
   const loadMeetings = useCallback(async () => {
     setLoadingMeetings(true);
     try {
@@ -1675,6 +1958,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     setShowProjectForm(true);
   };
 
+  // ── 검색 ─────────────────────────────────────────────────
   const matchesSearch = (p: Project) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -1683,13 +1967,18 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
       p.memberNames.some(n => n.toLowerCase().includes(q));
   };
 
-  const filteredProjects = projects
-    .filter(p => {
-      if (tab === 'active') return p.status === 'active';
-      if (tab === 'archived') return p.status === 'completed' || p.status === 'archived';
-      return true;
-    })
-    .filter(matchesSearch);
+  // ── 현재 폴더의 프로젝트 목록 (순서 정렬) ────────────────
+  const getProjectsInFolder = useCallback((folderId: string | null) => {
+    const filtered = projects.filter(p =>
+      folderId === 'unclassified' ? !p.folderId : p.folderId === folderId
+    );
+    return [...filtered].sort((a, b) => {
+      const oa = a.folderOrder ?? Infinity;
+      const ob = b.folderOrder ?? Infinity;
+      if (oa !== ob) return oa - ob;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+  }, [projects]);
 
   if (loading) return (
     <div className="flex items-center justify-center py-32">
@@ -1697,167 +1986,154 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     </div>
   );
 
-  // 프로젝트 상세
+  // ── 레벨 3: 프로젝트 상세 (도식화/칸반/간트) ─────────────
   if (selectedProject) {
+    const currentFolder = selectedFolderId === 'unclassified'
+      ? null
+      : folders.find(f => f.id === selectedFolderId) ?? null;
     return (
-      <ProjectDetail
-        project={selectedProject}
-        docs={projectDocs}
-        employees={employees}
-        currentUser={currentUser}
-        onBack={() => setSelectedProject(null)}
-        onUpdateProject={handleUpdateProject}
-        onDeleteProject={handleDeleteProject}
-        onDocsChange={() => {
-          loadProjectDocs(selectedProject.id);
-          loadDocStats();
-        }}
-      />
+      <>
+        {/* 브레드크럼 */}
+        <div className="flex items-center gap-1.5 text-[11px] text-stone-400 mb-3 flex-wrap">
+          <button onClick={() => { setSelectedProject(null); setSelectedFolderId(null); }}
+            className="hover:text-stone-700 dark:hover:text-stone-200 transition-colors">프로젝트</button>
+          <ChevronRight size={11} />
+          <button onClick={() => setSelectedProject(null)}
+            className="hover:text-stone-700 dark:hover:text-stone-200 transition-colors">
+            {currentFolder?.name ?? '미분류'}
+          </button>
+          <ChevronRight size={11} />
+          <span className="text-stone-700 dark:text-stone-300 font-bold">{selectedProject.title}</span>
+        </div>
+        <ProjectDetail
+          project={selectedProject}
+          docs={projectDocs}
+          employees={employees}
+          currentUser={currentUser}
+          onBack={() => setSelectedProject(null)}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
+          onDocsChange={() => loadProjectDocs(selectedProject.id)}
+          onProgressChange={v => handleProgressChange(selectedProject.id, v)}
+        />
+      </>
     );
   }
 
-  // 프로젝트 목록
-  const archivedCount = projects.filter(p => p.status === 'completed' || p.status === 'archived').length;
+  // ── 레벨 2: 폴더 내 프로젝트 목록 ───────────────────────
+  if (selectedFolderId !== null) {
+    const currentFolder = selectedFolderId === 'unclassified'
+      ? null
+      : folders.find(f => f.id === selectedFolderId);
+    const folderName = currentFolder?.name ?? '미분류';
+    const inFolderProjects = getProjectsInFolder(selectedFolderId);
 
-  return (
-    <div>
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h1 className="text-xl font-black text-stone-900 dark:text-white">프로젝트</h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">전사 프로젝트 관리</p>
+    const filtered = inFolderProjects
+      .filter(p => {
+        if (tab === 'active') return p.status === 'active';
+        if (tab === 'archived') return p.status === 'completed' || p.status === 'archived';
+        return true;
+      })
+      .filter(matchesSearch);
+
+    return (
+      <div>
+        {/* 브레드크럼 + 헤더 */}
+        <div className="flex items-center gap-1.5 text-[11px] text-stone-400 mb-2">
+          <button onClick={() => setSelectedFolderId(null)}
+            className="hover:text-stone-700 dark:hover:text-stone-200 transition-colors">프로젝트</button>
+          <ChevronRight size={11} />
+          <span className="text-stone-700 dark:text-stone-300 font-bold">{folderName}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleToggleMeetings}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-sm border transition-colors ${showMeetings ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-900 dark:border-stone-100' : 'border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
-          >
-            <BookOpen size={13} /> 회의록
-          </button>
-          <button onClick={() => setShowProjectForm(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors">
-            <Plus size={13} /> 새 프로젝트
-          </button>
-        </div>
-      </div>
-
-      {/* 검색바 */}
-      <div className="flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2 mb-3">
-        <Search size={13} className="text-stone-400 shrink-0" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="제목·설명·멤버 검색..."
-          className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700">
-            <X size={12} />
-          </button>
-        )}
-      </div>
-
-      {/* 탭 */}
-      <div className="flex gap-0 border-b border-stone-200 dark:border-stone-700 mb-4">
-        {([
-          ['active', '진행중'],
-          ['all', '전체'],
-          ['archived', '보관함'],
-          ['visual', '시각화'],
-        ] as [string, string][]).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key as typeof tab)}
-            className={`px-4 py-2.5 text-xs font-bold transition-colors border-b-2 -mb-px ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'}`}>
-            {label}
-            {key === 'active' && projects.filter(p => p.status === 'active').length > 0 && (
-              <span className="ml-1.5 text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded-full tabular-nums">
-                {projects.filter(p => p.status === 'active').length}
-              </span>
-            )}
-            {key === 'archived' && archivedCount > 0 && (
-              <span className="ml-1.5 text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded-full tabular-nums">
-                {archivedCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* 본문: 회의록 분할 레이아웃 or 단독 */}
-      <div className={showMeetings && tab !== 'visual' ? 'flex gap-4' : ''}>
-
-        {/* 좌측 — 회의록 패널 */}
-        {showMeetings && tab !== 'visual' && (
-          <div className="w-64 shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-black text-stone-700 dark:text-stone-300 flex items-center gap-1">
-                <BookOpen size={12} /> 최근 회의록
-              </h2>
-              <button onClick={() => setShowMeetings(false)} className="text-stone-400 hover:text-stone-700">
-                <X size={13} />
-              </button>
-            </div>
-            <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
-              {loadingMeetings ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
-                </div>
-              ) : meetings.length === 0 ? (
-                <div className="text-center py-8 text-[11px] text-stone-400">회의록이 없습니다</div>
-              ) : (
-                meetings.map(m => (
-                  <MeetingMiniCard key={m.id} meeting={m} onCreateProject={handleCreateFromMeeting} />
-                ))
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedFolderId(null)}
+              className="p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors">
+              <ChevronLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-xl font-black text-stone-900 dark:text-white flex items-center gap-2">
+                {currentFolder ? (
+                  <span className={`inline-block w-3 h-3 rounded-full ${COLOR_CFG[currentFolder.color]?.dotCls ?? 'bg-stone-400'}`} />
+                ) : null}
+                {folderName}
+              </h1>
+              {currentFolder?.description && (
+                <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">{currentFolder.description}</p>
               )}
             </div>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <button onClick={handleToggleMeetings}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-sm border transition-colors ${showMeetings ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-900' : 'border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>
+              <BookOpen size={13} /> 회의록
+            </button>
+            <button onClick={() => setShowProjectForm(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 transition-colors">
+              <Plus size={13} /> 새 프로젝트
+            </button>
+          </div>
+        </div>
 
-        {/* 우측 — 프로젝트 목록 */}
-        <div className="flex-1 min-w-0">
+        {/* 검색 */}
+        <div className="flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2 mb-3">
+          <Search size={13} className="text-stone-400 shrink-0" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="제목·설명·멤버 검색..."
+            className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none" />
+          {search && <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700"><X size={12} /></button>}
+        </div>
 
-          {/* 시각화 탭 */}
-          {tab === 'visual' && (
-            <div className="space-y-3">
-              {projects.filter(p => p.status !== 'archived').filter(matchesSearch).map(p => {
-                const stats = docStats[p.id] ?? { total: 0, done: 0 };
-                const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
-                const statusCfg = STATUS_CFG[p.status];
-                return (
-                  <button key={p.id} onClick={() => handleSelectProject(p)}
-                    className="w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-4 hover:shadow-md transition-all">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold shrink-0 ${statusCfg.cls}`}>{statusCfg.label}</span>
-                      <span className="text-sm font-black text-stone-900 dark:text-white flex-1 truncate">{p.title}</span>
-                      <span className="text-[11px] text-stone-400 tabular-nums shrink-0">{pct}%</span>
-                    </div>
-                    <div className="h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${p.status === 'completed' ? 'bg-blue-500' : p.status === 'on_hold' ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="flex items-center gap-3 mt-2 text-[10px] text-stone-400">
-                      {stats.total > 0 && <span>{stats.done}/{stats.total} 완료</span>}
-                      {p.endDate && <span className="flex items-center gap-0.5"><Calendar size={9} /> {fmtDate(p.endDate)}</span>}
-                      {p.memberNames.length > 0 && <span className="flex items-center gap-0.5"><Users size={9} /> {p.memberNames.slice(0, 2).join(', ')}</span>}
-                    </div>
-                  </button>
-                );
-              })}
-              {projects.filter(p => p.status !== 'archived').filter(matchesSearch).length === 0 && (
-                <div className="text-center py-16 text-stone-400">프로젝트가 없습니다.</div>
-              )}
+        {/* 상태 탭 */}
+        <div className="flex gap-0 border-b border-stone-200 dark:border-stone-700 mb-4">
+          {([['active', '진행중'], ['all', '전체'], ['archived', '보관함']] as [typeof tab, string][]).map(([key, label]) => {
+            const count = inFolderProjects.filter(p =>
+              key === 'active' ? p.status === 'active' :
+              key === 'archived' ? (p.status === 'completed' || p.status === 'archived') : true
+            ).length;
+            return (
+              <button key={key} onClick={() => setTab(key)}
+                className={`px-4 py-2.5 text-xs font-bold transition-colors border-b-2 -mb-px ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-700'}`}>
+                {label}
+                {count > 0 && (
+                  <span className="ml-1.5 text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 px-1.5 py-0.5 rounded-full tabular-nums">{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 본문 */}
+        <div className={showMeetings ? 'flex gap-4' : ''}>
+          {/* 회의록 패널 */}
+          {showMeetings && (
+            <div className="w-64 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xs font-black text-stone-700 dark:text-stone-300 flex items-center gap-1"><BookOpen size={12} /> 최근 회의록</h2>
+                <button onClick={() => setShowMeetings(false)} className="text-stone-400 hover:text-stone-700"><X size={13} /></button>
+              </div>
+              <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
+                {loadingMeetings ? (
+                  <div className="flex justify-center py-8"><div className="w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" /></div>
+                ) : meetings.length === 0 ? (
+                  <div className="text-center py-8 text-[11px] text-stone-400">회의록이 없습니다</div>
+                ) : meetings.map(m => (
+                  <MeetingMiniCard key={m.id} meeting={m} onCreateProject={handleCreateFromMeeting} />
+                ))}
+              </div>
             </div>
           )}
 
-          {/* 목록 탭 (active / all / archived) */}
-          {tab !== 'visual' && (
-            filteredProjects.length === 0 ? (
+          {/* 프로젝트 카드 목록 */}
+          <div className="flex-1 min-w-0">
+            {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <FolderKanban size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
                 <p className="text-sm font-bold text-stone-500 dark:text-stone-400 mb-1">
-                  {tab === 'active' ? '진행 중인 프로젝트가 없습니다' :
-                   tab === 'archived' ? '보관된 프로젝트가 없습니다' :
-                   search ? '검색 결과가 없습니다' : '프로젝트가 없습니다'}
+                  {search ? '검색 결과가 없습니다' :
+                   tab === 'active' ? '진행 중인 프로젝트가 없습니다' :
+                   tab === 'archived' ? '보관된 프로젝트가 없습니다' : '프로젝트가 없습니다'}
                 </p>
-                {tab !== 'archived' && !search && (
+                {!search && tab !== 'archived' && (
                   <button onClick={() => setShowProjectForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">
                     새 프로젝트 만들기
                   </button>
@@ -1865,40 +2141,158 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filteredProjects.map(p => {
-                  const stats = docStats[p.id] ?? { total: 0, done: 0 };
-                  return (
-                    <ProjectCard
-                      key={p.id}
-                      project={p}
-                      docCount={stats.total}
-                      doneCount={stats.done}
-                      onClick={() => handleSelectProject(p)}
-                      onStatusChange={newStatus => handleStatusChange(p.id, newStatus)}
-                    />
-                  );
-                })}
+                {filtered.map((p, idx) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    isFirst={idx === 0}
+                    isLast={idx === filtered.length - 1}
+                    onClick={() => handleSelectProject(p)}
+                    onStatusChange={newStatus => handleStatusChange(p.id, newStatus)}
+                    onProgressChange={v => handleProgressChange(p.id, v)}
+                    onMoveUp={() => handleMoveProjectInFolder(p.id, 'up', filtered)}
+                    onMoveDown={() => handleMoveProjectInFolder(p.id, 'down', filtered)}
+                  />
+                ))}
               </div>
-            )
-          )}
+            )}
+          </div>
+        </div>
 
+        {/* 프로젝트 생성 모달 */}
+        {showProjectForm && (
+          <ProjectFormModal
+            employees={employees}
+            currentUser={currentUser}
+            folders={folders}
+            defaultFolderId={selectedFolderId === 'unclassified' ? '' : selectedFolderId ?? ''}
+            initialTitle={meetingToConvert?.title}
+            initialDescription={meetingToConvert?.agendas?.map(a => a.title).filter(Boolean).join(' / ')}
+            onSave={async data => {
+              await handleCreateProject(data);
+              setMeetingToConvert(null);
+            }}
+            onClose={() => { setShowProjectForm(false); setMeetingToConvert(null); }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── 레벨 1: 폴더 목록 ────────────────────────────────────
+  const unclassifiedCount = projects.filter(p => !p.folderId).length;
+
+  return (
+    <div>
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-xl font-black text-stone-900 dark:text-white">프로젝트</h1>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">폴더별 프로젝트 관리</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowFolderForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-sm border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+            <Folder size={13} /> 새 폴더
+          </button>
+          <button onClick={() => setShowProjectForm(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 transition-colors">
+            <Plus size={13} /> 새 프로젝트
+          </button>
         </div>
       </div>
 
+      {/* 폴더 그리드 */}
+      {folders.length === 0 && unclassifiedCount === 0 ? (
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <FolderOpen size={48} className="text-stone-300 dark:text-stone-600 mb-4" />
+          <h3 className="text-sm font-black text-stone-700 dark:text-stone-300 mb-1">폴더와 프로젝트를 만들어 보세요</h3>
+          <p className="text-xs text-stone-400 mb-4">폴더로 프로젝트를 체계적으로 분류할 수 있습니다</p>
+          <div className="flex gap-2">
+            <button onClick={() => setShowFolderForm(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-sm hover:bg-stone-100 transition-colors">
+              <Folder size={13} /> 폴더 만들기
+            </button>
+            <button onClick={() => setShowProjectForm(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
+              <Plus size={13} /> 프로젝트 만들기
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* 폴더 카드 목록 */}
+          {folders.map((folder, idx) => {
+            const count = projects.filter(p => p.folderId === folder.id).length;
+            return (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                projectCount={count}
+                isFirst={idx === 0}
+                isLast={idx === folders.length - 1}
+                onOpen={() => setSelectedFolderId(folder.id)}
+                onEdit={() => setEditingFolder(folder)}
+                onDelete={() => handleDeleteFolder(folder)}
+                onMoveUp={() => handleMoveFolderUp(idx)}
+                onMoveDown={() => handleMoveFolderDown(idx)}
+              />
+            );
+          })}
+
+          {/* 미분류 버킷 */}
+          {unclassifiedCount > 0 && (
+            <button
+              onClick={() => setSelectedFolderId('unclassified')}
+              className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-sm p-4 hover:bg-stone-100 dark:hover:bg-stone-700/50 hover:shadow-sm transition-all text-left"
+            >
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-9 h-9 rounded-sm bg-stone-200 dark:bg-stone-700 flex items-center justify-center shrink-0">
+                  <Folder size={18} className="text-stone-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-stone-600 dark:text-stone-400">미분류</p>
+                  <p className="text-[11px] text-stone-400 mt-0.5">폴더 없는 프로젝트</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-stone-400 flex items-center gap-1">
+                <FolderKanban size={11} /> {unclassifiedCount}개 프로젝트
+              </p>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 폴더 생성 모달 */}
+      {showFolderForm && (
+        <FolderFormModal
+          onSave={handleCreateFolder}
+          onClose={() => setShowFolderForm(false)}
+        />
+      )}
+
+      {/* 폴더 수정 모달 */}
+      {editingFolder && (
+        <FolderFormModal
+          folder={editingFolder}
+          onSave={data => handleUpdateFolder(editingFolder, data)}
+          onClose={() => setEditingFolder(null)}
+        />
+      )}
+
+      {/* 프로젝트 생성 모달 (폴더 목록에서 생성 시) */}
       {showProjectForm && (
         <ProjectFormModal
           employees={employees}
           currentUser={currentUser}
+          folders={folders}
           initialTitle={meetingToConvert?.title}
           initialDescription={meetingToConvert?.agendas?.map(a => a.title).filter(Boolean).join(' / ')}
           onSave={async data => {
             await handleCreateProject(data);
             setMeetingToConvert(null);
           }}
-          onClose={() => {
-            setShowProjectForm(false);
-            setMeetingToConvert(null);
-          }}
+          onClose={() => { setShowProjectForm(false); setMeetingToConvert(null); }}
         />
       )}
     </div>

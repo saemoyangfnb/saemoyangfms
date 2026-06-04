@@ -34,6 +34,7 @@ const SopView = lazy(() => import('./components/SopView').then(m => ({ default: 
 const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({ default: m.ProjectsView })));
 const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: m.OKRView })));
 const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
+const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -61,7 +62,7 @@ enum OperationType {
 }
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1263,6 +1264,7 @@ export default function App() {
           )}
           <div className="mx-2 space-y-0.5 mb-1">
             {([
+              { section: 'workmap',   icon: <LayoutList size={14} />,    label: '업무 지도' },
               { section: 'okr',       icon: <Target size={14} />,        label: 'OKR & KPI' },
               { section: 'projects',  icon: <FolderKanban size={14} />,  label: '프로젝트' },
               { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고' },
@@ -1588,6 +1590,11 @@ export default function App() {
           {/* 새모양에프엔비 섹션 */}
           {(sidebar.section === 'mvc' || sidebar.section === 'brand_history' || sidebar.section === 'company_profile') && (
             <CompanyInfoView section={sidebar.section} currentUser={currentUser} />
+          )}
+
+          {/* 업무 지도 */}
+          {sidebar.section === 'workmap' && (
+            <WorkMapView currentUser={currentUser} />
           )}
 
           {/* OKR & KPI */}

@@ -11,6 +11,69 @@
 
 ---
 
+## 2026-06-04 (4) — Claude Code
+
+### 완료
+- **업무 지도 신규 구현** (`WorkMapView.tsx`, `App.tsx`, `types.ts`)
+  - 기존 `tasks` 컬렉션 기반 (새 컬렉션 없음), `meetings`(db) 조인으로 회의 출처 표시
+  - `Task` 타입에 `progress?: number`, `startDate?: string` 추가
+  - 목록 뷰: 담당자별 그룹, 상태 색상(🔴지연/🟠임박/🟢진행/⚫완료), 특이사항 펼침, 인라인 진행률 피커
+  - 타임라인 뷰: 주간/월간 전환, 담당자 레인별 Gantt 바, 클릭 편집
+  - 업무 등록/수정 모달: 담당자·출처(직접/회의)·기간·진행률·특이사항·상태
+  - 완료 토글: 상태 도트 클릭으로 done ↔ in_progress 즉시 전환
+  - 필터: 전체/지연/임박/진행중/완료 탭 + 담당자 드롭다운 + 전문 검색
+  - 사이드바 운영 섹션 최상단에 "업무 지도" 메뉴 추가
+
+### 주의
+- meetings는 `db` (메인DB), tasks/employees는 `salesDb` — 두 DB 동시 쿼리
+- Task.assigneeId 는 employee.id 기준 (uid 아님)
+
+---
+
+## 2026-06-04 (3) — Claude Code
+
+### 완료
+- **출근 보고 항목별 진행률 설정** (`DailyReportView.tsx`, `types.ts`)
+  - `DailyReportItem.progress?: number` 추가
+  - `MiniProgressPicker` 컴포넌트: 10칸 세그먼트, 마우스오버 미리보기, 같은 값 클릭 → 0% 리셋
+  - 출근 보고 폼: 각 업무 항목 아래에 진행률 피커 표시
+  - 수정 모드에서 기존 진행률 복원
+  - `ReportCard` 상세 펼침: `[30%]` 뱃지로 진행률 표시
+  - 카카오 공유 텍스트: 진행률 있는 항목은 `업무명 [30%]` 형식으로 포함
+
+---
+
+## 2026-06-04 (2) — Claude Code
+
+### 완료
+- **프로젝트 진행률 수동 설정** (`ProjectsView.tsx`, `types.ts`)
+  - `Project.progress?: number` 추가 (0~100, 10단위)
+  - `ProgressPicker` 컴포넌트: 10칸 세그먼트 바, 마우스 오버 미리보기, 클릭으로 설정 (같은 값 클릭 → 0% 리셋)
+  - 카드(목록)와 상세 헤더 모두에 표시·설정 가능, 낙관적 UI 업데이트
+  - 자동계산(보고서 완료 수) 방식 및 `docStats` 완전 제거
+
+---
+
+## 2026-06-04 — Claude Code
+
+### 완료
+- **프로젝트 폴더 계층 구조** 전면 도입 (`ProjectsView.tsx`)
+  - 3단계 네비게이션: 폴더목록 → 폴더 내 프로젝트 → 프로젝트 상세(도식화/칸반/간트)
+  - 폴더 CRUD (Firestore `salesDb/project_folders`), 색상 6가지, 설명 입력
+  - 폴더 순서 변경 (ChevronUp/Down), 프로젝트 순서 변경 (folderOrder 기준)
+  - 미분류 버킷 — `folderId` 없는 기존 프로젝트 자동 수용 (마이그레이션 없음)
+  - 브레드크럼 네비게이션, 폴더 내 상태 탭 (진행중/전체/보관함), 회의록 패널 유지
+  - `types.ts`: `ProjectFolder` 인터페이스, `Project`에 `folderId/folderOrder` 추가
+- **보고서 제목 양식 헬퍼** (`ReportView.tsx`)
+  - placeholder: `YYYY-MM-DD-보고서명-v1` 형식 안내
+  - "날짜 자동입력" 버튼: 오늘 날짜 + `-` 자동 삽입
+
+### 주의
+- `project_folders` 컬렉션 신규 (Firestore 규칙 확인 필요)
+- 기존 프로젝트 `folderId` 없음 → 미분류로 정상 표시됨
+
+---
+
 ## 2026-06-03 — Claude Code
 
 ### 완료

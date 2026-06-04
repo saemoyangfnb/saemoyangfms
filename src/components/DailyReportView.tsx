@@ -60,6 +60,44 @@ const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactN
   incomplete: { label: '미완료',  icon: <XCircle size={13} />,      cls: 'text-red-500 dark:text-red-400' },
 };
 
+/* ── 미니 진행률 피커 ───────────────────────────────────── */
+type MorningItem = { text: string; progress: number };
+
+function MiniProgressPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [hov, setHov] = useState<number | null>(null);
+  const display = hov ?? value;
+  const steps = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+  const segCls = (s: number) => {
+    if (display >= s) {
+      if (display === 100) return 'bg-blue-500';
+      if (display >= 70)  return 'bg-emerald-500';
+      if (display >= 40)  return 'bg-amber-400';
+      return 'bg-stone-400';
+    }
+    return 'bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 dark:hover:bg-stone-600';
+  };
+
+  return (
+    <div className="flex items-center gap-1.5" onMouseLeave={() => setHov(null)}>
+      <span className="text-[10px] text-stone-400 shrink-0">진행률</span>
+      <div className="flex gap-0.5">
+        {steps.map(s => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onChange(value === s ? 0 : s)}
+            onMouseEnter={() => setHov(s)}
+            className={`w-3.5 h-2 rounded-sm transition-colors ${segCls(s)}`}
+            title={`${s}%`}
+          />
+        ))}
+      </div>
+      <span className="text-[10px] font-bold tabular-nums text-stone-500 dark:text-stone-400 w-7">{display}%</span>
+    </div>
+  );
+}
+
 /* ── 개인 오전 보고 폼 ─────────────────────────────────── */
 function MorningForm({
   onSubmit,
@@ -67,12 +105,16 @@ function MorningForm({
   editItems,
   pendingTaskTitles = [],
 }: {
-  onSubmit: (items: string[]) => void;
+  onSubmit: (items: MorningItem[]) => void;
   myId: string;
-  editItems?: string[];       // 수정 모드: 기존 항목 초기값
-  pendingTaskTitles?: string[]; // 업무 인박스에서 추가된 제목들
+  editItems?: DailyReportItem[];   // 수정 모드: 기존 항목 초기값
+  pendingTaskTitles?: string[];    // 업무 인박스에서 추가된 제목들
 }) {
-  const [items, setItems] = useState<string[]>(editItems ?? ['', '']);
+  const [items, setItems] = useState<MorningItem[]>(
+    editItems
+      ? editItems.map(it => ({ text: it.text, progress: it.progress ?? 0 }))
+      : [{ text: '', progress: 0 }, { text: '', progress: 0 }]
+  );
   const [carryItems, setCarryItems] = useState<DailyReportItem[]>([]);
   const [selectedCarry, setSelectedCarry] = useState<Set<number>>(new Set());
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -84,8 +126,8 @@ function MorningForm({
     if (newCount > processedCount.current) {
       const newTitles = pendingTaskTitles.slice(processedCount.current);
       setItems(p => {
-        const withoutTrailingEmpty = p[p.length - 1]?.trim() === '' ? p.slice(0, -1) : p;
-        return [...withoutTrailingEmpty, ...newTitles, ''];
+        const withoutTrailingEmpty = p[p.length - 1]?.text === '' ? p.slice(0, -1) : p;
+        return [...withoutTrailingEmpty, ...newTitles.map(t => ({ text: t, progress: 0 })), { text: '', progress: 0 }];
       });
       processedCount.current = newCount;
     }
@@ -116,19 +158,22 @@ function MorningForm({
       return next;
     });
 
-  const update = (i: number, v: string) => setItems(p => p.map((x, idx) => idx === i ? v : x));
+  const updateText = (i: number, v: string) =>
+    setItems(p => p.map((x, idx) => idx === i ? { ...x, text: v } : x));
+  const updateProgress = (i: number, v: number) =>
+    setItems(p => p.map((x, idx) => idx === i ? { ...x, progress: v } : x));
 
   const handleKeyDown = (e: React.KeyboardEvent, i: number) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (i === items.length - 1) {
-        setItems(p => [...p, '']);
+        setItems(p => [...p, { text: '', progress: 0 }]);
         setTimeout(() => inputRefs.current[i + 1]?.focus(), 30);
       } else {
         inputRefs.current[i + 1]?.focus();
       }
     }
-    if (e.key === 'Backspace' && items[i] === '' && items.length > 1) {
+    if (e.key === 'Backspace' && items[i].text === '' && items.length > 1) {
       e.preventDefault();
       setItems(p => p.filter((_, idx) => idx !== i));
       setTimeout(() => inputRefs.current[Math.max(0, i - 1)]?.focus(), 30);
@@ -136,9 +181,10 @@ function MorningForm({
   };
 
   const handleSubmit = () => {
-    // 선택된 이월 항목 + 직접 입력 항목 합산
-    const carried = carryItems.filter((_, i) => selectedCarry.has(i)).map(it => `[이월] ${it.text}`);
-    const manual = items.map(s => s.trim()).filter(Boolean);
+    const carried: MorningItem[] = carryItems
+      .filter((_, i) => selectedCarry.has(i))
+      .map(it => ({ text: `[이월] ${it.text}`, progress: it.progress ?? 0 }));
+    const manual = items.filter(it => it.text.trim()).map(it => ({ ...it, text: it.text.trim() }));
     const all = [...carried, ...manual];
     if (all.length === 0) return;
     onSubmit(all);
@@ -168,6 +214,9 @@ function MorningForm({
                 <span className={`text-xs font-semibold flex-1 ${selectedCarry.has(i) ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400 line-through'}`}>
                   {it.text}
                 </span>
+                {(it.progress ?? 0) > 0 && (
+                  <span className="text-[10px] font-bold text-stone-400 shrink-0">{it.progress}%</span>
+                )}
                 {it.note && <span className="text-[10px] text-stone-400 truncate max-w-32">{it.note}</span>}
               </label>
             ))}
@@ -175,32 +224,38 @@ function MorningForm({
         </div>
       )}
 
-      {/* 새 업무 입력 */}
-      <div className="space-y-2 mb-4">
+      {/* 업무 항목 입력 */}
+      <div className="space-y-3 mb-4">
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">
-              {selectedCarry.size + i + 1}.
-            </span>
-            <input
-              ref={el => { inputRefs.current[i] = el; }}
-              value={item}
-              onChange={e => update(i, e.target.value)}
-              onKeyDown={e => handleKeyDown(e, i)}
-              placeholder="업무 내용 입력"
-              className="flex-1 px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
-            />
-            {items.length > 1 && (
-              <button onClick={() => setItems(p => p.filter((_, idx) => idx !== i))} className="text-stone-300 hover:text-stone-500 shrink-0">
-                <X size={14} />
-              </button>
-            )}
+          <div key={i} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">
+                {selectedCarry.size + i + 1}.
+              </span>
+              <input
+                ref={el => { inputRefs.current[i] = el; }}
+                value={item.text}
+                onChange={e => updateText(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(e, i)}
+                placeholder="업무 내용 입력"
+                className="flex-1 px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
+              />
+              {items.length > 1 && (
+                <button onClick={() => setItems(p => p.filter((_, idx) => idx !== i))} className="text-stone-300 hover:text-stone-500 shrink-0">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {/* 진행률 */}
+            <div className="pl-7">
+              <MiniProgressPicker value={item.progress} onChange={v => updateProgress(i, v)} />
+            </div>
           </div>
         ))}
       </div>
 
       <div className="flex items-center justify-between">
-        <button onClick={() => setItems(p => [...p, ''])} className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 font-semibold">
+        <button onClick={() => setItems(p => [...p, { text: '', progress: 0 }])} className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 font-semibold">
           <Plus size={13} /> 항목 추가 <span className="text-stone-300">(Enter)</span>
         </button>
         <button onClick={handleSubmit} className="flex items-center gap-2 px-5 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-sm font-bold hover:opacity-80">
@@ -331,6 +386,11 @@ function ReportCard({ report, showName = false, onEdit, onConfirm, isAdmin, onCr
                 <span className="text-xs text-stone-400 w-4 text-right font-bold">{i + 1}.</span>
                 <span className={`${STATUS_CONFIG[it.status].cls} shrink-0`}>{STATUS_CONFIG[it.status].icon}</span>
                 <span className={`text-xs flex-1 ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-700 dark:text-stone-300'} font-semibold`}>{it.text}</span>
+                {(it.progress ?? 0) > 0 && (
+                  <span className="text-[10px] font-bold tabular-nums shrink-0 text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+                    {it.progress}%
+                  </span>
+                )}
                 <span className={`text-[10px] font-bold shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].label}</span>
               </div>
               {it.note && <p className="ml-10 text-[11px] text-stone-400 mt-0.5">{it.note}</p>}
@@ -472,8 +532,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   /* 출근 보고 제출 / 수정 */
-  const submitMorning = async (texts: string[]) => {
-    const newItems = texts.map(text => ({ text, status: 'pending' as DailyItemStatus }));
+  const submitMorning = async (submitted: MorningItem[]) => {
+    const newItems: DailyReportItem[] = submitted.map(it => ({
+      text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress,
+    }));
     if (isEditingMorning && myMorning) {
       await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
         items: newItems, updatedAt: new Date().toISOString(),
@@ -489,7 +551,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
       toast.success('출근 보고 완료');
-      setKakaoTarget({ type: 'morning', items: texts });
+      setKakaoTarget({
+        type: 'morning',
+        items: submitted.map(it => it.progress > 0 ? `${it.text} [${it.progress}%]` : it.text),
+      });
     }
     setPendingTaskTitles([]);
     fetchData();
@@ -888,7 +953,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                 key={isEditingMorning ? 'edit' : 'new'}
                 onSubmit={submitMorning}
                 myId={myId}
-                editItems={isEditingMorning ? myMorning?.items.map(i => i.text) : undefined}
+                editItems={isEditingMorning ? myMorning?.items : undefined}
                 pendingTaskTitles={pendingTaskTitles}
               />
             ) : (
@@ -897,7 +962,11 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           ) : (
             <>
               <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
-                onShare={() => shareDailyReport({ name: currentUser.name, date, type: 'morning', items: myMorning.items.map(i => i.text), onCopied: toast.success })} />
+                onShare={() => shareDailyReport({
+                  name: currentUser.name, date, type: 'morning',
+                  items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
+                  onCopied: toast.success,
+                })} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
                 isToday ? <EveningForm key={isEditingEvening ? 'edit' : 'new'} morning={myMorning} onSubmit={submitEvening} /> : (

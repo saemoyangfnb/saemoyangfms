@@ -547,7 +547,9 @@ export interface Task {
   requesterName?: string;
   collaboratorIds?: string[];   // @태그된 협업자 IDs
   collaboratorNames?: string[];
+  startDate?: string;           // YYYY-MM-DD, 업무 시작일
   dueDate?: string;             // YYYY-MM-DD
+  progress?: number;            // 0~100, 10단위 수동 설정
   status: TaskStatus;
   rejectionNote?: string;       // 반려 사유
   addedToDailyDate?: string;    // 일일 보고에 추가된 날짜
@@ -563,7 +565,8 @@ export type DailyItemStatus = 'pending' | 'done' | 'incomplete';
 export interface DailyReportItem {
   text: string;
   status: DailyItemStatus;
-  note?: string; // 미완료 사유
+  note?: string;     // 미완료 사유
+  progress?: number; // 0~100, 10단위 수동 설정
 }
 
 export interface DailyReport {
@@ -674,11 +677,22 @@ export interface ProjectMilestone {
   done: boolean;
 }
 
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  description?: string;
+  color: KanbanColumnColor;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   title: string;
   description?: string;
   status: ProjectStatus;
+  progress?: number;           // 0~100, 10 단위 수동 설정
   ownerId: string;
   ownerName: string;
   memberIds: string[];
@@ -688,6 +702,8 @@ export interface Project {
   endDate?: string;
   milestones?: ProjectMilestone[];
   kanbanColumns?: KanbanColumnDef[];
+  folderId?: string;
+  folderOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
