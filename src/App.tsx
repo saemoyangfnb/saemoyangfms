@@ -35,6 +35,7 @@ const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({
 const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: m.OKRView })));
 const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
 const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
+const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ default: m.FactoryView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -45,7 +46,7 @@ import {
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
-  Flag, GitBranch, Building2, Target, FolderKanban,
+  Flag, GitBranch, Building2, Target, FolderKanban, Package,
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -62,7 +63,7 @@ enum OperationType {
 }
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1265,6 +1266,7 @@ export default function App() {
           <div className="mx-2 space-y-0.5 mb-1">
             {([
               { section: 'workmap',   icon: <LayoutList size={14} />,    label: '업무 지도' },
+              { section: 'factory',   icon: <Package size={14} />,       label: '제조실' },
               { section: 'okr',       icon: <Target size={14} />,        label: 'OKR & KPI' },
               { section: 'projects',  icon: <FolderKanban size={14} />,  label: '프로젝트' },
               { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고' },
@@ -1595,6 +1597,11 @@ export default function App() {
           {/* 업무 지도 */}
           {sidebar.section === 'workmap' && (
             <WorkMapView currentUser={currentUser} />
+          )}
+
+          {/* 제조실 */}
+          {sidebar.section === 'factory' && (
+            <FactoryView currentUser={currentUser} />
           )}
 
           {/* OKR & KPI */}

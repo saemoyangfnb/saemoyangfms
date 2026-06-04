@@ -807,3 +807,29 @@ export interface CalendarRoutine {
   isActive: boolean;
   createdAt: string;
 }
+
+// ==========================================
+// 제조실 (salesDb: factory_items / factory_daily / factory_settings)
+// ==========================================
+export interface FactoryItem {
+  id: string;
+  name: string;
+  unit: string;                   // 'kg' | 'L' | '개' | 기타
+  safetyDays: number;             // 안전재고 기준 일수 (default: 10)
+  estimatedMonthlyUsage?: number; // 초기 월 소비량 추정치 (실적 없을 때 사용)
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FactoryDailyRecord {
+  id: string;               // `${itemId}_${date}`
+  itemId: string;
+  date: string;             // YYYY-MM-DD
+  closingStock: number;     // 마감 실사재고
+  produced: number;         // 금일 제조량
+  storeCount: number;       // 당일 매장수
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+}
