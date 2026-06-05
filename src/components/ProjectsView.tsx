@@ -1351,11 +1351,11 @@ function MindMapTreeNode({
       {/* 하위 가지 */}
       {children.length > 0 && (
         <div className="flex items-center shrink-0">
-          <div className="w-5 h-px bg-stone-200 dark:bg-stone-700 shrink-0" />
-          <div className="relative border-l border-stone-200 dark:border-stone-700">
+          <div className="w-5 h-[2px] bg-stone-400 dark:bg-stone-500 shrink-0" />
+          <div className="relative border-l-2 border-stone-400 dark:border-stone-500">
             {children.map(child => (
               <div key={child.id} className="flex items-center py-1.5 pl-4 relative">
-                <div className="absolute left-0 top-1/2 w-4 h-px bg-stone-200 dark:bg-stone-700 -translate-y-px" />
+                <div className="absolute left-0 top-1/2 w-4 h-[2px] bg-stone-400 dark:bg-stone-500 -translate-y-px" />
                 <MindMapTreeNode
                   node={child} nodes={nodes} depth={depth + 1}
                   editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
