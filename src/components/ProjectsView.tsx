@@ -20,7 +20,7 @@ import {
   Plus, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
-  Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2, Folder, FolderOpen,
+  Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2, Folder, FolderOpen, Printer,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -1387,8 +1387,9 @@ function MindMapTreeNode({
   );
 }
 
-function ProjectMindMap({ projectId, docs, onOpenDoc }: {
+function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
   projectId: string;
+  projectTitle: string;
   docs: Report[];
   onOpenDoc: (r: Report) => void;
 }) {
@@ -1399,7 +1400,46 @@ function ProjectMindMap({ projectId, docs, onOpenDoc }: {
   const [loading, setLoading] = useState(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const skipBlurRef = useRef(false);
+  const printRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
+
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .map(el => `<link rel="stylesheet" href="${(el as HTMLLinkElement).href}">`)
+      .join('');
+    const win = window.open('', '_blank', 'width=1400,height=900');
+    if (!win) return;
+    const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+    win.document.write(`<!DOCTYPE html>
+<html class="${document.documentElement.className}">
+<head>
+  <meta charset="UTF-8">
+  <title>${projectTitle} — 마인드맵</title>
+  ${styleLinks}
+  <style>
+    body { padding: 32px; background: white; }
+    .no-print { display: none !important; }
+    @media print {
+      @page { margin: 15mm; size: A4 landscape; }
+      body { padding: 0; }
+      * { overflow: visible !important; }
+    }
+  </style>
+</head>
+<body class="${document.body.className}">
+  <div style="margin-bottom:20px;">
+    <div style="font-size:18px;font-weight:900;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
+    <div style="font-size:11px;color:#888;">인쇄일: ${printDate}</div>
+    <hr style="margin-top:12px;border:none;border-top:2px solid #222;">
+  </div>
+  ${printRef.current.innerHTML}
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 600);
+  };
 
   useEffect(() => {
     (async () => {
@@ -1535,7 +1575,7 @@ function ProjectMindMap({ projectId, docs, onOpenDoc }: {
         }
       }}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="no-print flex items-center justify-between mb-4">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
           <span>더블클릭: 편집</span>
           <span>Enter: 형제 추가</span>
@@ -1543,14 +1583,20 @@ function ProjectMindMap({ projectId, docs, onOpenDoc }: {
           <span>Del: 노드 삭제</span>
           <span className="text-blue-400 dark:text-blue-500">🔗: 보고서 연결</span>
         </div>
-        <button
-          onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors shrink-0"
-        ><Plus size={10} />주제 추가</button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+          ><Printer size={10} />인쇄</button>
+          <button
+            onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors"
+          ><Plus size={10} />주제 추가</button>
+        </div>
       </div>
       <div className="overflow-x-auto pb-4">
         {rootNode && (
-          <div className="pl-2 py-4 inline-block min-w-full">
+          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
             <MindMapTreeNode
               node={rootNode} nodes={nodes} depth={0}
               editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
@@ -1811,7 +1857,7 @@ function ProjectDetail({
 
       {/* 마인드맵 */}
       {view === 'mindmap' && (
-        <ProjectMindMap projectId={project.id} docs={docs} onOpenDoc={openReport} />
+        <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} onOpenDoc={openReport} />
       )}
 
       {/* 칸반 */}
