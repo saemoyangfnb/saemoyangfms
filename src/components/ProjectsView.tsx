@@ -454,7 +454,7 @@ function NodeActionPopup({
               <span className="text-base font-bold text-emerald-500 shrink-0 w-5 text-center">↓</span>
               <div>
                 <p className="text-xs font-bold text-stone-800 dark:text-stone-200">다음 보고서</p>
-                <p className="text-[10px] text-stone-400">하위 단계 (자식)</p>
+                <p className="text-[10px] text-stone-400">하위 단계</p>
               </div>
             </button>
             <button
@@ -1348,7 +1348,7 @@ function MindMapTreeNode({
         )}
       </div>
 
-      {/* 자식 가지 */}
+      {/* 하위 가지 */}
       {children.length > 0 && (
         <div className="flex items-center shrink-0">
           <div className="w-5 h-px bg-stone-200 dark:bg-stone-700 shrink-0" />
