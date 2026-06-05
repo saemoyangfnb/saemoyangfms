@@ -11,6 +11,22 @@
 
 ---
 
+## 2026-06-05 — Claude Code
+
+### 완료
+- **회의록 대규모 기능 확장** (`MeetingView.tsx` 전면 재작성)
+  - 결정사항 섹션 (중요/보통/참고 중요도 태그), 실행항목 섹션 (체크+담당자+기한), 회의 결론/요약 필드 추가
+  - 목록 전문 검색 (제목·안건·결정·요약·참석자), 카카오 공유 (클립보드 복사), 안건 드래그 재정렬 (dnd-kit)
+  - 참석자·실행항목 담당자: 직원 목록(`salesDb.employees`) 드롭다운 연동
+  - 회의 템플릿 DB 관리 (`salesDb.meeting_templates`), admin 전용 관리 모달
+  - `scrub()` 유틸로 undefined 필드 제거 후 Firestore 저장, 체크박스 낙관적 UI 업데이트
+
+### 주의
+- `meeting_templates` 컬렉션은 자동 생성됨 (Firestore 규칙에 읽기/쓰기 권한 추가 필요할 수 있음)
+- 기존 meetings 데이터와 하위 호환 유지 (decisions/actionItems/summary 없으면 빈 배열로 처리)
+
+---
+
 ## 2026-06-04 (4) — Claude Code
 
 ### 완료
