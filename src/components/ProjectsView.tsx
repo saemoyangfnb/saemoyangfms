@@ -1226,12 +1226,13 @@ function ProjectGanttView({
 
 // ── 프로젝트 상세 ─────────────────────────────────────────
 function ProjectDetail({
-  project, docs, employees, currentUser, onBack,
+  project, docs, employees, folders, currentUser, onBack,
   onUpdateProject, onDeleteProject, onDocsChange, onProgressChange,
 }: {
   project: Project;
   docs: Report[];
   employees: Employee[];
+  folders: ProjectFolder[];
   currentUser: User;
   onBack: () => void;
   onUpdateProject: (p: Project) => void;
@@ -1600,6 +1601,7 @@ function ProjectDetail({
         <ProjectFormModal
           project={project}
           employees={employees}
+          folders={folders}
           currentUser={currentUser}
           onSave={data => {
             onUpdateProject({ ...project, ...data, updatedAt: ts() });
@@ -2009,6 +2011,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
           project={selectedProject}
           docs={projectDocs}
           employees={employees}
+          folders={folders}
           currentUser={currentUser}
           onBack={() => setSelectedProject(null)}
           onUpdateProject={handleUpdateProject}
