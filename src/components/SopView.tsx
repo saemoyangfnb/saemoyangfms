@@ -10,6 +10,16 @@ import {
 
 const genId = () => `sop_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
+function scrub<T>(v: T): T {
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(scrub) as unknown as T;
+  return Object.fromEntries(
+    Object.entries(v as object)
+      .filter(([, val]) => val !== undefined)
+      .map(([k, val]) => [k, scrub(val)])
+  ) as T;
+}
+
 const DEFAULT_CATEGORIES = ['오픈 준비', '원가 관리', '식재료 발주', '직원 교육', '위생 관리', '고객 응대', '가맹 관리', '인사·채용'];
 
 /* ── 상세 뷰 (풀스크린) ──────────────────────────────────── */
@@ -320,15 +330,15 @@ export function SopView({ currentUser }: Props) {
     try {
       const now = new Date().toISOString();
       if (editing?.id) {
-        await updateDoc(doc(salesDb, 'sop_documents', editing.id), { ...data, updatedAt: now });
+        await updateDoc(doc(salesDb, 'sop_documents', editing.id), scrub({ ...data, updatedAt: now }));
         toast.success('수정되었습니다');
       } else {
         const id = genId();
-        await setDoc(doc(salesDb, 'sop_documents', id), {
+        await setDoc(doc(salesDb, 'sop_documents', id), scrub({
           id, ...data,
           authorId: currentUser.uid, authorName: currentUser.name,
           createdAt: now, updatedAt: now,
-        });
+        }));
         toast.success('등록되었습니다');
       }
       setEditing(null);
