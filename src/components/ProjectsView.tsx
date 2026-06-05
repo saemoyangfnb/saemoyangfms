@@ -1352,9 +1352,20 @@ function MindMapTreeNode({
       {children.length > 0 && (
         <div className="flex items-center shrink-0">
           <div className="w-5 h-[2px] bg-stone-400 dark:bg-stone-500 shrink-0" />
-          <div className="relative border-l-2 border-stone-400 dark:border-stone-500">
-            {children.map(child => (
+          <div className="relative">
+            {children.map((child, i) => {
+              const isFirst = i === 0;
+              const isLast = i === children.length - 1;
+              const isOnly = children.length === 1;
+              return (
               <div key={child.id} className="flex items-center py-1.5 pl-4 relative">
+                {/* 세로선: 첫 행은 중앙~하단, 마지막 행은 상단~중앙, 중간은 전체 */}
+                {!isOnly && (
+                  <div className={`absolute left-0 w-[2px] bg-stone-400 dark:bg-stone-500 ${
+                    isFirst ? 'top-1/2 bottom-0' : isLast ? 'top-0 bottom-1/2' : 'inset-y-0'
+                  }`} />
+                )}
+                {/* 가로선 */}
                 <div className="absolute left-0 top-1/2 w-4 h-[2px] bg-stone-400 dark:bg-stone-500 -translate-y-px" />
                 <MindMapTreeNode
                   node={child} nodes={nodes} depth={depth + 1}
@@ -1367,7 +1378,8 @@ function MindMapTreeNode({
                   onOpenDoc={onOpenDoc} onToggleLinkPicker={onToggleLinkPicker}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
