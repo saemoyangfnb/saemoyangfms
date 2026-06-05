@@ -11,6 +11,19 @@
 
 ---
 
+## 2026-06-05 (3) — Claude Code
+
+### 완료
+- **프로젝트 도식화 → 마인드맵 교체** (`ProjectsView.tsx`)
+  - 기존 `ReportTreeDiagram` 기반 도식화 탭을 EdrawMind 스타일 마인드맵으로 전면 교체
+  - `MindMapTreeNode` (재귀 CSS 트리) + `ProjectMindMap` 컴포넌트 신규 구현
+  - 키보드: Enter=형제 추가, Tab=하위 추가, Del=노드 삭제, F2/더블클릭=편집, Esc=편집 종료
+  - 보고서 연결: 선택된 노드에 🔗 버튼 → 프로젝트 보고서 연결·해제 드롭다운
+  - 마인드맵 데이터: `salesDb.project_mindmaps/{projectId}` Firestore 저장 (800ms 디바운스)
+  - `nodeAction` state + `handleNodeClick` 제거, blur 레이스컨디션 방지 (`skipBlurRef`)
+
+---
+
 ## 2026-06-05 (2) — Claude Code
 
 ### 완료

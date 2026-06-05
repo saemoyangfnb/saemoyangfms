@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { ReportView } from './ReportView';
 import { salesDb } from '../firebase';
 import {
-  collection, getDocs, doc, setDoc, updateDoc, deleteDoc,
+  collection, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc,
   query, where, orderBy, deleteField,
 } from 'firebase/firestore';
 import {
@@ -25,9 +25,11 @@ import {
 
 // ── 유틸 ──────────────────────────────────────────────────
 const genId = () => `proj_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+const mmId = () => `mm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ts = () => new Date().toISOString();
 const scrub = (o: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== ''));
+interface MindMapNode { id: string; text: string; parentId: string | null; order: number; reportId?: string; }
 
 const fmtDate = (iso: string) => {
   if (!iso) return '';
@@ -1224,6 +1226,342 @@ function ProjectGanttView({
   );
 }
 
+// ── 마인드맵 ──────────────────────────────────────────────
+function MindMapTreeNode({
+  node, nodes, depth, editingId, selectedId, linkPickerId,
+  docs, onSelect, onStartEdit, onUpdateText, onStopEdit,
+  onAddSibling, onAddChild, onDelete,
+  onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker,
+}: {
+  node: MindMapNode;
+  nodes: MindMapNode[];
+  depth: number;
+  editingId: string | null;
+  selectedId: string | null;
+  linkPickerId: string | null;
+  docs: Report[];
+  onSelect: (id: string) => void;
+  onStartEdit: (id: string) => void;
+  onUpdateText: (id: string, text: string) => void;
+  onStopEdit: () => void;
+  onAddSibling: (id: string) => void;
+  onAddChild: (id: string) => void;
+  onDelete: (id: string) => void;
+  onLinkReport: (nodeId: string, reportId: string) => void;
+  onUnlinkReport: (nodeId: string) => void;
+  onOpenDoc: (r: Report) => void;
+  onToggleLinkPicker: (id: string | null) => void;
+}) {
+  const children = nodes.filter(n => n.parentId === node.id).sort((a, b) => a.order - b.order);
+  const isEditing = editingId === node.id;
+  const isSelected = selectedId === node.id;
+  const isRoot = node.parentId === null;
+  const linkedReport = node.reportId ? docs.find(d => d.id === node.reportId) : undefined;
+  const isLinkPickerOpen = linkPickerId === node.id;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      try { inputRef.current.select(); } catch {}
+    }
+  }, [isEditing]);
+
+  const depthCls = [
+    'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-black text-sm px-4 py-2',
+    'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 font-bold text-xs px-3 py-1.5 border border-stone-200 dark:border-stone-700',
+    'bg-stone-50 dark:bg-stone-800/60 text-stone-700 dark:text-stone-300 text-xs px-2.5 py-1 border border-stone-100 dark:border-stone-700/60',
+    'bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 text-[11px] px-2 py-1 border border-stone-100 dark:border-stone-800',
+  ][Math.min(depth, 3)];
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isRoot) onAddChild(node.id); else onAddSibling(node.id);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      onAddChild(node.id);
+    } else if (e.key === 'Escape') {
+      onStopEdit();
+    } else if (e.key === 'Backspace' && !isRoot && (node.text ?? '') === '') {
+      e.preventDefault();
+      onDelete(node.id);
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      {/* 노드 박스 + 링크 피커 */}
+      <div className="relative shrink-0">
+        <div
+          className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : ''} transition-all`}
+          onClick={e => { e.stopPropagation(); onSelect(node.id); }}
+          onDoubleClick={e => { e.stopPropagation(); onStartEdit(node.id); }}
+        >
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={node.text ?? ''}
+              onChange={e => onUpdateText(node.id, e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="bg-transparent outline-none"
+              size={Math.max((node.text?.length ?? 0) + 2, 5)}
+            />
+          ) : (
+            <span>{node.text || <em className="opacity-30 text-[10px] not-italic">입력...</em>}</span>
+          )}
+          {linkedReport && !isEditing && (
+            <span className="text-[9px] opacity-60 flex items-center gap-0.5 max-w-[70px] truncate shrink-0 ml-1">
+              <FileText size={8} />{linkedReport.title?.slice(0, 8) || '(무제)'}
+            </span>
+          )}
+          {(isSelected || isLinkPickerOpen) && !isEditing && (
+            <button
+              onClick={e => { e.stopPropagation(); onToggleLinkPicker(isLinkPickerOpen ? null : node.id); }}
+              className={`opacity-60 hover:opacity-100 transition-opacity ${linkedReport ? 'text-blue-400' : ''}`}
+              title="보고서 연결"
+            ><Link size={9} /></button>
+          )}
+        </div>
+        {/* 보고서 연결 드롭다운 */}
+        {isLinkPickerOpen && (
+          <div className="absolute top-full left-0 mt-1 z-30 bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm shadow-xl min-w-[160px] max-h-48 overflow-y-auto">
+            {linkedReport ? (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-bold text-stone-400 dark:text-stone-500 border-b border-stone-100 dark:border-stone-700 truncate">{linkedReport.title || '(제목 없음)'}</div>
+                <button onClick={e => { e.stopPropagation(); onOpenDoc(linkedReport); onToggleLinkPicker(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-stone-50 dark:hover:bg-stone-700/50 flex items-center gap-1.5 text-stone-700 dark:text-stone-300"><FileText size={11} />보고서 열기</button>
+                <button onClick={e => { e.stopPropagation(); onUnlinkReport(node.id); onToggleLinkPicker(null); }} className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5"><X size={11} />연결 해제</button>
+              </>
+            ) : docs.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-stone-400 dark:text-stone-500">연결할 보고서가 없습니다</div>
+            ) : (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-bold text-stone-400 dark:text-stone-500 border-b border-stone-100 dark:border-stone-700">보고서 선택</div>
+                {docs.map(d => (
+                  <button key={d.id} onClick={e => { e.stopPropagation(); onLinkReport(node.id, d.id); onToggleLinkPicker(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-stone-50 dark:hover:bg-stone-700/50 truncate flex items-center gap-1.5 text-stone-700 dark:text-stone-300">
+                    <FileText size={11} className="shrink-0 text-stone-400 dark:text-stone-500" />{d.title || '(제목 없음)'}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 자식 가지 */}
+      {children.length > 0 && (
+        <div className="flex items-center shrink-0">
+          <div className="w-5 h-px bg-stone-200 dark:bg-stone-700 shrink-0" />
+          <div className="relative border-l border-stone-200 dark:border-stone-700">
+            {children.map(child => (
+              <div key={child.id} className="flex items-center py-1.5 pl-4 relative">
+                <div className="absolute left-0 top-1/2 w-4 h-px bg-stone-200 dark:bg-stone-700 -translate-y-px" />
+                <MindMapTreeNode
+                  node={child} nodes={nodes} depth={depth + 1}
+                  editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
+                  docs={docs}
+                  onSelect={onSelect} onStartEdit={onStartEdit}
+                  onUpdateText={onUpdateText} onStopEdit={onStopEdit}
+                  onAddSibling={onAddSibling} onAddChild={onAddChild} onDelete={onDelete}
+                  onLinkReport={onLinkReport} onUnlinkReport={onUnlinkReport}
+                  onOpenDoc={onOpenDoc} onToggleLinkPicker={onToggleLinkPicker}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectMindMap({ projectId, docs, onOpenDoc }: {
+  projectId: string;
+  docs: Report[];
+  onOpenDoc: (r: Report) => void;
+}) {
+  const [nodes, setNodes] = useState<MindMapNode[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [linkPickerId, setLinkPickerId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const skipBlurRef = useRef(false);
+  const { confirm } = useConfirm();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(salesDb, 'project_mindmaps', projectId));
+        if (snap.exists()) {
+          setNodes((snap.data().nodes as MindMapNode[]) ?? []);
+        } else {
+          setNodes([{ id: 'root', text: '프로젝트', parentId: null, order: 0 }]);
+        }
+      } catch {}
+      finally { setLoading(false); }
+    })();
+  }, [projectId]);
+
+  const saveNodes = (newNodes: MindMapNode[]) => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        const cleaned = newNodes.map(n => {
+          const o: Record<string, unknown> = { id: n.id, text: n.text ?? '', parentId: n.parentId, order: n.order };
+          if (n.reportId) o.reportId = n.reportId;
+          return o;
+        });
+        await setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() });
+      } catch {}
+    }, 800);
+  };
+
+  const handleAddSibling = (id: string) => {
+    skipBlurRef.current = true;
+    setTimeout(() => { skipBlurRef.current = false; }, 0);
+    const node = nodes.find(n => n.id === id);
+    if (!node) return;
+    if (node.parentId === null) {
+      const maxOrder = nodes.filter(n => n.parentId === id).reduce((m, n) => Math.max(m, n.order), -1);
+      const newNode: MindMapNode = { id: mmId(), text: '', parentId: id, order: maxOrder + 1 };
+      const next = [...nodes, newNode];
+      setNodes(next); saveNodes(next);
+      setEditingId(newNode.id); setSelectedId(newNode.id);
+      return;
+    }
+    const newOrder = node.order + 1;
+    const shifted = nodes.map(n =>
+      n.parentId === node.parentId && n.id !== id && n.order >= newOrder ? { ...n, order: n.order + 1 } : n
+    );
+    const newNode: MindMapNode = { id: mmId(), text: '', parentId: node.parentId, order: newOrder };
+    const next = [...shifted, newNode];
+    setNodes(next); saveNodes(next);
+    setEditingId(newNode.id); setSelectedId(newNode.id);
+  };
+
+  const handleAddChild = (id: string) => {
+    skipBlurRef.current = true;
+    setTimeout(() => { skipBlurRef.current = false; }, 0);
+    const maxOrder = nodes.filter(n => n.parentId === id).reduce((m, n) => Math.max(m, n.order), -1);
+    const newNode: MindMapNode = { id: mmId(), text: '', parentId: id, order: maxOrder + 1 };
+    const next = [...nodes, newNode];
+    setNodes(next); saveNodes(next);
+    setEditingId(newNode.id); setSelectedId(newNode.id);
+  };
+
+  const handleDelete = async (id: string) => {
+    const node = nodes.find(n => n.id === id);
+    if (!node || node.parentId === null) return;
+    const hasChildren = nodes.some(n => n.parentId === id);
+    if (hasChildren) {
+      const ok = await confirm({ title: '노드 삭제', message: '이 노드와 모든 하위 노드를 삭제할까요?', confirmLabel: '삭제', variant: 'danger' });
+      if (!ok) return;
+    }
+    const toDelete = new Set<string>();
+    const addDesc = (nid: string) => { toDelete.add(nid); nodes.filter(n => n.parentId === nid).forEach(c => addDesc(c.id)); };
+    addDesc(id);
+    const next = nodes.filter(n => !toDelete.has(n.id));
+    setNodes(next); saveNodes(next);
+    setSelectedId(node.parentId); setEditingId(null);
+  };
+
+  const handleUpdateText = (id: string, text: string) => {
+    const next = nodes.map(n => n.id === id ? { ...n, text } : n);
+    setNodes(next); saveNodes(next);
+  };
+
+  const handleLinkReport = (nodeId: string, reportId: string) => {
+    const next = nodes.map(n => n.id === nodeId ? { ...n, reportId } : n);
+    setNodes(next); saveNodes(next);
+  };
+
+  const handleUnlinkReport = (nodeId: string) => {
+    const next = nodes.map(n => {
+      if (n.id !== nodeId) return n;
+      const { reportId: _r, ...rest } = n;
+      return rest as MindMapNode;
+    });
+    setNodes(next); saveNodes(next);
+  };
+
+  const handleContainerKeyDown = (e: React.KeyboardEvent) => {
+    if (editingId) return;
+    if (!selectedId) return;
+    if (e.key === 'Enter' || e.key === 'F2') {
+      e.preventDefault(); setEditingId(selectedId);
+    } else if (e.key === 'Tab') {
+      e.preventDefault(); handleAddChild(selectedId);
+    } else if (e.key === 'Delete') {
+      const node = nodes.find(n => n.id === selectedId);
+      if (node && node.parentId !== null) { e.preventDefault(); handleDelete(selectedId); }
+    }
+  };
+
+  const rootNode = nodes.find(n => n.parentId === null);
+
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <div className="w-5 h-5 border-2 border-stone-300 dark:border-stone-600 border-t-stone-800 dark:border-t-stone-200 rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div
+      tabIndex={0}
+      className="outline-none"
+      onKeyDown={handleContainerKeyDown}
+      onBlur={e => {
+        if (skipBlurRef.current) return;
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setEditingId(null); setLinkPickerId(null);
+        }
+      }}
+      onClick={e => {
+        if (e.target === e.currentTarget) {
+          setSelectedId(null); setEditingId(null); setLinkPickerId(null);
+        }
+      }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
+          <span>더블클릭: 편집</span>
+          <span>Enter: 형제 추가</span>
+          <span>Tab: 하위 추가</span>
+          <span>Del: 노드 삭제</span>
+          <span className="text-blue-400 dark:text-blue-500">🔗: 보고서 연결</span>
+        </div>
+        <button
+          onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
+          className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors shrink-0"
+        ><Plus size={10} />주제 추가</button>
+      </div>
+      <div className="overflow-x-auto pb-4">
+        {rootNode && (
+          <div className="pl-2 py-4 inline-block min-w-full">
+            <MindMapTreeNode
+              node={rootNode} nodes={nodes} depth={0}
+              editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
+              docs={docs}
+              onSelect={setSelectedId}
+              onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
+              onUpdateText={handleUpdateText}
+              onStopEdit={() => setEditingId(null)}
+              onAddSibling={handleAddSibling}
+              onAddChild={handleAddChild}
+              onDelete={handleDelete}
+              onLinkReport={handleLinkReport}
+              onUnlinkReport={handleUnlinkReport}
+              onOpenDoc={onOpenDoc}
+              onToggleLinkPicker={setLinkPickerId}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── 프로젝트 상세 ─────────────────────────────────────────
 function ProjectDetail({
   project, docs, employees, folders, currentUser, onBack,
@@ -1243,7 +1581,7 @@ function ProjectDetail({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'diagram' | 'kanban' | 'gantt'>('diagram');
+  const [view, setView] = useState<'mindmap' | 'kanban' | 'gantt'>('mindmap');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
   // 보고서 팝업 모달 상태
@@ -1278,9 +1616,6 @@ function ProjectDetail({
   }, [project.id]);
 
   useEffect(() => { loadGanttTasks(); }, [loadGanttTasks]);
-
-  type NodeActionState = { kind: 'menu'; report: Report };
-  const [nodeAction, setNodeAction] = useState<NodeActionState | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -1338,17 +1673,11 @@ function ProjectDetail({
   }, [onDocsChange, toast]);
 
   const openReport = (report: Report) => {
-    setNodeAction(null);
     setReportModal({ focusReportId: report.id });
   };
 
   const openNewReport = (parentReportId?: string) => {
-    setNodeAction(null);
     setReportModal({ openNew: true, parentId: parentReportId });
-  };
-
-  const handleNodeClick = (report: Report) => {
-    setNodeAction({ kind: 'menu', report });
   };
 
   const handleUnlink = async (report: Report) => {
@@ -1457,10 +1786,10 @@ function ProjectDetail({
       {/* 뷰 토글 */}
       <div className="flex items-center gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
         {([
-          { key: 'diagram', icon: <GitBranch size={12} />, label: '도식화' },
+          { key: 'mindmap', icon: <GitBranch size={12} />, label: '마인드맵' },
           { key: 'kanban',  icon: <Kanban size={12} />,    label: '칸반' },
           { key: 'gantt',   icon: <BarChart2 size={12} />, label: '간트' },
-        ] as { key: 'diagram' | 'kanban' | 'gantt'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+        ] as { key: 'mindmap' | 'kanban' | 'gantt'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
           <button key={key} onClick={() => setView(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${view === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
             {icon} {label}
@@ -1468,27 +1797,9 @@ function ProjectDetail({
         ))}
       </div>
 
-      {/* 도식화 */}
-      {view === 'diagram' && (
-        docs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <GitBranch size={40} className="text-stone-300 dark:text-stone-600 mb-4" />
-            <h3 className="text-sm font-black text-stone-700 dark:text-stone-300 mb-1">아직 보고서가 없습니다</h3>
-            <p className="text-xs text-stone-400 mb-4">새 보고서를 작성하거나 기존 보고서를 연결하세요</p>
-            <div className="flex gap-2">
-              <button onClick={() => openNewReport()}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
-                <Plus size={13} /> 새 보고서 작성
-              </button>
-              <button onClick={() => setShowDocPicker(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 rounded-sm hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
-                <Link size={13} /> 기존 보고서 연결
-              </button>
-            </div>
-          </div>
-        ) : (
-          <ReportTreeDiagram docs={docs} columns={localCols} onNodeClick={handleNodeClick} onUnlink={handleUnlink} />
-        )
+      {/* 마인드맵 */}
+      {view === 'mindmap' && (
+        <ProjectMindMap projectId={project.id} docs={docs} onOpenDoc={openReport} />
       )}
 
       {/* 칸반 */}
@@ -1573,19 +1884,6 @@ function ProjectDetail({
           </div>
         </div>
       )}
-
-      {/* 도식화 노드 팝업 */}
-      {nodeAction?.kind === 'menu' && (
-        <NodeActionPopup
-          report={nodeAction.report}
-          columns={localCols}
-          onView={() => openReport(nodeAction.report)}
-          onAddSibling={() => openNewReport(nodeAction.report.parentReportId)}
-          onAddChild={() => openNewReport(nodeAction.report.id)}
-          onClose={() => setNodeAction(null)}
-        />
-      )}
-
 
       {/* 문서 연결 모달 */}
       {showDocPicker && (
