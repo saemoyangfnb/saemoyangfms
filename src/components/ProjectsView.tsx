@@ -1795,7 +1795,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     const now = ts();
     const maxOrder = folders.reduce((max, f) => Math.max(max, f.order), -1);
     try {
-      await setDoc(doc(salesDb, 'project_folders', id), { ...data, id, order: maxOrder + 1, createdAt: now, updatedAt: now });
+      await setDoc(doc(salesDb, 'project_folders', id), scrub({ ...data, id, order: maxOrder + 1, createdAt: now, updatedAt: now }));
       toast.success('폴더 생성됨');
       await loadFolders();
       setShowFolderForm(false);
@@ -1804,7 +1804,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
 
   const handleUpdateFolder = async (folder: ProjectFolder, data: Omit<ProjectFolder, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
     try {
-      await updateDoc(doc(salesDb, 'project_folders', folder.id), { ...data, updatedAt: ts() });
+      await updateDoc(doc(salesDb, 'project_folders', folder.id), scrub({ ...data, updatedAt: ts() }));
       toast.success('수정됨');
       await loadFolders();
       setEditingFolder(null);
