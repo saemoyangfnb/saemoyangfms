@@ -1407,45 +1407,25 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
     if (!printRef.current) return;
     const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // #root 바깥에 최상위 컨테이너 생성 → position:fixed 없이 자연스럽게 여러 페이지 흐름
+    // body 최상단에 컨테이너 삽입 (#root보다 앞) → index.css의 #_mm_print_wrap_ 규칙이 적용됨
     const container = document.createElement('div');
     container.id = '_mm_print_wrap_';
-    container.style.display = 'none';
     container.innerHTML = `
-      <div style="font-family:sans-serif;padding:0;">
-        <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
-        <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
-        <hr style="border:none;border-top:2px solid #222;margin-bottom:20px;">
-      </div>
+      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
+      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
+      <hr style="border:none;border-top:2px solid #222;margin-bottom:16px;">
     `;
-    // 마인드맵 트리 복사
     const clone = printRef.current.cloneNode(true) as HTMLElement;
     clone.style.overflow = 'visible';
     container.appendChild(clone);
-    document.body.appendChild(container);
+    document.body.insertBefore(container, document.body.firstChild);
 
-    const style = document.createElement('style');
-    style.textContent = `
-      @media print {
-        @page { size: A4 portrait; margin: 15mm; }
-        #root { display: none !important; }
-        #_mm_print_wrap_ {
-          display: block !important;
-          overflow: visible !important;
-        }
-        #_mm_print_wrap_ * {
-          overflow: visible !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-      }
-    `;
-    document.head.appendChild(style);
+    // A4 세로 페이지 설정만 별도 주입
+    const pageStyle = document.createElement('style');
+    pageStyle.textContent = `@media print { @page { size: A4 portrait; } }`;
+    document.head.appendChild(pageStyle);
 
-    const cleanup = () => {
-      style.remove();
-      container.remove();
-    };
+    const cleanup = () => { container.remove(); pageStyle.remove(); };
     window.addEventListener('afterprint', cleanup, { once: true });
 
     window.print();

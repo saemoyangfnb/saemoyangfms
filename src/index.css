@@ -21,38 +21,49 @@
   font-weight: 700 !important;
 }
 
-/* 인쇄 스타일 — 캘린더 / 회의록 */
+/* 인쇄 스타일 — 캘린더 / 회의록 / 마인드맵 */
 @media print {
   body * { visibility: hidden; }
 
   /* 캘린더 */
   #calendar-print-area, #calendar-print-area * { visibility: visible; }
   #calendar-print-area {
-    position: fixed;
+    position: absolute;
     top: 0; left: 0;
     width: 100%;
-    z-index: 9999;
+    overflow: visible;
   }
 
   /* 회의록 */
   #meeting-print-area, #meeting-print-area * { visibility: visible; }
   #meeting-print-area {
-    position: fixed;
+    position: absolute;
     top: 0; left: 0;
     width: 100%;
-    z-index: 9999;
+    overflow: visible;
   }
 
   /* 업무 규정 */
   #sop-print-area, #sop-print-area * { visibility: visible; }
   #sop-print-area {
-    position: fixed;
+    position: absolute;
     top: 0; left: 0;
     width: 100%;
-    z-index: 9999;
+    overflow: visible;
   }
 
-  @page { margin: 8mm; }
+  /* 마인드맵 */
+  #_mm_print_wrap_, #_mm_print_wrap_ * { visibility: visible; }
+  #_mm_print_wrap_ {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    overflow: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page { margin: 12mm; }
 }
 
 @keyframes slideIn {
