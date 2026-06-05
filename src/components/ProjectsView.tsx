@@ -1407,40 +1407,44 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
     if (!printRef.current) return;
     const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // 헤더 노드 생성 (인쇄 시 삽입, 완료 후 제거)
-    const header = document.createElement('div');
-    header.setAttribute('data-print-header', '1');
-    header.innerHTML = `
-      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
-      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
-      <hr style="border:none;border-top:2px solid #222;margin-bottom:20px;">
+    // #root 바깥에 최상위 컨테이너 생성 → position:fixed 없이 자연스럽게 여러 페이지 흐름
+    const container = document.createElement('div');
+    container.id = '_mm_print_wrap_';
+    container.style.display = 'none';
+    container.innerHTML = `
+      <div style="font-family:sans-serif;padding:0;">
+        <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
+        <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
+        <hr style="border:none;border-top:2px solid #222;margin-bottom:20px;">
+      </div>
     `;
-    printRef.current.prepend(header);
+    // 마인드맵 트리 복사
+    const clone = printRef.current.cloneNode(true) as HTMLElement;
+    clone.style.overflow = 'visible';
+    container.appendChild(clone);
+    document.body.appendChild(container);
 
-    // 현재 페이지에서 마인드맵 영역만 보이도록 CSS 주입
     const style = document.createElement('style');
-    style.setAttribute('data-print-style', '1');
     style.textContent = `
       @media print {
         @page { size: A4 portrait; margin: 15mm; }
-        body * { visibility: hidden !important; }
-        #_mm_print_, #_mm_print_ * { visibility: visible !important; }
-        #_mm_print_ {
-          position: fixed !important;
-          top: 0 !important; left: 0 !important;
-          width: 100% !important;
+        #root { display: none !important; }
+        #_mm_print_wrap_ {
+          display: block !important;
           overflow: visible !important;
-          padding: 0 !important;
+        }
+        #_mm_print_wrap_ * {
+          overflow: visible !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
       }
     `;
     document.head.appendChild(style);
-    printRef.current.id = '_mm_print_';
 
     const cleanup = () => {
       style.remove();
-      header.remove();
-      if (printRef.current) printRef.current.removeAttribute('id');
+      container.remove();
     };
     window.addEventListener('afterprint', cleanup, { once: true });
 
