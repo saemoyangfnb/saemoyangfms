@@ -1423,9 +1423,9 @@ function ProjectDetail({
             {project.endDate && (
               <span className="text-[11px] text-stone-400 flex items-center gap-1"><Calendar size={11} /> 마감 {fmtDate(project.endDate)}</span>
             )}
-            {project.memberNames.length > 0 && (
+            {(project.memberNames ?? []).length > 0 && (
               <span className="text-[11px] text-stone-400 flex items-center gap-1">
-                <Users size={11} /> {project.memberNames.slice(0, 3).join(', ')}{project.memberNames.length > 3 ? ` +${project.memberNames.length - 3}` : ''}
+                <Users size={11} /> {(project.memberNames ?? []).slice(0, 3).join(', ')}{(project.memberNames ?? []).length > 3 ? ` +${(project.memberNames ?? []).length - 3}` : ''}
               </span>
             )}
           </div>
@@ -1663,9 +1663,9 @@ function ProjectCard({ project, isFirst, isLast, onClick, onStatusChange, onProg
         </div>
         {project.description && <p className="text-xs text-stone-500 dark:text-stone-400 mb-2 line-clamp-2 leading-snug">{project.description}</p>}
         <div className="flex items-center gap-3 text-[10px] text-stone-400 flex-wrap">
-          {project.memberNames.length > 0 && (
+          {(project.memberNames ?? []).length > 0 && (
             <span className="flex items-center gap-0.5">
-              <Users size={9} /> {project.memberNames.slice(0, 2).join(', ')}{project.memberNames.length > 2 ? ` +${project.memberNames.length - 2}` : ''}
+              <Users size={9} /> {(project.memberNames ?? []).slice(0, 2).join(', ')}{(project.memberNames ?? []).length > 2 ? ` +${(project.memberNames ?? []).length - 2}` : ''}
             </span>
           )}
           {project.endDate && (
@@ -1964,7 +1964,7 @@ export function ProjectsView({ currentUser }: { currentUser: User }) {
     const q = search.toLowerCase();
     return p.title.toLowerCase().includes(q) ||
       (p.description?.toLowerCase().includes(q) ?? false) ||
-      p.memberNames.some(n => n.toLowerCase().includes(q));
+      (p.memberNames ?? []).some(n => n.toLowerCase().includes(q));
   };
 
   // ── 현재 폴더의 프로젝트 목록 (순서 정렬) ────────────────

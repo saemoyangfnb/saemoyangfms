@@ -11,7 +11,17 @@
 
 ---
 
-## 2026-06-05 — Claude Code
+## 2026-06-05 (2) — Claude Code
+
+### 완료
+- **ProjectsView undefined 방어 처리** (`ProjectsView.tsx`)
+  - `project.memberNames`가 구 Firestore 문서에서 `undefined`일 때 크래시 방지
+  - `?? []` guard 추가: 상세뷰 멤버 표시(line 1426), 카드 멤버 표시(line 1666), 검색(line 1967)
+  - Vercel 최신 배포 확인: `4bc0e1f` (폴더 fix) 이미 프로덕션 반영됨
+
+---
+
+## 2026-06-05 (1) — Claude Code
 
 ### 완료
 - **회의록 대규모 기능 확장** (`MeetingView.tsx` 전면 재작성)
