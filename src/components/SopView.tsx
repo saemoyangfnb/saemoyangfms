@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { salesDb } from '../firebase';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { SopDocument, SopStep, User } from '../types';
 import { useToast } from './Toast';
 import {
@@ -305,8 +305,12 @@ export function SopView({ currentUser }: Props) {
   const fetchDocs = useCallback(async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(salesDb, 'sop_documents'), orderBy('category'), orderBy('createdAt')));
-      setDocs(snap.docs.map(d => ({ id: d.id, ...d.data() } as SopDocument)));
+      const snap = await getDocs(collection(salesDb, 'sop_documents'));
+      setDocs(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as SopDocument))
+          .sort((a, b) => a.category.localeCompare(b.category) || a.createdAt.localeCompare(b.createdAt))
+      );
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
