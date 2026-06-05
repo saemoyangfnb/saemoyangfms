@@ -1405,40 +1405,46 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
 
   const handlePrint = () => {
     if (!printRef.current) return;
-    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-      .map(el => `<link rel="stylesheet" href="${(el as HTMLLinkElement).href}">`)
-      .join('');
-    const win = window.open('', '_blank', 'width=1400,height=900');
-    if (!win) return;
     const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-    win.document.write(`<!DOCTYPE html>
-<html class="${document.documentElement.className}">
-<head>
-  <meta charset="UTF-8">
-  <title>${projectTitle} — 마인드맵</title>
-  ${styleLinks}
-  <style>
-    body { padding: 32px; background: white; }
-    .no-print { display: none !important; }
-    @media print {
-      @page { margin: 15mm; size: A4 landscape; }
-      body { padding: 0; }
-      * { overflow: visible !important; }
-    }
-  </style>
-</head>
-<body class="${document.body.className}">
-  <div style="margin-bottom:20px;">
-    <div style="font-size:18px;font-weight:900;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
-    <div style="font-size:11px;color:#888;">인쇄일: ${printDate}</div>
-    <hr style="margin-top:12px;border:none;border-top:2px solid #222;">
-  </div>
-  ${printRef.current.innerHTML}
-</body>
-</html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 600);
+
+    // 헤더 노드 생성 (인쇄 시 삽입, 완료 후 제거)
+    const header = document.createElement('div');
+    header.setAttribute('data-print-header', '1');
+    header.innerHTML = `
+      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 마인드맵</div>
+      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
+      <hr style="border:none;border-top:2px solid #222;margin-bottom:20px;">
+    `;
+    printRef.current.prepend(header);
+
+    // 현재 페이지에서 마인드맵 영역만 보이도록 CSS 주입
+    const style = document.createElement('style');
+    style.setAttribute('data-print-style', '1');
+    style.textContent = `
+      @media print {
+        @page { size: A4 portrait; margin: 15mm; }
+        body * { visibility: hidden !important; }
+        #_mm_print_, #_mm_print_ * { visibility: visible !important; }
+        #_mm_print_ {
+          position: fixed !important;
+          top: 0 !important; left: 0 !important;
+          width: 100% !important;
+          overflow: visible !important;
+          padding: 0 !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    printRef.current.id = '_mm_print_';
+
+    const cleanup = () => {
+      style.remove();
+      header.remove();
+      if (printRef.current) printRef.current.removeAttribute('id');
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
+
+    window.print();
   };
 
   useEffect(() => {
