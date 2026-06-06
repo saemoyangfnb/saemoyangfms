@@ -12,7 +12,7 @@ import {
 import {
   User, Employee, Department, Project, Report, ProjectStatus,
   KanbanColumnDef, KanbanColumnColor, DEFAULT_KANBAN_COLUMNS, ProjectItem,
-  ProjectFolder,
+  ProjectFolder, ProjectSopTemplate,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -21,6 +21,7 @@ import {
   Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
   Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2, Folder, FolderOpen, Printer,
+  AlertCircle, Clock, Download, SlidersHorizontal,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -29,7 +30,26 @@ const mmId = () => `mm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ts = () => new Date().toISOString();
 const scrub = (o: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== ''));
-interface MindMapNode { id: string; text: string; parentId: string | null; order: number; reportId?: string; }
+interface MindMapNode {
+  id: string; text: string; parentId: string | null; order: number;
+  reportId?: string;
+  sopId?: string;       // sop_project_templates 노드 참조
+  dueDate?: string;     // YYYY-MM-DD
+  duration?: number;    // 소요 일수
+  assigneeId?: string;  // employee.id
+  department?: string;
+  status?: 'todo' | 'in_progress' | 'done';
+}
+
+function nodeWarnLevel(node: MindMapNode): 'done' | 'overdue' | 'soon' | 'ok' | null {
+  if (node.status === 'done') return 'done';
+  if (!node.dueDate) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((new Date(node.dueDate).getTime() - today.getTime()) / 86400000);
+  if (diff < 0) return 'overdue';
+  if (diff <= 3) return 'soon';
+  return 'ok';
+}
 
 const fmtDate = (iso: string) => {
   if (!iso) return '';
@@ -1229,7 +1249,7 @@ function ProjectGanttView({
 // ── 마인드맵 ──────────────────────────────────────────────
 function MindMapTreeNode({
   node, nodes, depth, editingId, selectedId, linkPickerId,
-  docs, onSelect, onStartEdit, onUpdateText, onStopEdit,
+  docs, employees, onSelect, onStartEdit, onUpdateText, onStopEdit,
   onAddSibling, onAddChild, onDelete,
   onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker,
 }: {
@@ -1240,6 +1260,7 @@ function MindMapTreeNode({
   selectedId: string | null;
   linkPickerId: string | null;
   docs: Report[];
+  employees: Employee[];
   onSelect: (id: string) => void;
   onStartEdit: (id: string) => void;
   onUpdateText: (id: string, text: string) => void;
@@ -1259,6 +1280,8 @@ function MindMapTreeNode({
   const linkedReport = node.reportId ? docs.find(d => d.id === node.reportId) : undefined;
   const isLinkPickerOpen = linkPickerId === node.id;
   const inputRef = useRef<HTMLInputElement>(null);
+  const warn = nodeWarnLevel(node);
+  const assigneeName = node.assigneeId ? (employees.find(e => e.id === node.assigneeId)?.name ?? null) : null;
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -1273,6 +1296,9 @@ function MindMapTreeNode({
     'bg-stone-50 dark:bg-stone-800/60 text-stone-700 dark:text-stone-300 text-xs px-2.5 py-1 border border-stone-100 dark:border-stone-700/60',
     'bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 text-[11px] px-2 py-1 border border-stone-100 dark:border-stone-800',
   ][Math.min(depth, 3)];
+
+  const warnRing = warn === 'overdue' ? 'ring-2 ring-red-400 ring-offset-1 dark:ring-offset-stone-900'
+    : warn === 'soon' ? 'ring-2 ring-orange-400 ring-offset-1 dark:ring-offset-stone-900' : '';
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -1294,10 +1320,19 @@ function MindMapTreeNode({
       {/* 노드 박스 + 링크 피커 */}
       <div className="relative shrink-0">
         <div
-          className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : ''} transition-all`}
+          className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing} transition-all`}
           onClick={e => { e.stopPropagation(); onSelect(node.id); }}
           onDoubleClick={e => { e.stopPropagation(); onStartEdit(node.id); }}
         >
+          {/* 상태/경고 도트 */}
+          {!isEditing && !isRoot && (
+            <span className={`shrink-0 text-[8px] ${
+              warn === 'done' ? 'text-green-500' :
+              warn === 'overdue' ? 'text-red-500' :
+              warn === 'soon' ? 'text-orange-400' :
+              node.status === 'in_progress' ? 'text-blue-400' : 'text-stone-300 dark:text-stone-600'
+            }`}>●</span>
+          )}
           {isEditing ? (
             <input
               ref={inputRef}
@@ -1309,6 +1344,21 @@ function MindMapTreeNode({
             />
           ) : (
             <span>{node.text || <em className="opacity-30 text-[10px] not-italic">입력...</em>}</span>
+          )}
+          {/* 마감일/담당자 뱃지 */}
+          {!isEditing && !isRoot && (node.dueDate || assigneeName) && (
+            <span className="flex items-center gap-1 ml-1 shrink-0">
+              {node.dueDate && (
+                <span className={`text-[9px] flex items-center gap-0.5 ${
+                  warn === 'overdue' ? 'text-red-400' : warn === 'soon' ? 'text-orange-400' : 'opacity-50'
+                }`}>
+                  <Clock size={7} />{node.dueDate.slice(5)}
+                </span>
+              )}
+              {assigneeName && (
+                <span className="text-[9px] opacity-50 truncate max-w-[50px]">{assigneeName}</span>
+              )}
+            </span>
           )}
           {linkedReport && !isEditing && (
             <span className="text-[9px] opacity-60 flex items-center gap-0.5 max-w-[70px] truncate shrink-0 ml-1">
@@ -1370,7 +1420,7 @@ function MindMapTreeNode({
                 <MindMapTreeNode
                   node={child} nodes={nodes} depth={depth + 1}
                   editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
-                  docs={docs}
+                  docs={docs} employees={employees}
                   onSelect={onSelect} onStartEdit={onStartEdit}
                   onUpdateText={onUpdateText} onStopEdit={onStopEdit}
                   onAddSibling={onAddSibling} onAddChild={onAddChild} onDelete={onDelete}
@@ -1387,10 +1437,11 @@ function MindMapTreeNode({
   );
 }
 
-function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
+function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }: {
   projectId: string;
   projectTitle: string;
   docs: Report[];
+  employees: Employee[];
   onOpenDoc: (r: Report) => void;
 }) {
   const [nodes, setNodes] = useState<MindMapNode[]>([]);
@@ -1398,6 +1449,10 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [linkPickerId, setLinkPickerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sopPickerOpen, setSopPickerOpen] = useState(false);
+  const [templates, setTemplates] = useState<ProjectSopTemplate[]>([]);
+  const [sopLoading, setSopLoading] = useState(false);
+  const [sopSearch, setSopSearch] = useState('');
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -1406,8 +1461,6 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
   const handlePrint = () => {
     if (!printRef.current) return;
     const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-
-    // body 최상단에 컨테이너 삽입 (#root보다 앞) → index.css의 #_mm_print_wrap_ 규칙이 적용됨
     const container = document.createElement('div');
     container.id = '_mm_print_wrap_';
     container.innerHTML = `
@@ -1419,15 +1472,11 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
     clone.style.overflow = 'visible';
     container.appendChild(clone);
     document.body.insertBefore(container, document.body.firstChild);
-
-    // A4 세로 페이지 설정만 별도 주입
     const pageStyle = document.createElement('style');
     pageStyle.textContent = `@media print { @page { size: A4 portrait; } }`;
     document.head.appendChild(pageStyle);
-
     const cleanup = () => { container.remove(); pageStyle.remove(); };
     window.addEventListener('afterprint', cleanup, { once: true });
-
     window.print();
   };
 
@@ -1452,11 +1501,22 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
         const cleaned = newNodes.map(n => {
           const o: Record<string, unknown> = { id: n.id, text: n.text ?? '', parentId: n.parentId, order: n.order };
           if (n.reportId) o.reportId = n.reportId;
+          if (n.sopId) o.sopId = n.sopId;
+          if (n.dueDate) o.dueDate = n.dueDate;
+          if (n.duration != null) o.duration = n.duration;
+          if (n.assigneeId) o.assigneeId = n.assigneeId;
+          if (n.department) o.department = n.department;
+          if (n.status) o.status = n.status;
           return o;
         });
         await setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() });
       } catch {}
     }, 800);
+  };
+
+  const handleUpdateNode = (id: string, patch: Partial<MindMapNode>) => {
+    const next = nodes.map(n => n.id === id ? { ...n, ...patch } : n);
+    setNodes(next); saveNodes(next);
   };
 
   const handleAddSibling = (id: string) => {
@@ -1540,7 +1600,77 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
     }
   };
 
+  const openSopPicker = async () => {
+    setSopPickerOpen(true);
+    if (templates.length > 0) return;
+    setSopLoading(true);
+    try {
+      const snap = await getDocs(collection(salesDb, 'sop_project_templates'));
+      setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as ProjectSopTemplate)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    } catch {}
+    finally { setSopLoading(false); }
+  };
+
+  const handleLoadTemplate = async (tpl: ProjectSopTemplate) => {
+    const ok = await confirm({
+      title: 'SOP 뼈대 불러오기',
+      message: `"${tpl.title}" 뼈대를 현재 마인드맵에 추가합니다. 기존 노드는 유지됩니다.`,
+      confirmLabel: '불러오기',
+      variant: 'warning',
+    });
+    if (!ok) return;
+    setSopPickerOpen(false);
+    const root = nodes.find(n => n.parentId === null);
+    if (!root) return;
+
+    const tplRoot = tpl.nodes.find(n => n.parentId === null);
+    if (!tplRoot) return;
+
+    // 새 ID 매핑 생성
+    const idMap = new Map<string, string>();
+    tpl.nodes.forEach(n => idMap.set(n.id, mmId()));
+
+    // 프로젝트 루트 하위의 최대 order
+    const topLevelChildren = tpl.nodes
+      .filter(n => n.parentId === tplRoot.id)
+      .sort((a, b) => a.order - b.order);
+    const maxOrder = nodes.filter(n => n.parentId === root.id).reduce((m, n) => Math.max(m, n.order), -1);
+
+    // 템플릿 루트 제외하고 모든 노드를 새 ID로 복사, 최상위 자식은 프로젝트 루트로 재연결
+    const newNodes: MindMapNode[] = tpl.nodes
+      .filter(n => n.id !== tplRoot.id)
+      .map(n => ({
+        id: idMap.get(n.id)!,
+        text: n.text,
+        parentId: n.parentId === tplRoot.id ? root.id : idMap.get(n.parentId!)!,
+        order: n.parentId === tplRoot.id ? maxOrder + 1 + topLevelChildren.indexOf(n) : n.order,
+        ...(n.sopId ? { sopId: n.sopId } : {}),
+        status: 'todo' as const,
+      }));
+
+    const next = [...nodes, ...newNodes];
+    setNodes(next);
+    saveNodes(next);
+  };
+
+  // 헤더 통계 계산
+  const nonRootNodes = nodes.filter(n => n.parentId !== null);
+  const nodesWithDate = nonRootNodes.filter(n => n.dueDate);
+  const dueDates = nodesWithDate.map(n => n.dueDate!).sort();
+  const minDate = dueDates[0];
+  const maxDate = dueDates[dueDates.length - 1];
+  const totalDays = minDate && maxDate
+    ? Math.ceil((new Date(maxDate).getTime() - new Date(minDate).getTime()) / 86400000) + 1
+    : null;
+  const overdueCount = nodesWithDate.filter(n => nodeWarnLevel(n) === 'overdue').length;
+  const soonCount = nodesWithDate.filter(n => nodeWarnLevel(n) === 'soon').length;
+
   const rootNode = nodes.find(n => n.parentId === null);
+  const selectedNode = selectedId ? nodes.find(n => n.id === selectedId) : null;
+
+  const filteredTemplates = templates.filter(t =>
+    !sopSearch || t.title.includes(sopSearch) || (t.description ?? '').includes(sopSearch)
+  );
 
   if (loading) return (
     <div className="flex justify-center py-20">
@@ -1565,15 +1695,19 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
         }
       }}
     >
-      <div className="no-print flex items-center justify-between mb-4">
+      {/* 도구모음 */}
+      <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
           <span>더블클릭: 편집</span>
           <span>Enter: 형제 추가</span>
           <span>Tab: 하위 추가</span>
-          <span>Del: 노드 삭제</span>
-          <span className="text-blue-400 dark:text-blue-500">🔗: 보고서 연결</span>
+          <span>Del: 삭제</span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+          <button
+            onClick={openSopPicker}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+          ><Download size={10} />업무규정 불러오기</button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
@@ -1584,13 +1718,123 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
           ><Plus size={10} />주제 추가</button>
         </div>
       </div>
+
+      {/* 기간 요약 헤더 */}
+      {(nodesWithDate.length > 0 || overdueCount > 0) && (
+        <div className="no-print flex items-center gap-3 mb-3 px-3 py-2 bg-stone-50 dark:bg-stone-800/50 rounded-sm border border-stone-200 dark:border-stone-700 text-[11px] flex-wrap gap-y-1">
+          <span className="text-stone-500 dark:text-stone-400 flex items-center gap-1">
+            <Calendar size={11} />
+            {totalDays != null ? `총 ${totalDays}일 (${minDate} ~ ${maxDate})` : `마감일 ${nodesWithDate.length}개`}
+          </span>
+          {overdueCount > 0 && (
+            <span className="flex items-center gap-0.5 text-red-500 font-bold">
+              <AlertCircle size={10} />지연 {overdueCount}건
+            </span>
+          )}
+          {soonCount > 0 && (
+            <span className="flex items-center gap-0.5 text-orange-400 font-bold">
+              <Clock size={10} />임박 {soonCount}건
+            </span>
+          )}
+          <span className="text-stone-300 dark:text-stone-600">·</span>
+          <span className="text-stone-400 dark:text-stone-500">
+            <span className="text-green-500">●</span> 완료
+            <span className="ml-2 text-blue-400">●</span> 진행중
+            <span className="ml-2 text-stone-300 dark:text-stone-600">●</span> 예정
+          </span>
+        </div>
+      )}
+
+      {/* 선택된 노드 상세 패널 */}
+      {selectedNode && selectedNode.parentId !== null && (
+        <div className="no-print mb-3 px-3 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-sm">
+          <div className="flex items-center gap-1 mb-2">
+            <SlidersHorizontal size={11} className="text-blue-500 dark:text-blue-400" />
+            <span className="text-[11px] font-bold text-blue-700 dark:text-blue-300 truncate max-w-[200px]">
+              {selectedNode.text || '(제목 없음)'}
+            </span>
+            <button onClick={() => setSelectedId(null)} className="ml-auto text-blue-300 hover:text-blue-600 dark:hover:text-blue-200">
+              <X size={12} />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* 상태 */}
+            <div className="flex items-center gap-1">
+              {(['todo', 'in_progress', 'done'] as const).map(s => (
+                <button key={s}
+                  onClick={() => handleUpdateNode(selectedNode.id, { status: selectedNode.status === s ? undefined : s })}
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full border transition-colors ${
+                    selectedNode.status === s
+                      ? s === 'done' ? 'bg-green-500 text-white border-green-500'
+                        : s === 'in_progress' ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-stone-400 text-white border-stone-400'
+                      : 'bg-white dark:bg-stone-900 text-stone-400 border-stone-200 dark:border-stone-700 hover:border-stone-400'
+                  }`}>
+                  {s === 'todo' ? '예정' : s === 'in_progress' ? '진행중' : '완료'}
+                </button>
+              ))}
+            </div>
+            <div className="w-px h-4 bg-stone-200 dark:bg-stone-700" />
+            {/* 마감일 */}
+            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+              <Clock size={10} />마감일
+              <input
+                type="date"
+                value={selectedNode.dueDate ?? ''}
+                onChange={e => handleUpdateNode(selectedNode.id, { dueDate: e.target.value || undefined })}
+                className="ml-1 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+              />
+            </label>
+            {/* 소요 일수 */}
+            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+              <span>소요</span>
+              <input
+                type="number"
+                min={1}
+                max={999}
+                value={selectedNode.duration ?? ''}
+                onChange={e => handleUpdateNode(selectedNode.id, { duration: e.target.value ? parseInt(e.target.value) : undefined })}
+                className="w-12 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+                placeholder="일수"
+              />
+              <span>일</span>
+            </label>
+            {/* 담당자 */}
+            {employees.length > 0 && (
+              <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+                <Users size={10} />
+                <select
+                  value={selectedNode.assigneeId ?? ''}
+                  onChange={e => handleUpdateNode(selectedNode.id, { assigneeId: e.target.value || undefined })}
+                  className="px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+                >
+                  <option value="">담당자</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </label>
+            )}
+            {/* 부서 */}
+            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+              <input
+                type="text"
+                value={selectedNode.department ?? ''}
+                onChange={e => handleUpdateNode(selectedNode.id, { department: e.target.value || undefined })}
+                placeholder="부서"
+                className="w-20 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* 마인드맵 트리 */}
       <div className="overflow-x-auto pb-4">
         {rootNode && (
           <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
             <MindMapTreeNode
               node={rootNode} nodes={nodes} depth={0}
               editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
-              docs={docs}
+              docs={docs} employees={employees}
               onSelect={setSelectedId}
               onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
               onUpdateText={handleUpdateText}
@@ -1606,6 +1850,52 @@ function ProjectMindMap({ projectId, projectTitle, docs, onOpenDoc }: {
           </div>
         )}
       </div>
+
+      {/* SOP 뼈대 불러오기 모달 */}
+      {sopPickerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col border border-stone-200 dark:border-stone-700">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-200 dark:border-stone-700 shrink-0">
+              <Download size={16} className="text-stone-500" />
+              <p className="text-sm font-black text-stone-900 dark:text-stone-100 flex-1">SOP 뼈대 불러오기</p>
+              <button onClick={() => setSopPickerOpen(false)} className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-4 py-2 border-b border-stone-100 dark:border-stone-800 shrink-0">
+              <input
+                value={sopSearch}
+                onChange={e => setSopSearch(e.target.value)}
+                placeholder="뼈대 검색..."
+                className="w-full px-3 py-1.5 text-sm border border-stone-200 dark:border-stone-700 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-400"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              {sopLoading ? (
+                <p className="text-center text-sm text-stone-400 py-8">불러오는 중...</p>
+              ) : filteredTemplates.length === 0 ? (
+                <p className="text-center text-sm text-stone-400 py-8">
+                  {templates.length === 0 ? '등록된 SOP 뼈대가 없습니다' : '검색 결과가 없습니다'}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredTemplates.map(tpl => (
+                    <button key={tpl.id}
+                      onClick={() => handleLoadTemplate(tpl)}
+                      className="w-full text-left px-3 py-2.5 rounded-lg border border-stone-200 dark:border-stone-700 hover:border-stone-400 dark:hover:border-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                      <p className="text-sm font-bold text-stone-800 dark:text-stone-200 truncate">{tpl.title}</p>
+                      <div className="flex gap-2 mt-0.5">
+                        <span className="text-[10px] text-stone-400">{tpl.nodes.length - 1}개 단계</span>
+                        {tpl.description && <span className="text-[10px] text-stone-400 truncate">{tpl.description}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1847,7 +2137,7 @@ function ProjectDetail({
 
       {/* 마인드맵 */}
       {view === 'mindmap' && (
-        <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} onOpenDoc={openReport} />
+        <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} employees={employees} onOpenDoc={openReport} />
       )}
 
       {/* 칸반 */}

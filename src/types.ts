@@ -652,6 +652,28 @@ export interface SopDocument {
 }
 
 // ==========================================
+// 프로젝트 SOP 뼈대 (salesDb: sop_project_templates)
+// ==========================================
+export interface SopTemplateNode {
+  id: string;
+  text: string;
+  parentId: string | null;
+  order: number;
+  sopId?: string;  // sop_documents 참조
+}
+
+export interface ProjectSopTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  nodes: SopTemplateNode[];
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
 // 프로젝트 (salesDb: projects / project_items)
 // ==========================================
 export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived';

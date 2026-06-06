@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-06-06 — Claude Code
+
+### 완료
+- **3티어 SOP 아키텍처 구현**
+  - `types.ts`: `SopTemplateNode`, `ProjectSopTemplate` 타입 추가 (`salesDb.sop_project_templates` 컬렉션용)
+  - `SopView.tsx` 전면 재작성: 상단 탭 "업무 규정 | 프로젝트 SOP" 추가, `TplTreeNode`/`ProjectSopTemplateEditor`/`ProjectSopPanel` 컴포넌트 신규 구현
+  - `ProjectsView.tsx`: `MindMapNode`에 `sopId?` 추가, `saveNodes` 화이트리스트 업데이트, 피커를 `sop_project_templates` 기반으로 교체, `handleLoadTemplate` ID 재매핑 로직 포함
+- **SopView.tsx 정리**: 이전 세션의 미완 `tab`/`ArrowDown` 잔여물 제거
+
+### 주의
+- **Firestore 권한 추가 필요**: `salesDb`에 `sop_project_templates` 컬렉션 규칙 미등록 시 `permission-denied`. 앱에서 저장 실패 시 사용자에게 Firestore 규칙 추가 요청 필요.
+
+---
+
 ## 플랜 — 미착수 (우선순위 순)
 
 1. **칸반 도움말 모달** — `?` 버튼 + 기능 시각화 팝업 (칸반 탭 내)
