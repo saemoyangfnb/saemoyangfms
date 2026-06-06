@@ -390,7 +390,7 @@ function TplTreeNode({
   );
 }
 
-/* ── 프로젝트 SOP 뼈대 에디터 (풀스크린) ───────────────── */
+/* ── 프로젝트 SOP 구조 에디터 (풀스크린) ───────────────── */
 function ProjectSopTemplateEditor({
   initial, sopDocs, onSave, onClose, saving,
 }: {
@@ -467,7 +467,7 @@ function ProjectSopTemplateEditor({
           <X size={18} />
         </button>
         <p className="text-sm font-black text-stone-900 dark:text-stone-100 flex-1">
-          {initial.id ? 'SOP 뼈대 수정' : '새 SOP 뼈대 만들기'}
+          {initial.id ? 'SOP 구조 수정' : '새 SOP 구조 만들기'}
         </p>
         <button onClick={handleSave} disabled={!title.trim() || saving}
           className="px-4 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-xs font-black disabled:opacity-40 hover:opacity-80">
@@ -477,7 +477,7 @@ function ProjectSopTemplateEditor({
 
       <div className="flex-1 overflow-y-auto px-5 py-5 max-w-2xl mx-auto w-full space-y-4">
         <input value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="SOP 뼈대 제목 *"
+          placeholder="SOP 구조 제목 *"
           className="w-full text-lg font-black bg-transparent outline-none text-stone-900 dark:text-stone-100 placeholder:text-stone-300 border-b-2 border-stone-200 dark:border-stone-700 pb-2 focus:border-stone-800 dark:focus:border-stone-300" />
         <input value={description} onChange={e => setDescription(e.target.value)}
           placeholder="설명 (선택)"
@@ -562,7 +562,7 @@ function ProjectSopPanel({ currentUser, sopDocs }: { currentUser: User; sopDocs:
           authorId: currentUser.uid, authorName: currentUser.name,
           createdAt: now, updatedAt: now,
         }));
-        toast.success('SOP 뼈대가 생성되었습니다');
+        toast.success('SOP 구조가 생성되었습니다');
       }
       setEditing(null);
       fetchTemplates();
@@ -588,7 +588,7 @@ function ProjectSopPanel({ currentUser, sopDocs }: { currentUser: User; sopDocs:
         <div className="flex justify-end mb-4">
           <button onClick={() => setEditing({})}
             className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg text-xs font-black hover:opacity-80">
-            <Plus size={13} /> 새 SOP 뼈대
+            <Plus size={13} /> 새 SOP 구조
           </button>
         </div>
       )}
@@ -598,8 +598,8 @@ function ProjectSopPanel({ currentUser, sopDocs }: { currentUser: User; sopDocs:
       ) : templates.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-stone-300 dark:text-stone-700">
           <GitBranch size={40} className="mb-3" />
-          <p className="text-sm font-semibold">등록된 SOP 뼈대가 없습니다</p>
-          {isAdmin && <p className="text-xs mt-1">"새 SOP 뼈대" 버튼으로 프로젝트 템플릿을 만들어보세요</p>}
+          <p className="text-sm font-semibold">등록된 SOP 구조가 없습니다</p>
+          {isAdmin && <p className="text-xs mt-1">"새 SOP 구조" 버튼으로 프로젝트 템플릿을 만들어보세요</p>}
         </div>
       ) : (
         <div className="space-y-3 pb-10">

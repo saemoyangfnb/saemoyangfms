@@ -1613,8 +1613,8 @@ function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }:
 
   const handleLoadTemplate = async (tpl: ProjectSopTemplate) => {
     const ok = await confirm({
-      title: 'SOP 뼈대 불러오기',
-      message: `"${tpl.title}" 뼈대를 현재 마인드맵에 추가합니다. 기존 노드는 유지됩니다.`,
+      title: 'SOP 구조 불러오기',
+      message: `"${tpl.title}" 구조를 현재 마인드맵에 추가합니다. 기존 노드는 유지됩니다.`,
       confirmLabel: '불러오기',
       variant: 'warning',
     });
@@ -1851,13 +1851,13 @@ function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }:
         )}
       </div>
 
-      {/* SOP 뼈대 불러오기 모달 */}
+      {/* SOP 구조 불러오기 모달 */}
       {sopPickerOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col border border-stone-200 dark:border-stone-700">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-200 dark:border-stone-700 shrink-0">
               <Download size={16} className="text-stone-500" />
-              <p className="text-sm font-black text-stone-900 dark:text-stone-100 flex-1">SOP 뼈대 불러오기</p>
+              <p className="text-sm font-black text-stone-900 dark:text-stone-100 flex-1">SOP 구조 불러오기</p>
               <button onClick={() => setSopPickerOpen(false)} className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200">
                 <X size={18} />
               </button>
@@ -1866,7 +1866,7 @@ function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }:
               <input
                 value={sopSearch}
                 onChange={e => setSopSearch(e.target.value)}
-                placeholder="뼈대 검색..."
+                placeholder="구조 검색..."
                 className="w-full px-3 py-1.5 text-sm border border-stone-200 dark:border-stone-700 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-400"
               />
             </div>
@@ -1875,7 +1875,7 @@ function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }:
                 <p className="text-center text-sm text-stone-400 py-8">불러오는 중...</p>
               ) : filteredTemplates.length === 0 ? (
                 <p className="text-center text-sm text-stone-400 py-8">
-                  {templates.length === 0 ? '등록된 SOP 뼈대가 없습니다' : '검색 결과가 없습니다'}
+                  {templates.length === 0 ? '등록된 SOP 구조가 없습니다' : '검색 결과가 없습니다'}
                 </p>
               ) : (
                 <div className="space-y-2">
