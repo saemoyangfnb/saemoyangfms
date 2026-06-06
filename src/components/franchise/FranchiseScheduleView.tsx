@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, onSnapshot, query, where, writeBatch, orderBy } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig } from '../../types';
+import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig, DepartmentTask } from '../../types';
 import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, LayoutList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
@@ -333,6 +333,28 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
           before: beforeSummary || undefined,
           after: afterSummary || undefined,
         });
+
+        // openDate 변경 시 department_tasks dueDate 일괄 재계산
+        if (existing && updates.openDate && updates.openDate !== existing.openDate) {
+          const tasksSnap = await getDocs(
+            query(collection(db, 'department_tasks'), where('scheduleId', '==', id))
+          );
+          if (!tasksSnap.empty) {
+            const taskBatch = writeBatch(db);
+            const now = new Date().toISOString();
+            tasksSnap.forEach(tDoc => {
+              const task = tDoc.data() as DepartmentTask;
+              if (typeof task.dDayOffset === 'number') {
+                taskBatch.update(tDoc.ref, {
+                  dueDate: addDays(updates.openDate!, task.dDayOffset),
+                  updatedAt: now,
+                });
+              }
+            });
+            await taskBatch.commit();
+            toast.success(`부서 업무 ${tasksSnap.size}건 날짜 자동 조정 완료`);
+          }
+        }
       } else {
         //  [신규] 매장 등록과 동시에 템플릿 업무를 자동 생성합니다.
         const docRef = await addDoc(collection(db, 'franchise_schedules'), {
@@ -425,10 +447,35 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
     // 1. 고정 필드형 (Milestone) 처리
     if (workItem.category === 'schedule_date' && workItem.scheduleField) {
       const updates: any = { [workItem.scheduleField]: newStartDate };
-      
+
       setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, ...updates } : s));
       await updateDoc(doc(db, 'franchise_schedules', scheduleId), updates);
-      toast.success(`[${schedule.storeName}] ${workItem.text} 일정이 변경되었습니다.`);
+
+      // 오픈일 드래그 이동 시 department_tasks 전체 재계산
+      if (workItem.scheduleField === 'openDate') {
+        const tasksSnap = await getDocs(
+          query(collection(db, 'department_tasks'), where('scheduleId', '==', scheduleId))
+        );
+        if (!tasksSnap.empty) {
+          const taskBatch = writeBatch(db);
+          const now = new Date().toISOString();
+          tasksSnap.forEach(tDoc => {
+            const task = tDoc.data() as DepartmentTask;
+            if (typeof task.dDayOffset === 'number') {
+              taskBatch.update(tDoc.ref, {
+                dueDate: addDays(newStartDate, task.dDayOffset),
+                updatedAt: now,
+              });
+            }
+          });
+          await taskBatch.commit();
+          toast.success(`[${schedule.storeName}] 오픈일 변경 → 부서 업무 ${tasksSnap.size}건 자동 조정`);
+        } else {
+          toast.success(`[${schedule.storeName}] ${workItem.text} 일정이 변경되었습니다.`);
+        }
+      } else {
+        toast.success(`[${schedule.storeName}] ${workItem.text} 일정이 변경되었습니다.`);
+      }
       return;
     }
 

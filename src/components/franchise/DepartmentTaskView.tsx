@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb as db } from '../../firebase';
 import {
-  collection, getDocs, query, where, updateDoc, doc
+  collection, onSnapshot, query, where, updateDoc, doc
 } from 'firebase/firestore';
 import {
   FranchiseSchedule, Department, DepartmentTask, DepartmentTaskStatus, User
@@ -251,37 +251,50 @@ export function DepartmentTaskView({ brandId, schedules, currentUser }: Props) {
   const [filterStatus, setFilterStatus] = useState<DepartmentTaskStatus | 'all'>('all');
 
   const activeSchedules = schedules.filter(s => !s.archived);
+  const activeIdsKey = activeSchedules.map(s => s.id).sort().join(',');
 
-  // 부서 목록
+  // 부서 목록 (변경 빈도 낮음 — onSnapshot 불필요)
   useEffect(() => {
-    getDocs(query(collection(db, 'departments'), where('brandId', '==', brandId)))
-      .then(snap => setDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department))));
+    const unsub = onSnapshot(
+      query(collection(db, 'departments'), where('brandId', '==', brandId)),
+      snap => setDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department)))
+    );
+    return () => unsub();
   }, [brandId]);
 
-  // 태스크 목록
-  const fetchTasks = async () => {
-    setLoading(true);
-    try {
-      const activeIds = activeSchedules.map(s => s.id);
-      if (activeIds.length === 0) { setTasks([]); return; }
-
-      // Firestore 'in' 쿼리는 30개 제한 → 청크 처리
-      const CHUNK = 30;
-      const all: DepartmentTask[] = [];
-      for (let i = 0; i < activeIds.length; i += CHUNK) {
-        const chunk = activeIds.slice(i, i + CHUNK);
-        const snap = await getDocs(
-          query(collection(db, 'department_tasks'), where('scheduleId', 'in', chunk))
-        );
-        all.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask)));
-      }
-      setTasks(all);
-    } finally {
+  // 태스크 목록 — onSnapshot 실시간 구독 (청크별 다중 리스너)
+  useEffect(() => {
+    const activeIds = activeSchedules.map(s => s.id);
+    if (activeIds.length === 0) {
+      setTasks([]);
       setLoading(false);
+      return;
     }
-  };
 
-  useEffect(() => { fetchTasks(); }, [brandId, schedules.length]);
+    setLoading(true);
+    const CHUNK = 30;
+    const chunkResults = new Map<number, DepartmentTask[]>();
+    const unsubscribers: (() => void)[] = [];
+
+    for (let i = 0; i < activeIds.length; i += CHUNK) {
+      const idx = Math.floor(i / CHUNK);
+      const chunk = activeIds.slice(i, i + CHUNK);
+      const unsub = onSnapshot(
+        query(collection(db, 'department_tasks'), where('scheduleId', 'in', chunk)),
+        snap => {
+          chunkResults.set(idx, snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask)));
+          const merged: DepartmentTask[] = [];
+          chunkResults.forEach(arr => merged.push(...arr));
+          setTasks(merged);
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
+      unsubscribers.push(unsub);
+    }
+
+    return () => unsubscribers.forEach(u => u());
+  }, [activeIdsKey]);
 
   const handleStatusChange = async (id: string, status: DepartmentTaskStatus, completedBy?: string) => {
     const now = new Date().toISOString();
@@ -299,7 +312,7 @@ export function DepartmentTaskView({ brandId, schedules, currentUser }: Props) {
       });
     } catch {
       toast.error('상태 변경 실패');
-      fetchTasks();
+      // onSnapshot이 서버 상태로 자동 복구
     }
   };
 
