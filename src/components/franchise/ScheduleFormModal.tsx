@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FranchiseSchedule, TeamSetting, FileAttachment, Department } from '../../types';
+import { FranchiseSchedule, TeamSetting, FileAttachment, Department, Employee } from '../../types';
 import { X, Calculator, AlertCircle, Palette, Eye, EyeOff, FileText, UploadCloud, Loader2, ClipboardList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { addDays, diffDays, addExcludingSunday, getOvenInDate, getPreTrainingStartDate } from '../../utils';
@@ -74,6 +74,7 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('all');
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [svEmployees, setSvEmployees] = useState<Employee[]>([]);
 
   //  DB 부서 정보 일회성 로드 (변경 빈도 낮음)
   useEffect(() => {
@@ -86,6 +87,18 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
     });
     return () => { cancelled = true; };
   }, [form.brandId]);
+
+  // SV(슈퍼바이저) 직원 목록 로드
+  useEffect(() => {
+    let cancelled = false;
+    getDocs(collection(salesDb, 'employees')).then(snap => {
+      if (cancelled) return;
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee))
+        .filter(e => e.isActive && e.position === '슈퍼바이저');
+      setSvEmployees(data);
+    });
+    return () => { cancelled = true; };
+  }, []);
   
   //  신규: 일정 자동 계산 토글 (AI가 자동계산을 요청했거나 기존 일정이 없으면 ON)
   const [autoCalc, setAutoCalc] = useState((initial as any).isAiAutoCalc ?? (!initial.id && !initial.openDate));
@@ -114,7 +127,6 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
     }));
   };
 
-  const allTeamMembers = teams.flatMap(t => t.members.map(m => ({ ...m, teamName: t.name })));
   const isDuplicateStoreNumber = schedules.some(s => s.id !== form.id && s.storeNumber === form.storeNumber);
 
   // 사용 중인 색상 파악 (보관되지 않은 매장 기준)
@@ -421,21 +433,49 @@ export function ScheduleFormModal({ initial, teams, schedules, processSettings, 
                   setForm(prev => ({
                     ...prev,
                     team: teamName,
-                    supervisor: selTeam && selTeam.members.length > 0 ? selTeam.members[0].name : '',
                     teamMembersSnapshot: selTeam ? selTeam.members : prev.teamMembersSnapshot
                   }));
                 }}>
                   <option value="">팀 선택</option>
                   {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                 </select>
-                <select className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" value={form.supervisor || ''} onChange={e => set('supervisor', e.target.value)}>
+                <select
+                  className="flex-1 px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                  value={form.supervisorId || ''}
+                  onChange={e => {
+                    const empId = e.target.value;
+                    const emp = svEmployees.find(sv => sv.id === empId);
+                    setForm(prev => ({
+                      ...prev,
+                      supervisorId: empId || undefined,
+                      supervisor: emp?.name || prev.supervisor || '',
+                    }));
+                  }}
+                >
                   <option value="">SV 선택</option>
-                  {(form.team
-                    ? (teams.find(t => t.name === form.team)?.members || [])
-                    : allTeamMembers
-                  ).map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                  {svEmployees.map(emp => {
+                    const dept = dbDepartments.find(d => d.id === emp.departmentId);
+                    return (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name}{dept ? ` (${dept.name})` : ''}
+                      </option>
+                    );
+                  })}
+                  {/* 기존 텍스트 바이저가 있고 Employee 미연동 시 하위 호환 표시 */}
+                  {form.supervisor && !form.supervisorId && (
+                    <option value="" disabled>{form.supervisor} (미연동)</option>
+                  )}
                 </select>
               </div>
+              {form.supervisorId && (() => {
+                const emp = svEmployees.find(sv => sv.id === form.supervisorId);
+                const dept = dbDepartments.find(d => d.id === emp?.departmentId);
+                return emp ? (
+                  <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    ✓ {emp.name} 연동됨 {dept ? `· ${dept.name}` : ''}
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
           )}

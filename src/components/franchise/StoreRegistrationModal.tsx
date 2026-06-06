@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { salesDb as db, db as mainDb } from '../../firebase';
-import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
-import { FranchiseSchedule, BrandId, TeamSetting, SystemConfig } from '../../types';
+import { collection, addDoc, getDoc, getDocs, doc } from 'firebase/firestore';
+import { FranchiseSchedule, BrandId, TeamSetting, SystemConfig, Employee, Department } from '../../types';
 import { useToast } from '../Toast';
 
 interface Props {
@@ -71,11 +71,29 @@ export function StoreRegistrationModal({ brandId, teams, schedules = [], onClose
     return () => { cancelled = true; };
   }, []);
 
+  const [svEmployees, setSvEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  // SV 직원 + 부서 로드
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'departments')),
+    ]).then(([empSnap, deptSnap]) => {
+      if (cancelled) return;
+      setSvEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)).filter(e => e.isActive && e.position === '슈퍼바이저'));
+      setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const [form, setForm] = useState({
     storeNumber: `${nextNumber}호`,
     storeName: '',
     team: '',
     supervisor: '',
+    supervisorId: '',
     colorCode: nextColor,
     constructionType: '더원',
     signageType: '동영',
@@ -108,6 +126,7 @@ export function StoreRegistrationModal({ brandId, teams, schedules = [], onClose
         storeName: form.storeName.trim(),
         team: form.team,
         supervisor: form.supervisor.trim(),
+        ...(form.supervisorId ? { supervisorId: form.supervisorId } : {}),
         colorCode: form.colorCode,
         constructionType: form.constructionType,
         signageType: form.signageType,
@@ -176,11 +195,24 @@ export function StoreRegistrationModal({ brandId, teams, schedules = [], onClose
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">담당 SV</label>
-              <select className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-bold focus:outline-none focus:border-indigo-500" value={form.supervisor} onChange={e => set('supervisor', e.target.value)}>
+              <select
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                value={form.supervisorId}
+                onChange={e => {
+                  const empId = e.target.value;
+                  const emp = svEmployees.find(sv => sv.id === empId);
+                  setForm(prev => ({ ...prev, supervisorId: empId, supervisor: emp?.name || '' }));
+                }}
+              >
                 <option value="">SV 선택</option>
-                {(form.team ? (teams.find(t => t.name === form.team)?.members || []) : teams.flatMap(t => t.members)).map(m => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
+                {svEmployees.map(emp => {
+                  const dept = departments.find(d => d.id === emp.departmentId);
+                  return (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}{dept ? ` (${dept.name})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

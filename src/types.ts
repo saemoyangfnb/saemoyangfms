@@ -251,7 +251,8 @@ export interface FranchiseSchedule {
   storeNumber: string;  // 매장 호수 (예: 120호)
   storeName: string;    // 매장명
   team: string;         // 담당 팀
-  supervisor: string;   // 슈퍼바이저
+  supervisor: string;   // 슈퍼바이저 이름 (표시용, 하위 호환)
+  supervisorId?: string; // Employee.id 참조 (연동 시 저장)
 
   // 세부 사항
   constructionType: string; // 더원, 감리, 직접입력

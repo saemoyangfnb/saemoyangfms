@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, salesDb } from '../../firebase';
 import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { User, Department, PERMISSION_SECTIONS, SECTION_LABELS, SectionPermission, PermissionSection } from '../../types';
-import { Shield, ChevronDown, ChevronUp, Check, Lock } from 'lucide-react';
+import { Shield, ChevronDown, ChevronUp, Check, Lock, Layers } from 'lucide-react';
 import { useToast } from '../Toast';
 
 const PERMISSION_OPTIONS: { value: SectionPermission; label: string; color: string }[] = [
@@ -68,6 +68,37 @@ export function UserPermissionManager() {
         ? current.filter(id => id !== deptId)
         : [...current, deptId];
       await updateDoc(doc(db, 'users', user.uid), { departmentHeadOf: next });
+    } catch {
+      toast.error('저장 실패');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // 경영진(열람 전용) 프리셋: admin/history/database는 none, 나머지는 view
+  const handleExecPreset = async (user: User) => {
+    setSaving(user.uid);
+    try {
+      const preset: Partial<Record<PermissionSection, SectionPermission>> = {};
+      PERMISSION_SECTIONS.forEach(s => {
+        if (['admin', 'history', 'database'].includes(s)) preset[s] = 'none';
+        else preset[s] = 'view';
+      });
+      await updateDoc(doc(db, 'users', user.uid), { sectionPermissions: preset });
+      toast.success('경영진 프리셋이 적용되었습니다.');
+    } catch {
+      toast.error('저장 실패');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // 실무자 프리셋: sectionPermissions 초기화 (모두 기본값)
+  const handleWorkerPreset = async (user: User) => {
+    setSaving(user.uid);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { sectionPermissions: {} });
+      toast.success('실무자 프리셋이 적용되었습니다.');
     } catch {
       toast.error('저장 실패');
     } finally {
@@ -142,7 +173,30 @@ export function UserPermissionManager() {
 
                 {/* 섹션별 권한 */}
                 <div>
-                  <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 mb-2 tracking-wider">섹션별 접근 권한</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 tracking-wider">섹션별 접근 권한</p>
+                    {!isAdmin && (
+                      <div className="flex gap-1.5">
+                        <button
+                          disabled={saving === user.uid}
+                          onClick={() => handleExecPreset(user)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                          title="모든 섹션 열람 전용 (admin/이력/DB는 접근 제한)"
+                        >
+                          <Layers size={11} />
+                          경영진 프리셋
+                        </button>
+                        <button
+                          disabled={saving === user.uid}
+                          onClick={() => handleWorkerPreset(user)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                          title="사용자 권한을 기본값(편집 가능)으로 초기화"
+                        >
+                          실무자 초기화
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {isAdmin ? (
                     <p className="text-xs text-slate-400 italic">최고 관리자는 모든 섹션에 수정 권한이 부여됩니다.</p>
                   ) : (
