@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-06-08 — Claude Code
+
+### 완료
+- **제조실 과거 날짜 입력 수정** (`FactoryView.tsx`)
+  - `DailyInputModal`: 날짜 변경 시 기존 기록 로드(기존 기록 있으면 덮어쓰기 배너 표시), 없으면 직전 기록 마감재고를 기초재고로 자동 설정
+  - `prev` 컨텍스트 힌트·소비량 미리보기를 선택한 날짜 기준으로 수정 (기존엔 현재 최신재고 기준으로 표시되어 오해 유발)
+  - **과거 날짜 입력 시 전역 storeCount 덮어쓰기 버그 수정**: `date >= todayYMD()` 조건 추가
+  - 추이 탭 각 행에 `Edit2` 수정 버튼 추가 → 클릭 시 해당 날짜로 입력 모달 바로 열림
+
+---
+
+## 2026-06-06 (2차) — Claude Code
+
+### 완료
+- **바이저(SV) Employee 연동**: `FranchiseSchedule.supervisorId?: string` 추가. `ScheduleFormModal`·`StoreRegistrationModal`에서 SV 선택 시 `employees` 컬렉션(position=슈퍼바이저) 드롭다운으로 전환. 부서명 표시 + 연동 확인 뱃지. `supervisor: string`(이름)은 하위 호환 유지.
+- **권한 경영진 프리셋**: `UserPermissionManager`에 "경영진 프리셋"(전 섹션 view, admin/history/database는 none) + "실무자 초기화"(sectionPermissions 초기화) 버튼 추가.
+
+### 미완/다음
+- **나머지 섹션 readOnly 강제**: projects, workmap, employees, sop 등에 `readOnly` prop 추가 미진행 (franchise/sales는 이미 구현됨)
+- **바이저 타임라인 표시**: supervisorId 기반 부서 정보를 ScheduleTimeline에서 표시 미진행
+
+---
+
 ## 2026-06-06 — Claude Code
 
 ### 완료

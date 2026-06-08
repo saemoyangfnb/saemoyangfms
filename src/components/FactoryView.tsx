@@ -169,18 +169,54 @@ function ItemFormModal({
 
 // ── 저녁 실사 입력 모달 ────────────────────────────────────
 function DailyInputModal({
-  statsList, storeCount, onSave, onClose,
+  statsList, storeCount, records, initialDate, onSave, onClose,
 }: {
   statsList: ItemStats[];
   storeCount: number;
+  records: FactoryDailyRecord[];
+  initialDate?: string;
   onSave: (entries: { itemId: string; closingStock: number; produced: number; note: string }[], date: string, storeCount: number) => void;
   onClose: () => void;
 }) {
-  const [date, setDate] = useState(todayYMD());
-  const [sc, setSc] = useState(storeCount);
-  const [entries, setEntries] = useState<{ itemId: string; closingStock: string; produced: string; note: string }[]>(
-    statsList.map(s => ({ itemId: s.item.id, closingStock: s.currentStock.toString(), produced: '0', note: '' }))
-  );
+  // 날짜 기준 직전 기록의 마감재고 반환
+  const getPrevRecord = (itemId: string, forDate: string) =>
+    records
+      .filter(r => r.itemId === itemId && r.date < forDate)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+
+  // 날짜 기준 entries 재구성 (기존 기록 있으면 불러오기, 없으면 직전 마감재고 기준)
+  const buildEntries = (forDate: string) =>
+    statsList.map(s => {
+      const existing = records.find(r => r.itemId === s.item.id && r.date === forDate);
+      if (existing) return {
+        itemId: s.item.id,
+        closingStock: existing.closingStock.toString(),
+        produced: existing.produced.toString(),
+        note: existing.note ?? '',
+      };
+      const prev = getPrevRecord(s.item.id, forDate);
+      return { itemId: s.item.id, closingStock: (prev?.closingStock ?? 0).toString(), produced: '0', note: '' };
+    });
+
+  const hasExisting = (forDate: string) =>
+    statsList.some(s => records.some(r => r.itemId === s.item.id && r.date === forDate));
+
+  const initDate = initialDate ?? todayYMD();
+  const [date, setDate] = useState(initDate);
+  const [sc, setSc] = useState(() => records.find(r => r.date === initDate)?.storeCount ?? storeCount);
+  const [entries, setEntries] = useState(() => buildEntries(initDate));
+  const [isExistingRecord, setIsExistingRecord] = useState(() => hasExisting(initDate));
+
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    setEntries(buildEntries(newDate));
+    const existing = hasExisting(newDate);
+    setIsExistingRecord(existing);
+    if (existing) {
+      const rec = records.find(r => r.date === newDate);
+      if (rec?.storeCount != null) setSc(rec.storeCount);
+    }
+  };
 
   const update = (i: number, field: 'closingStock' | 'produced' | 'note', val: string) =>
     setEntries(p => p.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
@@ -195,11 +231,15 @@ function DailyInputModal({
     onSave(parsed, date, sc);
   };
 
+  const isToday = date === todayYMD();
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-xl border border-stone-200 dark:border-stone-700 flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400 shrink-0">
-          <h2 className="text-sm font-black text-stone-900 dark:text-white">저녁 실사 입력</h2>
+          <h2 className="text-sm font-black text-stone-900 dark:text-white">
+            {isToday ? '저녁 실사 입력' : `${date} 실사 입력`}
+          </h2>
           <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
         </div>
 
@@ -207,7 +247,7 @@ function DailyInputModal({
         <div className="flex items-center gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800 shrink-0">
           <div className="flex items-center gap-2">
             <label className="text-[11px] font-bold text-stone-500">날짜</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            <input type="date" value={date} onChange={e => handleDateChange(e.target.value)}
               className="text-xs border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-1 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 focus:outline-none" />
           </div>
           <div className="flex items-center gap-2">
@@ -217,6 +257,24 @@ function DailyInputModal({
               className="w-16 text-xs border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-1 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 focus:outline-none" />
           </div>
         </div>
+
+        {/* 기존 기록 수정 배너 */}
+        {isExistingRecord && (
+          <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 shrink-0">
+            <AlertTriangle size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-bold">
+              {date} 기록이 이미 있습니다 — 저장하면 덮어씁니다
+            </span>
+          </div>
+        )}
+        {/* 과거 날짜 신규 입력 안내 */}
+        {!isExistingRecord && !isToday && (
+          <div className="flex items-center gap-2 px-5 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 shrink-0">
+            <span className="text-[11px] text-blue-700 dark:text-blue-400">
+              과거 날짜 입력 — 직전 기록의 마감재고를 기초재고로 설정했습니다
+            </span>
+          </div>
+        )}
 
         {/* 컬럼 헤더 */}
         <div className="grid grid-cols-[1fr_90px_90px_80px] gap-2 px-5 py-1.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800 shrink-0">
@@ -229,15 +287,17 @@ function DailyInputModal({
         {/* 입력 행 */}
         <div className="overflow-y-auto flex-1">
           {statsList.map((s, i) => {
-            const prev = s.lastRecordDate ? `(${fmtDate(s.lastRecordDate)} ${s.currentStock}${s.item.unit})` : '(초기입력)';
             const entry = entries[i];
-            const consumed = (s.currentStock + (Number(entry?.produced) || 0)) - (Number(entry?.closingStock) || 0);
+            const prevRec = getPrevRecord(s.item.id, date);
+            const openingStock = prevRec?.closingStock ?? 0;
+            const prevHint = prevRec ? `(${fmtDate(prevRec.date)} ${openingStock}${s.item.unit})` : '(초기입력)';
+            const consumed = openingStock + (Number(entry?.produced) || 0) - (Number(entry?.closingStock) || 0);
 
             return (
               <div key={s.item.id} className="grid grid-cols-[1fr_90px_90px_80px] gap-2 px-5 py-2.5 border-b border-stone-100 dark:border-stone-800/50 items-center">
                 <div>
                   <p className="text-xs font-bold text-stone-800 dark:text-stone-200">{s.item.name}</p>
-                  <p className="text-[9px] text-stone-400">{prev}</p>
+                  <p className="text-[9px] text-stone-400">{prevHint}</p>
                 </div>
                 <input
                   type="number" min="0" step="0.1"
@@ -252,7 +312,7 @@ function DailyInputModal({
                     value={entry?.closingStock ?? ''}
                     onChange={e => update(i, 'closingStock', e.target.value)}
                     className="text-xs text-right border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-1.5 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-stone-400 w-full"
-                    placeholder={s.currentStock.toString()}
+                    placeholder={openingStock.toString()}
                   />
                   {consumed > 0 && (
                     <p className="text-[9px] text-red-400 text-right mt-0.5">-{consumed.toFixed(1)}{s.item.unit} 소비</p>
@@ -295,6 +355,7 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<FactoryItem | null>(null);
   const [showDailyInput, setShowDailyInput] = useState(false);
+  const [dailyInputInitDate, setDailyInputInitDate] = useState<string | undefined>();
   const [editingStoreCount, setEditingStoreCount] = useState(false);
   const [tempStoreCount, setTempStoreCount] = useState('');
   const [planStoreCount, setPlanStoreCount] = useState(1);
@@ -397,9 +458,11 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
           } as Record<string, unknown>),
           { merge: true });
       }));
-      if (sc !== storeCount) await saveStoreCount(sc);
+      // 과거 날짜 입력 시 전역 매장수 변경 금지
+      if (sc !== storeCount && date >= todayYMD()) await saveStoreCount(sc);
       toast.success(`${date} 실사 저장됨`);
       setShowDailyInput(false);
+      setDailyInputInitDate(undefined);
       await loadAll();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -620,20 +683,21 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
             const sorted = [...s.records].sort((a, b) => a.date.localeCompare(b.date));
             return (
               <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
-                <div className="grid grid-cols-[80px_90px_90px_90px_90px_1fr] text-[10px] font-bold text-stone-400 px-4 py-2 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50">
+                <div className="grid grid-cols-[80px_90px_90px_90px_90px_1fr_28px] text-[10px] font-bold text-stone-400 px-4 py-2 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50">
                   <span>날짜</span>
                   <span className="text-right">기초재고</span>
                   <span className="text-right">제조량</span>
                   <span className="text-right">소비량</span>
                   <span className="text-right">마감재고</span>
                   <span className="pl-2">메모</span>
+                  <span />
                 </div>
                 {sorted.map((r, i) => {
                   const prev = sorted[i - 1];
                   const openingStock = prev?.closingStock ?? r.closingStock;
                   const consumed = i === 0 ? 0 : openingStock + r.produced - r.closingStock;
                   return (
-                    <div key={r.id} className="grid grid-cols-[80px_90px_90px_90px_90px_1fr] px-4 py-2.5 border-b border-stone-100 dark:border-stone-800/50 last:border-0 items-center text-xs">
+                    <div key={r.id} className="grid grid-cols-[80px_90px_90px_90px_90px_1fr_28px] px-4 py-2.5 border-b border-stone-100 dark:border-stone-800/50 last:border-0 items-center text-xs">
                       <span className="font-bold text-stone-700 dark:text-stone-300">{r.date.slice(5)}</span>
                       <span className="text-right tabular-nums text-stone-600 dark:text-stone-400">{i === 0 ? '-' : fmt(openingStock, '')}</span>
                       <span className={`text-right tabular-nums font-bold ${r.produced > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-stone-400'}`}>
@@ -646,6 +710,12 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
                         {fmt(r.closingStock, s.item.unit)}
                       </span>
                       <span className="pl-2 text-stone-400 text-[10px] truncate">{r.note ?? ''}</span>
+                      <button
+                        onClick={() => { setDailyInputInitDate(r.date); setShowDailyInput(true); }}
+                        className="p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
+                        title={`${r.date} 수정`}>
+                        <Edit2 size={11} />
+                      </button>
                     </div>
                   );
                 })}
@@ -783,8 +853,10 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
         <DailyInputModal
           statsList={statsList}
           storeCount={storeCount}
+          records={records}
+          initialDate={dailyInputInitDate}
           onSave={handleSaveDailyInput}
-          onClose={() => setShowDailyInput(false)}
+          onClose={() => { setShowDailyInput(false); setDailyInputInitDate(undefined); }}
         />
       )}
     </div>
