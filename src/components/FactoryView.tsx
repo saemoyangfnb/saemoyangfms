@@ -12,7 +12,7 @@ import { shareKakao } from '../utils/kakao';
 import {
   Plus, X, Edit2, ChevronUp, ChevronDown,
   AlertTriangle, CheckCircle2, Clock, Store,
-  Package, BarChart2, Calendar, Settings,
+  Package, BarChart2, Calendar, Settings, MessageCircle,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -470,6 +470,25 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
     }
   };
 
+  // ── 카톡 복사 ──────────────────────────────────────────
+  const handleShareKakao = (list: ItemStats[]) => {
+    const lines = list.map(s => {
+      if (s.status === 'no_data') return `${s.item.name}-미입력`;
+      const produced = s.records[0]?.produced ?? 0;
+      const stock = fmt(s.currentStock, s.item.unit);
+      return produced > 0
+        ? `${s.item.name}-${stock}+${fmt(produced, s.item.unit)}`
+        : `${s.item.name}-${stock}`;
+    });
+    const today = new Date();
+    const dateStr = `${today.getMonth() + 1}/${today.getDate()}`;
+    shareKakao({
+      title: `제조실 재고 현황 — ${dateStr}`,
+      body: lines.join('\n'),
+      onCopied: msg => toast.success(msg),
+    });
+  };
+
   // ── 통계 계산 ──────────────────────────────────────────
   const statsList: ItemStats[] = items.map(item => {
     const itemRecords = records.filter(r => r.itemId === item.id);
@@ -512,6 +531,12 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
               </button>
             )}
           </div>
+          <button
+            onClick={() => handleShareKakao(statsList)}
+            disabled={items.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 text-xs font-bold rounded-sm hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-40">
+            <MessageCircle size={12} /> 카톡 복사
+          </button>
           <button onClick={() => setShowDailyInput(true)}
             disabled={items.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 transition-colors disabled:opacity-40">
