@@ -7,6 +7,7 @@ import {
   Plus, X, ChevronDown, ChevronUp, Search, Edit2, Trash2,
   Clock, Users, Building2, BookOpen, ChevronRight, Printer, GitBranch, Link,
 } from 'lucide-react';
+import { TabBar } from './ui/Tabs';
 
 const genId = () => `sop_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const tplId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -788,21 +789,15 @@ export function SopView({ currentUser }: Props) {
         )}
       </div>
 
-      {/* 상단 탭 */}
-      <div className="flex gap-0 mb-5 border-b border-stone-200 dark:border-stone-700">
-        <button
-          onClick={() => setMainTab('sop')}
-          className={`px-4 py-2 text-xs font-bold transition-colors ${mainTab === 'sop' ? 'border-b-2 border-stone-800 dark:border-stone-200 text-stone-900 dark:text-stone-100 -mb-px' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-300'}`}
-        >
-          업무 규정
-        </button>
-        <button
-          onClick={() => setMainTab('template')}
-          className={`px-4 py-2 text-xs font-bold flex items-center gap-1.5 transition-colors ${mainTab === 'template' ? 'border-b-2 border-stone-800 dark:border-stone-200 text-stone-900 dark:text-stone-100 -mb-px' : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-300'}`}
-        >
-          <GitBranch size={11} /> 프로젝트 SOP
-        </button>
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'sop',      label: '업무 규정' },
+          { id: 'template', label: '프로젝트 SOP', icon: <GitBranch size={11} /> },
+        ]}
+        active={mainTab}
+        onChange={v => setMainTab(v as typeof mainTab)}
+        className="mb-5"
+      />
 
       {mainTab === 'template' ? (
         <ProjectSopPanel currentUser={currentUser} sopDocs={docs} />

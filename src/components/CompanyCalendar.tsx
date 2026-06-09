@@ -5,6 +5,7 @@ import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus,
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2 } from 'lucide-react';
+import { TabBar } from './ui/Tabs';
 
 /* ── 상수 ──────────────────────────────────────────────── */
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -355,15 +356,16 @@ export function CompanyCalendar({ currentUser }: Props) {
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
-        {([['calendar', '달력'], ['leave', '연차 내역'], ['routine', '루틴']] as [string, string][]).map(([t, label]) => (
-          <button key={t} onClick={() => setActiveTab(t as typeof activeTab)}
-            className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === t ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'calendar', label: '달력' },
+          { id: 'leave',    label: '연차 내역' },
+          { id: 'routine',  label: '루틴' },
+        ]}
+        active={activeTab}
+        onChange={v => setActiveTab(v as typeof activeTab)}
+        className="mb-4"
+      />
 
       {activeTab === 'routine' && (
         <div>

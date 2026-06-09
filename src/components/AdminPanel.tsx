@@ -8,6 +8,7 @@ import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { DepartmentManager } from './admin/DepartmentManager';
 import { WorkMasterManager } from './admin/WorkMasterManager';
+import { TabBar } from './ui/Tabs';
 import { UserPermissionManager } from './admin/UserPermissionManager';
 import { StoreImportPanel } from './admin/StoreImportPanel';
 import { EmployeeImportPanel } from './admin/EmployeeImportPanel';
@@ -284,21 +285,15 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
 
   return (
     <div className="space-y-6">
-      {/* 탭 전환 */}
-      <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-sm border border-stone-200 dark:border-stone-700 w-fit">
-        <button
-          onClick={() => setAdminTab('general')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold whitespace-nowrap transition-all ${adminTab === 'general' ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'}`}
-        >
-          <Settings2 size={14} /> 일반 관리
-        </button>
-        <button
-          onClick={() => setAdminTab('data')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold whitespace-nowrap transition-all ${adminTab === 'data' ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'}`}
-        >
-          <FolderOpen size={14} /> 데이터 관리
-        </button>
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'general', label: '일반 관리', icon: <Settings2 size={14} /> },
+          { id: 'data',    label: '데이터 관리', icon: <FolderOpen size={14} /> },
+        ]}
+        active={adminTab}
+        onChange={setAdminTab}
+        className="mb-2"
+      />
 
       {adminTab === 'data' ? (
         <div className="space-y-6">
