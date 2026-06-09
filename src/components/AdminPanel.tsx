@@ -131,7 +131,7 @@ interface Props {
 
 export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, currentUser, activeBrand }) => {
   const { confirm } = useConfirm();
-  const [adminTab, setAdminTab] = useState<'general' | 'data'>('general');
+  const [adminTab, setAdminTab] = useState<'personnel' | 'system' | 'data'>('personnel');
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -287,47 +287,46 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
     <div className="space-y-6">
       <TabBar
         tabs={[
-          { id: 'general', label: '일반 관리', icon: <Settings2 size={14} /> },
-          { id: 'data',    label: '데이터 관리', icon: <FolderOpen size={14} /> },
+          { id: 'personnel', label: '인원 관리',   icon: <ShieldAlert size={14} /> },
+          { id: 'system',    label: '시스템 설정', icon: <Settings2 size={14} /> },
+          { id: 'data',      label: '데이터 관리', icon: <FolderOpen size={14} /> },
         ]}
         active={adminTab}
         onChange={setAdminTab}
-        className="mb-2"
+        className="mb-4"
       />
 
-      {adminTab === 'data' ? (
+      {/* ── 데이터 관리 ── */}
+      {adminTab === 'data' && (
         <div className="space-y-6">
           <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
             <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
               <FolderOpen className="text-stone-800 dark:text-stone-300" size={20} />
               <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">매장 마스터 임포트</h2>
             </div>
-            <div className="p-6">
-              <StoreImportPanel />
-            </div>
+            <div className="p-6"><StoreImportPanel /></div>
           </div>
           <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
             <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
               <FolderOpen className="text-stone-800 dark:text-stone-300" size={20} />
               <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">직원 정보 보강 임포트</h2>
             </div>
-            <div className="p-6">
-              <EmployeeImportPanel />
-            </div>
+            <div className="p-6"><EmployeeImportPanel /></div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* ── 시스템 설정 ── */}
+      {adminTab === 'system' && (
         <>
-      {/* 💡 [4단계] 시스템 공통 코드 관리 - 위쪽 배치 및 권한 체크 확실히 */}
-      {(currentUser.role === 'admin' || currentUser.email === 'saemoyang_official@naver.com') && <SystemConfigManager />}
+          {(currentUser.role === 'admin' || currentUser.email === 'saemoyang_official@naver.com') && <SystemConfigManager />}
 
-
-      {/* Database Maintenance Section */}
-      <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
-        <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
-          <Database className="text-stone-800 dark:text-stone-300" size={20} />
-          <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">데이터베이스 관리</h2>
-        </div>
+          {/* Database Maintenance Section */}
+          <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+            <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+              <Database className="text-stone-800 dark:text-stone-300" size={20} />
+              <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">데이터베이스 관리</h2>
+            </div>
         <div className="p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
@@ -385,11 +384,18 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
         </div>
       </div>
 
+          <ProcessManager brandId={brandId} departments={departments} />
+        </>
+      )}
+
+      {/* ── 인원 관리 ── */}
+      {adminTab === 'personnel' && (<>
+
       {/* User Management Section */}
       <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
       <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
         <ShieldAlert className="text-stone-800 dark:text-stone-300" size={20} />
-        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">관리자 패널 - 사용자 관리</h2>
+        <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">사용자 관리</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left text-stone-700 dark:text-stone-400">
@@ -507,10 +513,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
       </div>
     </div>
 
-    {/* 오픈 프로세스 관리 (통합) */}
-    <ProcessManager brandId={brandId} departments={departments} />
-        </>
-      )}
+      </>)}
     </div>
   );
 };
