@@ -36,6 +36,7 @@ const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: 
 const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
 const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
 const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ default: m.FactoryView })));
+const StoreListView = lazy(() => import('./components/store/StoreListView').then(m => ({ default: m.StoreListView })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -66,7 +67,7 @@ enum OperationType {
 const SECTION_GROUP: Record<string, string> = {
   notice: 'comm', meetings: 'comm', daily: 'comm', reports: 'comm',
   projects: 'work', okr: 'work', workmap: 'work', sop: 'work', factory: 'work',
-  calendar: 'sch', employees: 'sch',
+  calendar: 'sch', employees: 'sch', stores: 'sch',
   database: 'mgmt', history: 'mgmt', admin: 'mgmt', agents: 'mgmt',
 };
 
@@ -1301,6 +1302,7 @@ export default function App() {
               items: [
                 { section: 'calendar' as SidebarSection,  icon: <Calendar size={13} />,     label: '캘린더' },
                 { section: 'employees' as SidebarSection, icon: <Users size={13} />,        label: '팀/부서' },
+                { section: 'stores' as SidebarSection,    icon: <Store size={13} />,        label: '매장 관리' },
               ],
             },
           ]).map(group => {
@@ -1706,6 +1708,11 @@ export default function App() {
           {/* 직원 명부 */}
           {sidebar.section === 'employees' && (
             <EmployeeDirectory currentUser={currentUser} />
+          )}
+
+          {/* 매장 관리 */}
+          {sidebar.section === 'stores' && (
+            <StoreListView currentUser={currentUser} />
           )}
 
           {/* 업무 규정 */}
