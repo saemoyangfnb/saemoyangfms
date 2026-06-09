@@ -66,6 +66,35 @@
   @page { margin: 12mm; }
 }
 
+/* ===== 가독성 모드 (사이드바 하단 토글로 개인 설정) ===== */
+
+/* 라이트모드: 흐린 색상 → 짙게 */
+html.readable-mode .text-stone-300,
+html.readable-mode .text-stone-400 { color: rgb(68 64 60) !important; }   /* stone-700 */
+html.readable-mode .text-stone-500 { color: rgb(41 37 36) !important; }   /* stone-800 */
+html.readable-mode .text-slate-300,
+html.readable-mode .text-slate-400 { color: rgb(51 65 85) !important; }   /* slate-700 */
+html.readable-mode .text-slate-500 { color: rgb(30 41 59) !important; }   /* slate-800 */
+
+/* 다크모드: 흐린 색상 → 밝게 */
+html.readable-mode.dark .text-stone-300,
+html.readable-mode.dark .text-stone-400 { color: rgb(231 229 228) !important; }  /* stone-200 */
+html.readable-mode.dark .text-stone-500 { color: rgb(214 211 209) !important; }  /* stone-300 */
+html.readable-mode.dark .text-slate-300,
+html.readable-mode.dark .text-slate-400 { color: rgb(226 232 240) !important; }  /* slate-200 */
+html.readable-mode.dark .text-slate-500 { color: rgb(203 213 225) !important; }  /* slate-300 */
+
+/* 아이콘 등 흐린 색상 계열 */
+html.readable-mode .text-stone-300 svg,
+html.readable-mode .text-stone-400 svg { color: inherit; }
+
+/* 매우 작은 텍스트 → 최소 12px 이상으로 */
+html.readable-mode [class*="text-[9px]"]  { font-size: 12px !important; }
+html.readable-mode [class*="text-[10px]"] { font-size: 13px !important; }
+html.readable-mode [class*="text-[11px]"] { font-size: 13px !important; }
+html.readable-mode [class~="text-xs"]     { font-size: 13px !important; }
+html.readable-mode [class~="text-sm"]     { font-size: 15px !important; }
+
 @keyframes slideIn {
   from {
     opacity: 0;

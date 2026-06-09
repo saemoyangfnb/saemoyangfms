@@ -39,6 +39,7 @@ const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ d
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
+import { useReadabilityMode } from './hooks/useReadabilityMode';
 import {
   Plus, Download, LogOut, KeyRound, Sun, Moon,
   Archive, AlertTriangle, Trash2, X, ChevronLeft, ChevronRight,
@@ -46,7 +47,7 @@ import {
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
-  Flag, GitBranch, Building2, Target, FolderKanban, Package,
+  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type,
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
@@ -455,6 +456,7 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const { enabled: readableMode, toggle: toggleReadableMode } = useReadabilityMode();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -1493,6 +1495,13 @@ export default function App() {
               </div>
             )}
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={toggleReadableMode}
+                className={`p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors ${readableMode ? 'text-stone-900 dark:text-stone-100 bg-stone-200 dark:bg-stone-800' : 'text-stone-500'}`}
+                title={readableMode ? '가독성 모드 켜짐 — 클릭해서 끄기' : '가독성 모드 끄기 — 클릭해서 켜기'}
+              >
+                <Type size={14} />
+              </button>
               <button onClick={toggleTheme} className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="테마">
                 {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
               </button>
