@@ -239,7 +239,8 @@ function MorningForm({
                 onChange={v => updateText(i, v)}
                 onKeyDown={e => handleKeyDown(e, i)}
                 placeholder="업무 내용 입력 (@매장명으로 매장 멘션)"
-                className="flex-1 px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
+                wrapperClassName="flex-1 min-w-0"
+                className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
               />
               {items.length > 1 && (
                 <button onClick={() => setItems(p => p.filter((_, idx) => idx !== i))} className="text-stone-300 hover:text-stone-500 shrink-0">

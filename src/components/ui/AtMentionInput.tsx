@@ -75,10 +75,11 @@ interface Props extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onCha
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  wrapperClassName?: string;
 }
 
 export const AtMentionInput = React.forwardRef<HTMLInputElement, Props>(
-function AtMentionInput({ value, onChange, className = '', ...rest }, forwardedRef) {
+function AtMentionInput({ value, onChange, className = '', wrapperClassName, ...rest }, forwardedRef) {
   const [stores, setStores] = useState<Store[]>([]);
   const [popover, setPopover] = useState<{ q: string; atPos: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +126,7 @@ function AtMentionInput({ value, onChange, className = '', ...rest }, forwardedR
   }, [value, onChange, popover]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={`relative ${wrapperClassName ?? 'w-full'}`}>
       <input
         ref={setRef}
         value={value}

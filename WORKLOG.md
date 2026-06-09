@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-06-09 (6) — Claude Code
+
+### 완료
+- **AtMentionInput flex 버그 수정**: `wrapperClassName` prop 추가, 기본값 `w-full`
+  - wrapper `div`에 flex-1 적용 안 되는 문제 해결 (className은 inner `<input>`에만 적용됨)
+  - DailyReportView MorningForm: `wrapperClassName="flex-1 min-w-0"` + `className="w-full ..."`
+  - 업무 항목 2개 이상 추가 시 삭제 버튼 나타나며 input이 찌그러지던 버그 수정
+- **CalendarFilter 칩 UI, OnboardingTour** (이전 세션 계속): 빌드 확인 완료
+
+---
+
+## 2026-06-09 (5) — Claude Code
+
+### 완료 & 배포
+- **[3-A] 전사 검색 (GlobalSearch)**: Ctrl+K 단축키 + 사이드바/모바일 헤더 버튼
+  - salesDb: stores, employees, notices, meetings 통합 검색 (클라이언트 사이드)
+  - 결과 타입별 그룹핑, 클릭 시 해당 섹션으로 이동
+- **[3-B] @ 태그 + store_mentions**: AtMentionInput 컴포넌트 신규
+  - DailyReportView 출근 항목 / MeetingView 안건 제목에 적용
+  - 저장 시 salesDb.store_mentions 기록 → StoreListView 우측 패널에 "언급 이력" 섹션
+- **배포**: git push → Vercel 자동 배포 (a236476)
+
+### 마스터 플랜 현황
+- 1-A, 1-B, 1-C, 2-A~D, 3-A, 3-B 완료. 3-C(AI) 제외 전체 완료.
+
+---
+
 ## 2026-06-09 (4) — Claude Code
 
 ### 완료
