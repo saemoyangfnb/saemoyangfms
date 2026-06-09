@@ -21,6 +21,7 @@ import { useConfirm } from './ConfirmModal';
 import { User, Employee } from '../types';
 import { TaskRequestModal } from './TaskRequestModal';
 import { shareKakao } from '../utils/kakao';
+import { AtMentionInput, saveMentions } from './ui/AtMentionInput';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface CheckItem { text: string; done: boolean; assignee?: string }
@@ -177,8 +178,8 @@ function SortableAgendaBlock({ idx, data, employees, onChange, onRemove }: {
       </div>
       <div className="mb-3">
         <label className="block text-[11px] font-semibold text-stone-500 dark:text-stone-400 mb-1">안건 제목 *</label>
-        <input type="text" value={data.title} onChange={e => onChange({ ...data, title: e.target.value })}
-          placeholder="안건을 한 줄로 요약"
+        <AtMentionInput value={data.title} onChange={v => onChange({ ...data, title: v })}
+          placeholder="안건을 한 줄로 요약 (@매장명으로 매장 멘션)"
           className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500" />
       </div>
       <div className="mb-3">
@@ -1023,6 +1024,8 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
       const exists = prev.find(x => x.id === m.id);
       return exists ? prev.map(x => x.id === m.id ? m : x) : [m, ...prev];
     });
+    const agendaTexts = (m.agendas ?? []).map(a => a.title).filter(Boolean);
+    saveMentions(agendaTexts, 'meeting', m.id, m.title, m.date);
     setSelectedId(m.id);
     setEditingId(null);
     setView('detail');

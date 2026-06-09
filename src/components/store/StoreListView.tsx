@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb } from '../../firebase';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
 import { Store, FranchiseSchedule, User } from '../../types';
-import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check } from 'lucide-react';
+import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare } from 'lucide-react';
 import { useToast } from '../Toast';
+import { MentionRecord } from '../ui/AtMentionInput';
 
 interface Props {
   currentUser: User;
@@ -25,6 +26,7 @@ export function StoreListView({ currentUser }: Props) {
   const [schedules, setSchedules] = useState<FranchiseSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Store | null>(null);
+  const [mentions, setMentions] = useState<(MentionRecord & { id: string })[]>([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [mappingMode, setMappingMode] = useState(false);
@@ -42,6 +44,14 @@ export function StoreListView({ currentUser }: Props) {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    getDocs(query(collection(salesDb, 'store_mentions'), where('storeId', '==', selected.id)))
+      .then(snap => setMentions(snap.docs.map(d => ({ id: d.id, ...d.data() } as MentionRecord & { id: string }))
+        .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))))
+      .catch(() => {});
+  }, [selected?.id]);
 
   const statuses = useMemo(() => [...new Set(stores.map(s => s.status).filter(Boolean))].sort(), [stores]);
 
@@ -334,6 +344,35 @@ export function StoreListView({ currentUser }: Props) {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* 언급 이력 */}
+            <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden">
+              <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center gap-1.5">
+                <MessageSquare size={10} className="text-stone-400" />
+                <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">언급 이력</p>
+                <span className="text-stone-300 dark:text-stone-600 font-bold">({mentions.length}건)</span>
+              </div>
+              {mentions.length === 0 ? (
+                <div className="py-6 text-center text-xs font-bold text-stone-300 dark:text-stone-600">
+                  회의록·업무보고에서 @{selected.name}으로 멘션하면 여기 쌓입니다
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                  {mentions.map(m => (
+                    <div key={m.id} className="px-4 py-3">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm ${m.sourceType === 'meeting' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                          {m.sourceType === 'meeting' ? '회의록' : '업무보고'}
+                        </span>
+                        <span className="text-[10px] font-bold text-stone-400">{m.date}</span>
+                      </div>
+                      <p className="text-xs font-bold text-stone-700 dark:text-stone-300 truncate">{m.sourceTitle}</p>
+                      {m.excerpt && <p className="text-[11px] text-stone-400 truncate mt-0.5">{m.excerpt}</p>}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

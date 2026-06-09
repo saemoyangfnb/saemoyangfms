@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-06-09 (4) — Claude Code
+
+### 완료
+- **[2-D] CompanyCalendar 멀티뷰 구현** (이전 세션 이어받아 완성)
+  - TabBar: `달력` 단일 탭 → `전체 / 개인 / 오픈 일정 / 연차 내역 / 루틴` 5탭으로 확장
+  - `eventsForDate(ymd, view)`: view별 필터 — open=가맹점 오픈 이벤트만, personal=내 개인 일정만, all=전체+연차+오픈
+  - 연차 내역 탭: `else` 블록에서 `activeTab === 'leave'` 명시적 조건으로 분리
+  - 오픈 탭 범례: 가맹 오픈 이벤트 색상만 표시, 개인 탭 범례: 개인 이벤트 타입만 표시
+  - `franchiseEvents` 로드: `franchise_schedules`의 openDate → CalendarEvent type='franchise' 변환
+
+### 다음 작업
+- **[1-A] 매장 상세 패널** — 가맹 스케줄 카드 클릭 시 상세 패널 진입 (미완)
+
+---
+
 ## 2026-06-09 (3) — Claude Code
 
 ### 완료

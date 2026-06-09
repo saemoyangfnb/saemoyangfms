@@ -9,6 +9,7 @@ import { useToast } from './Toast';
 import { FeedView } from './FeedView';
 import { shareDailyReport, shareWeeklyReport } from '../utils/kakao';
 import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText } from 'lucide-react';
+import { AtMentionInput, saveMentions } from './ui/AtMentionInput';
 
 /* ── 상수 ─────────────────────────────────────────────── */
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -232,12 +233,12 @@ function MorningForm({
               <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">
                 {selectedCarry.size + i + 1}.
               </span>
-              <input
+              <AtMentionInput
                 ref={el => { inputRefs.current[i] = el; }}
                 value={item.text}
-                onChange={e => updateText(i, e.target.value)}
+                onChange={v => updateText(i, v)}
                 onKeyDown={e => handleKeyDown(e, i)}
-                placeholder="업무 내용 입력"
+                placeholder="업무 내용 입력 (@매장명으로 매장 멘션)"
                 className="flex-1 px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 dark:focus:border-stone-400"
               />
               {items.length > 1 && (
@@ -603,6 +604,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
         items: newItems, updatedAt: new Date().toISOString(),
       });
+      saveMentions(submitted.map(it => it.text), 'daily', myMorning.id, `${date} 출근보고`, date);
       setIsEditingMorning(false);
       toast.success('출근 보고가 수정되었습니다');
     } else {
@@ -613,6 +615,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         date, type: 'morning', items: newItems,
         submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
+      saveMentions(submitted.map(it => it.text), 'daily', id, `${date} 출근보고`, date);
       toast.success('출근 보고 완료');
       setKakaoTarget({
         type: 'morning',

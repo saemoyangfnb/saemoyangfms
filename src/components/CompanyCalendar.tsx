@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy } from 'firebase/firestore';
-import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine } from '../types';
+import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine, FranchiseSchedule } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2 } from 'lucide-react';
@@ -98,7 +98,8 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState<EventForm>(emptyEventForm());
   const [leaveForm, setLeaveForm] = useState<LeaveForm>(emptyLeaveForm());
-  const [activeTab, setActiveTab] = useState<'calendar' | 'leave' | 'routine'>('calendar');
+  const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'open' | 'leave' | 'routine'>('all');
+  const [franchiseEvents, setFranchiseEvents] = useState<CalendarEvent[]>([]);
 
   // ── 루틴 상태 ──
   const [routines, setRoutines] = useState<CalendarRoutine[]>([]);
@@ -161,6 +162,37 @@ export function CompanyCalendar({ currentUser }: Props) {
   };
 
   useEffect(() => { fetchData(); }, [year, month]);
+
+  useEffect(() => {
+    getDocs(collection(salesDb, 'franchise_schedules')).then(snap => {
+      const fEvents: CalendarEvent[] = [];
+      snap.docs.forEach(d => {
+        const sch = d.data() as FranchiseSchedule;
+        if (sch.openDate) {
+          fEvents.push({
+            id: `franchise_${d.id}_open`,
+            type: 'franchise',
+            title: `🏪 ${sch.storeName}`,
+            startDate: sch.openDate, endDate: sch.openDate,
+            allDay: true, visibility: 'all',
+            createdAt: '', updatedAt: '',
+          });
+        }
+        if (sch.constructionStart) {
+          fEvents.push({
+            id: `franchise_${d.id}_const`,
+            type: 'franchise',
+            title: `🔨 ${sch.storeName} 공사`,
+            startDate: sch.constructionStart,
+            endDate: sch.constructionEnd || sch.constructionStart,
+            allDay: true, visibility: 'all',
+            createdAt: '', updatedAt: '',
+          });
+        }
+      });
+      setFranchiseEvents(fEvents);
+    }).catch(() => {});
+  }, []);
 
   /* ── 루틴 로드 ── */
   const fetchRoutines = async () => {
@@ -238,7 +270,17 @@ export function CompanyCalendar({ currentUser }: Props) {
   }, [year, month]);
 
   /* 날짜별 이벤트 */
-  const eventsForDate = (ymd: string) => {
+  const eventsForDate = (ymd: string, view: typeof activeTab = activeTab) => {
+    if (view === 'open') {
+      return franchiseEvents.filter(e => e.startDate <= ymd && e.endDate >= ymd);
+    }
+    if (view === 'personal') {
+      return events.filter(e =>
+        e.startDate <= ymd && e.endDate >= ymd &&
+        e.visibility === 'private' && e.employeeId === myEmployee?.id
+      );
+    }
+    // 전체 (all)
     const dayEvents = events.filter(e => e.startDate <= ymd && e.endDate >= ymd);
     const approvedLeaves = leaveRequests.filter(
       l => l.status === 'approved' && l.startDate <= ymd && l.endDate >= ymd
@@ -248,7 +290,8 @@ export function CompanyCalendar({ currentUser }: Props) {
       startDate: l.startDate, endDate: l.endDate, allDay: true, visibility: 'all',
       createdAt: l.submittedAt, updatedAt: l.submittedAt,
     }));
-    return [...dayEvents, ...leaveEvents];
+    const dayFranchise = franchiseEvents.filter(e => e.startDate <= ymd && e.endDate >= ymd);
+    return [...dayEvents, ...leaveEvents, ...dayFranchise];
   };
 
   const getEmpName = (id: string) => employees.find(e => e.id === id)?.name ?? '-';
@@ -358,7 +401,9 @@ export function CompanyCalendar({ currentUser }: Props) {
 
       <TabBar
         tabs={[
-          { id: 'calendar', label: '달력' },
+          { id: 'all',      label: '전체' },
+          { id: 'personal', label: '개인' },
+          { id: 'open',     label: '오픈 일정' },
           { id: 'leave',    label: '연차 내역' },
           { id: 'routine',  label: '루틴' },
         ]}
@@ -504,7 +549,7 @@ export function CompanyCalendar({ currentUser }: Props) {
         </div>
       )}
 
-      {activeTab === 'calendar' ? (
+      {(['all', 'personal', 'open'] as const).includes(activeTab as 'all' | 'personal' | 'open') ? (
         <>
           {/* 월 네비게이션 */}
           <div className="flex items-center gap-3 mb-4">
@@ -514,16 +559,23 @@ export function CompanyCalendar({ currentUser }: Props) {
             <button onClick={goToday} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold ml-2">
               <RefreshCw size={11} /> 오늘
             </button>
-            {/* 범례 — 데스크탑만 표시 */}
+            {/* 범례 */}
             <div className="ml-auto hidden sm:flex items-center gap-3 flex-wrap">
-              {(Object.entries(EVENT_COLORS) as [CalendarEventType, string][])
-                .filter(([type]) => type !== 'franchise')
-                .map(([type, color]) => (
-                  <span key={type} className="flex items-center gap-1 text-[11px] text-stone-500">
-                    <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
-                    {EVENT_TEXT[type]}
-                  </span>
-                ))}
+              {activeTab === 'open' ? (
+                <span className="flex items-center gap-1 text-[11px] text-stone-500">
+                  <span className={`w-2.5 h-2.5 rounded-full ${EVENT_COLORS['franchise']}`} />
+                  {EVENT_TEXT['franchise']}
+                </span>
+              ) : (
+                (Object.entries(EVENT_COLORS) as [CalendarEventType, string][])
+                  .filter(([type]) => activeTab === 'personal' ? type === 'personal' : true)
+                  .map(([type, color]) => (
+                    <span key={type} className="flex items-center gap-1 text-[11px] text-stone-500">
+                      <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+                      {EVENT_TEXT[type]}
+                    </span>
+                  ))
+              )}
             </div>
           </div>
 
@@ -580,7 +632,9 @@ export function CompanyCalendar({ currentUser }: Props) {
             </div>
           )}
         </>
-      ) : (
+      ) : null}
+
+      {activeTab === 'leave' && (
         /* 연차 내역 탭 */
         <div className="space-y-3">
           {myLeaves.length === 0 ? (

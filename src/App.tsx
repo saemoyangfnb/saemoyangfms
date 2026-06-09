@@ -48,8 +48,9 @@ import {
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
-  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type,
+  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search,
 } from 'lucide-react';
+import { GlobalSearch } from './components/GlobalSearch';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
 import { auth, db, reviewDb, salesDb } from './firebase';
@@ -473,6 +474,7 @@ export default function App() {
   const [brands, setBrands] = useState<Brand[]>(DEFAULT_BRANDS);
   const [expandedBrands, setExpandedBrands] = useState<Set<BrandId>>(new Set(['dalbitgo']));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const toggleGroup = (id: string) => setExpandedGroups(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -539,6 +541,17 @@ export default function App() {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
   useEffect(() => {
@@ -1202,6 +1215,14 @@ export default function App() {
         />
       )}
 
+      {/* 전사 검색 오버레이 */}
+      {showGlobalSearch && (
+        <GlobalSearch
+          onClose={() => setShowGlobalSearch(false)}
+          onNavigate={(brandId, section) => navigateTo(brandId as any, section as any)}
+        />
+      )}
+
       {/* 모바일 햄버거 버튼 */}
       {isMobile && (
         <header className="bg-[#FDFBF7]/95 dark:bg-stone-900/95 backdrop-blur-md fixed top-0 w-full z-40 border-b-[3px] border-double border-stone-800 dark:border-stone-400 h-14 flex items-center justify-between px-4 shadow-sm print:hidden">
@@ -1211,6 +1232,9 @@ export default function App() {
             </button>
             <h1 className="text-lg font-black tracking-tight text-stone-900 dark:text-stone-100 select-none">SAEMOYANG F&B</h1>
           </div>
+          <button onClick={() => setShowGlobalSearch(true)} className="p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-sm transition-colors">
+            <Search size={18} />
+          </button>
         </header>
       )}
 
@@ -1234,9 +1258,14 @@ export default function App() {
             </button>
           )}
           {!isMobile && (
-            <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 ml-auto">
-              {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
-            </button>
+            <div className="flex items-center gap-0.5 ml-auto">
+              <button onClick={() => setShowGlobalSearch(true)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500" title="검색 (Ctrl+K)">
+                <Search size={14} />
+              </button>
+              <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500">
+                {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+              </button>
+            </div>
           )}
           {isMobile && (
             <button onClick={() => setMobileSidebarOpen(false)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 ml-auto">
