@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-06-09 (3) — Claude Code
+
+### 완료
+- **가독성 모드 구현**: `useReadabilityMode` 훅 + CSS 오버라이드 + 사이드바 하단 `T` 토글 버튼
+  - text-stone/slate-400 계열 선명하게, text-[10px]/text-xs 등 확대, localStorage 개인 설정 저장
+- **마스터 플랜 수립** (`PLAN_master.md`): 매장 중심 3단계 로드맵
+  - 기존 PLAN 4개 흡수/정리. 1단계: 매장상세패널 + 역할별홈 + SV연결
+  - 2단계: 사이드바 슬림화 + UI통일. 3단계: 검색·AI 확장
+
+### 다음 작업
+- **[1-A] 매장 상세 패널** — `StoreDetailPanel.tsx` 신규, FranchiseScheduleView 카드에서 진입
+
+---
+
 ## 2026-06-09 (2) — Claude Code
 
 ### 완료

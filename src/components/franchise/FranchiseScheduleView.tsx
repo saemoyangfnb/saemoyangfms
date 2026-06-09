@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, onSnapshot, query, where, writeBatch, orderBy } from 'firebase/firestore';
 import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig, DepartmentTask, Employee } from '../../types';
-import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, LayoutList } from 'lucide-react';
+import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, LayoutList, PanelRight } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -14,6 +14,7 @@ import { ScheduleFormModal } from './ScheduleFormModal';
 import { TeamSettingsModal } from './TeamSettingsModal';
 import { OpenChecklistView } from './OpenChecklistView';
 import { DepartmentTaskView } from './DepartmentTaskView';
+import { StoreDetailPanel } from '../store/StoreDetailPanel';
 import { addDays, computeWorkItemDates } from '../../utils';
 import {
   ProcessSettings,
@@ -99,6 +100,7 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
   const [checklistScrollToItemId, setChecklistScrollToItemId] = useState<string | undefined>(undefined);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
   const [processSettings, setProcessSettings] = useState<ProcessSettings>(DEFAULT_PROCESS_SETTINGS);
+  const [detailSchedule, setDetailSchedule] = useState<FranchiseSchedule | null>(null);
   
   const [hoveredTeam, setHoveredTeam] = useState<{ name: string, members: any[], x: number, y: number } | null>(null);
 
@@ -1261,7 +1263,7 @@ ${transcript}`;
                         <div key={sch.id} className={`bg-[#FDFBF7] dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-sm p-6 shadow-none hover:border-stone-800 transition-all flex flex-col ${sch.archived ? 'opacity-60' : ''}`}>
                           {/* Header: Actions & Visibility */}
                           <div className="flex justify-between items-start mb-4 border-b border-stone-300 dark:border-stone-700 pb-3">
-                            <button onClick={() => { setChecklistSelectedStoreId(sch.id); setViewTab('store'); }} className="text-left group flex-1 min-w-0">
+                            <button onClick={() => setDetailSchedule(sch)} className="text-left group flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <div className={`w-3 h-3 rounded-full flex-shrink-0 bg-${sch.colorCode || 'slate'}-500 shadow-sm`} />
                                 <span className="font-black text-xl tracking-tight text-stone-900 dark:text-white group-hover:text-stone-600 transition-colors truncate">{sch.storeName}</span>
@@ -1288,8 +1290,16 @@ ${transcript}`;
                                 )}
                               </div>
                             </button>
-                            {!isReadOnly && (
                             <div className="flex items-center gap-1 shrink-0 ml-2">
+                              <button
+                                onClick={() => setDetailSchedule(sch)}
+                                className="p-1.5 text-stone-500 border border-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+                                title="매장 상세 보기"
+                              >
+                                <PanelRight size={15} />
+                              </button>
+                            {!isReadOnly && (
+                            <>
                                <button
                                  onClick={() => { updateDoc(doc(db, 'franchise_schedules', sch.id), { showInCalendar: sch.showInCalendar === false }); }}
                                  className={`p-1.5 rounded-sm transition-colors border ${sch.showInCalendar !== false ? 'text-blue-800 border-blue-200 bg-blue-50 hover:bg-blue-100' : 'text-stone-400 border-stone-200 hover:bg-stone-100'}`}
@@ -1309,8 +1319,9 @@ ${transcript}`;
                                <button onClick={() => handleDeleteSchedule(sch.id)} className="p-1.5 text-rose-700 border border-rose-200 bg-rose-50 hover:bg-rose-100 rounded-sm transition-colors" title="삭제">
                                  <X size={15} />
                                </button>
-                            </div>
+                            </>
                             )}
+                            </div>
                           </div>
                           
                           {/* Info Grid — schedule_date masterItems 기반 동적 렌더링 */}
@@ -1640,6 +1651,29 @@ ${transcript}`;
               {renderLivePreview()}
             </div>
           </div>
+        )}
+
+        {/* 매장 상세 패널 */}
+        {detailSchedule && (
+          <StoreDetailPanel
+            schedule={detailSchedule}
+            allSchedules={schedules}
+            employees={employees}
+            departments={dbDepartments}
+            processSettings={processSettings}
+            isReadOnly={isReadOnly}
+            onClose={() => setDetailSchedule(null)}
+            onOpenChecklist={() => {
+              setChecklistSelectedStoreId(detailSchedule.id);
+              setViewTab('store');
+              setDetailSchedule(null);
+            }}
+            onEdit={() => {
+              setEditingData(detailSchedule);
+              setShowForm(true);
+              setDetailSchedule(null);
+            }}
+          />
         )}
     </div>
   );
