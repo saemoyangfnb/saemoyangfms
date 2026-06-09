@@ -61,6 +61,7 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
   const [monthsView, setMonthsView] = useState<1 | 2>(1);
   const [search, setSearch] = useState('');
   const [filterTeam, setFilterTeam] = useState('');
+  const [showMineOnly, setShowMineOnly] = useState(false);
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('all');
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -1045,15 +1046,20 @@ ${transcript}`;
     );
   };
 
+  const currentEmployee = useMemo(() =>
+    employees.find(e => e.linkedUid === currentUser?.uid) ?? null,
+  [employees, currentUser?.uid]);
+
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
       if (!showArchived && s.archived) return false;
       if (showArchived && !s.archived) return false;
       if (search && !s.storeName.includes(search)) return false;
       if (filterTeam && s.team !== filterTeam) return false;
+      if (showMineOnly && currentEmployee && s.supervisorId !== currentEmployee.id) return false;
       return true;
     }).sort((a, b) => (a.openDate || '').localeCompare(b.openDate || ''));
-  }, [schedules, search, filterTeam, showArchived]);
+  }, [schedules, search, filterTeam, showArchived, showMineOnly, currentEmployee]);
 
   const timelineDates = useMemo(() => {
     const y = currentMonth.getFullYear();
@@ -1187,6 +1193,14 @@ ${transcript}`;
          </div>
 
          <div className="flex items-center gap-2 flex-wrap">
+            {currentEmployee && (
+              <button
+                onClick={() => setShowMineOnly(p => !p)}
+                className={`px-3 py-1.5 text-sm font-bold rounded-sm border transition-colors ${showMineOnly ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-900 dark:border-stone-100' : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-700 hover:border-stone-800'}`}
+              >
+                내 담당만
+              </button>
+            )}
             <select className="px-3 py-1.5 text-sm font-bold bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-sm focus:outline-none focus:border-stone-800" value={filterTeam} onChange={e => setFilterTeam(e.target.value)}>
               <option value="">전체 팀</option>
               {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
