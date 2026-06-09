@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Brand, Menu, Ingredient, IngredientChange, BrandId, SidebarSection, CostTabType, OperationType, Notice } from '../types';
+import { User, Brand, Menu, Ingredient, IngredientChange, BrandId, SidebarSection, CostTabType, OperationType, Notice, Employee, FranchiseSchedule } from '../types';
 import { checkMenuAlert } from '../utils';
 import { salesDb } from '../firebase';
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
@@ -8,7 +8,19 @@ import {
   CalendarDays, Sparkles, TriangleAlert, FileText,
   ClipboardList, NotebookPen, Megaphone, Calendar,
   Users, ChevronRight, Pin, Settings, FolderKanban,
+  AlertCircle,
 } from 'lucide-react';
+
+function calcDday(openDate: string): number | null {
+  if (!openDate) return null;
+  const open = new Date(openDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((open.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+const EXEC_POSITIONS = ['대표', '전무', '이사', '부장'];
+
 
 // ── 위젯 정의 ──────────────────────────────────────────────
 type WidgetId = 'quicknav' | 'notices' | 'projects' | 'meetings' | 'brands';
@@ -90,6 +102,30 @@ export function HomePage({
   const [latestNotices,   setLatestNotices]   = useState<Notice[]>([]);
   const [recentMeetings,  setRecentMeetings]  = useState<{ id: string; title: string; date: string; authorName?: string }[]>([]);
   const [recentProjects,  setRecentProjects]  = useState<{ id: string; title: string; status: string; updatedAt: string }[]>([]);
+  const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
+  const [mySchedules,     setMySchedules]     = useState<FranchiseSchedule[]>([]);
+  const [execSchedules,   setExecSchedules]   = useState<FranchiseSchedule[]>([]);
+
+  useEffect(() => {
+    getDocs(query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid)))
+      .then(snap => {
+        if (snap.empty) return;
+        const emp = { id: snap.docs[0].id, ...snap.docs[0].data() } as Employee;
+        setCurrentEmployee(emp);
+        if (emp.position === '슈퍼바이저') {
+          getDocs(query(collection(salesDb, 'franchise_schedules'), where('supervisorId', '==', emp.id)))
+            .then(schSnap => setMySchedules(schSnap.docs.map(d => ({ id: d.id, ...d.data() } as FranchiseSchedule)).filter(s => !s.archived)))
+            .catch(() => {});
+        }
+      }).catch(() => {});
+  }, [currentUser.uid]);
+
+  useEffect(() => {
+    if (currentUser.role !== 'admin') return;
+    getDocs(collection(salesDb, 'franchise_schedules'))
+      .then(snap => setExecSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() } as FranchiseSchedule))))
+      .catch(() => {});
+  }, [currentUser.role]);
 
   useEffect(() => {
     const d    = new Date();
@@ -124,6 +160,9 @@ export function HomePage({
   }, []);
 
   const alertMenus = menus.filter(m => (m.hasAlert || checkMenuAlert(m, ingredients, menus)) && !m.isArchived).length;
+
+  const isSV   = currentEmployee?.position === '슈퍼바이저';
+  const isExec = currentUser.role === 'admin' || EXEC_POSITIONS.includes(currentEmployee?.position ?? '');
 
   /* 인트라넷 빠른 이동 */
   const quickNavItems = [
@@ -210,6 +249,84 @@ export function HomePage({
           ))}
         </div>
       </div>
+
+      {/* ── SV 담당 매장 섹션 ── */}
+      {isSV && !isExec && mySchedules.length > 0 && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+            <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase flex items-center gap-1.5">
+              <Store size={11} /> 내 담당 매장
+            </p>
+            <button onClick={() => onNavigate('dalbitgo', 'franchise')} className="text-[10px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300">
+              전체 보기 →
+            </button>
+          </div>
+          <div className="divide-y divide-stone-100 dark:divide-stone-800">
+            {[...mySchedules].sort((a, b) => (a.openDate || '').localeCompare(b.openDate || '')).map(sch => {
+              const dday = calcDday(sch.openDate ?? '');
+              const ddayStr = dday === null ? '-' : dday === 0 ? 'D-Day' : dday > 0 ? `D-${dday}` : `D+${Math.abs(dday)}`;
+              const ddayCls = dday !== null && dday <= 7 ? 'text-rose-600 dark:text-rose-400' : dday !== null && dday <= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400';
+              return (
+                <button key={sch.id} onClick={() => onNavigate((sch.brandId as BrandId) ?? 'dalbitgo', 'franchise')}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors text-left">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-stone-800 dark:text-stone-200 truncate">{sch.storeName}</p>
+                      <p className="text-[10px] font-bold text-stone-400">{sch.storeNumber || '호수 미정'} · {sch.team || '팀 미정'}</p>
+                    </div>
+                  </div>
+                  <span className={`text-sm font-black shrink-0 ml-4 ${ddayCls}`}>{ddayStr}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── 경영진 파이프라인 섹션 ── */}
+      {isExec && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+            <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase flex items-center gap-1.5">
+              <LayoutDashboard size={11} /> 오픈 파이프라인
+            </p>
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-stone-100 dark:divide-stone-800">
+            {[
+              { label: '진행중',     count: execSchedules.filter(s => !s.archived).length,  cls: 'text-amber-600 dark:text-amber-400' },
+              { label: '이번 주 오픈', count: execSchedules.filter(s => { const d = calcDday(s.openDate ?? ''); return d !== null && d >= 0 && d <= 7 && !s.archived; }).length, cls: 'text-rose-600 dark:text-rose-400' },
+              { label: '오픈완료',   count: execSchedules.filter(s => s.archived).length,   cls: 'text-emerald-600 dark:text-emerald-400' },
+            ].map(stat => (
+              <button key={stat.label} onClick={() => onNavigate('dalbitgo', 'franchise')}
+                className="flex flex-col items-center py-4 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                <span className={`text-2xl font-black ${stat.cls}`}>{stat.count}</span>
+                <span className="text-[10px] font-bold text-stone-400 mt-0.5">{stat.label}</span>
+              </button>
+            ))}
+          </div>
+          {execSchedules.filter(s => !s.archived && (() => { const d = calcDday(s.openDate ?? ''); return d !== null && d <= 14 && d >= -3; })()).length > 0 && (
+            <div className="border-t border-stone-100 dark:border-stone-800 px-4 py-3 space-y-1">
+              <p className="text-[10px] font-black text-rose-500 tracking-widest mb-2 flex items-center gap-1.5">
+                <AlertCircle size={10} /> 14일 이내 오픈
+              </p>
+              {execSchedules
+                .filter(s => !s.archived && (() => { const d = calcDday(s.openDate ?? ''); return d !== null && d <= 14 && d >= -3; })())
+                .sort((a, b) => (a.openDate || '').localeCompare(b.openDate || ''))
+                .map(sch => {
+                  const d = calcDday(sch.openDate ?? '')!;
+                  return (
+                    <div key={sch.id} className="flex items-center justify-between py-1">
+                      <span className="text-xs font-bold text-stone-700 dark:text-stone-300">{sch.storeName}</span>
+                      <span className={`text-xs font-black ${d <= 0 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {d === 0 ? 'D-Day' : d > 0 ? `D-${d}` : `D+${Math.abs(d)}`}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 빠른 이동 + 공지사항 ── */}
       {(on('quicknav') || on('notices')) && (
