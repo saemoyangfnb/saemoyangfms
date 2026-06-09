@@ -849,10 +849,15 @@ export interface CalendarRoutine {
   ownerId: string;
   ownerName: string;
   recurrence: 'daily' | 'weekly' | 'monthly';
-  weekdays?: number[];
+  weekdays?: number[];        // 0=일 ~ 6=토. daily에서도 특정 요일만 가능
   monthDay?: number;
   timeSlot: 'morning' | 'afternoon' | 'allday';
-  isTeamRoutine: boolean;
+  durationMinutes?: number;  // 소요 시간 (15/30/60/90/120)
+  priority?: 'high' | 'medium' | 'low';
+  color?: string;             // 'stone' | 'red' | 'orange' | 'amber' | 'emerald' | 'blue' | 'purple'
+  description?: string;       // 메모
+  visibility: 'personal' | 'team';  // 이전 isTeamRoutine 대체
+  isTeamRoutine: boolean;     // 하위호환
   isActive: boolean;
   createdAt: string;
 }

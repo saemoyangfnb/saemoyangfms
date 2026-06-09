@@ -106,7 +106,18 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [completedToday, setCompletedToday] = useState<Set<string>>(new Set());
   const [showRoutineForm, setShowRoutineForm] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<CalendarRoutine | null>(null);
-  const [rForm, setRForm] = useState({ title: '', recurrence: 'daily' as CalendarRoutine['recurrence'], weekdays: [] as number[], monthDay: 1, timeSlot: 'allday' as CalendarRoutine['timeSlot'] });
+  const [rForm, setRForm] = useState({
+    title: '',
+    recurrence: 'daily' as CalendarRoutine['recurrence'],
+    weekdays: [] as number[],
+    monthDay: 1,
+    timeSlot: 'allday' as CalendarRoutine['timeSlot'],
+    durationMinutes: 0,
+    priority: 'medium' as NonNullable<CalendarRoutine['priority']>,
+    color: 'stone' as NonNullable<CalendarRoutine['color']>,
+    description: '',
+    visibility: 'personal' as CalendarRoutine['visibility'],
+  });
   const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -208,8 +219,10 @@ export function CompanyCalendar({ currentUser }: Props) {
 
   const isTodayRoutine = (r: CalendarRoutine) => {
     const now = new Date();
+    const todayDay = now.getDay();
+    if (r.weekdays && r.weekdays.length > 0 && !r.weekdays.includes(todayDay)) return false;
     if (r.recurrence === 'daily') return true;
-    if (r.recurrence === 'weekly') return (r.weekdays ?? []).includes(now.getDay());
+    if (r.recurrence === 'weekly') return (r.weekdays ?? []).includes(todayDay);
     if (r.recurrence === 'monthly') return r.monthDay === now.getDate();
     return false;
   };
@@ -227,19 +240,44 @@ export function CompanyCalendar({ currentUser }: Props) {
   };
 
   const openRoutineForm = (r?: CalendarRoutine) => {
-    if (r) { setEditingRoutine(r); setRForm({ title: r.title, recurrence: r.recurrence, weekdays: r.weekdays ?? [], monthDay: r.monthDay ?? 1, timeSlot: r.timeSlot }); }
-    else { setEditingRoutine(null); setRForm({ title: '', recurrence: 'daily', weekdays: [], monthDay: 1, timeSlot: 'allday' }); }
+    if (r) {
+      setEditingRoutine(r);
+      setRForm({
+        title: r.title,
+        recurrence: r.recurrence,
+        weekdays: r.weekdays ?? [],
+        monthDay: r.monthDay ?? 1,
+        timeSlot: r.timeSlot,
+        durationMinutes: r.durationMinutes ?? 0,
+        priority: r.priority ?? 'medium',
+        color: r.color ?? 'stone',
+        description: r.description ?? '',
+        visibility: r.visibility ?? (r.isTeamRoutine ? 'team' : 'personal'),
+      });
+    } else {
+      setEditingRoutine(null);
+      setRForm({ title: '', recurrence: 'daily', weekdays: [], monthDay: 1, timeSlot: 'allday', durationMinutes: 0, priority: 'medium', color: 'stone', description: '', visibility: 'personal' });
+    }
     setShowRoutineForm(true);
   };
 
   const saveRoutine = async () => {
     if (!rForm.title.trim()) return;
     const base: Omit<CalendarRoutine, 'id' | 'createdAt'> = {
-      title: rForm.title.trim(), recurrence: rForm.recurrence,
-      weekdays: rForm.recurrence === 'weekly' ? rForm.weekdays : undefined,
+      title: rForm.title.trim(),
+      recurrence: rForm.recurrence,
+      weekdays: rForm.weekdays.length > 0 ? rForm.weekdays : undefined,
       monthDay: rForm.recurrence === 'monthly' ? rForm.monthDay : undefined,
-      timeSlot: rForm.timeSlot, ownerId: currentUser.uid, ownerName: currentUser.name,
-      isTeamRoutine: false, isActive: true,
+      timeSlot: rForm.timeSlot,
+      durationMinutes: rForm.durationMinutes || undefined,
+      priority: rForm.priority,
+      color: rForm.color,
+      description: rForm.description.trim() || undefined,
+      visibility: rForm.visibility,
+      ownerId: currentUser.uid,
+      ownerName: currentUser.name,
+      isTeamRoutine: rForm.visibility === 'team',
+      isActive: true,
     };
     const scrub = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([,v]) => v !== undefined));
     if (editingRoutine) {
@@ -415,9 +453,7 @@ export function CompanyCalendar({ currentUser }: Props) {
       {activeTab === 'routine' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">매일/매주/매월 반복 업무를 등록하세요</p>
-            </div>
+            <p className="text-xs text-stone-500 dark:text-stone-400">반복 업무를 요일·주기·우선순위별로 관리하세요</p>
             <button onClick={() => openRoutineForm()}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 transition-colors">
               <Plus size={13} /> 루틴 추가
@@ -426,74 +462,122 @@ export function CompanyCalendar({ currentUser }: Props) {
 
           {/* 오늘 할 루틴 */}
           {(() => {
-            const todayRoutines = routines.filter(isTodayRoutine);
-            if (todayRoutines.length === 0 && routines.length > 0) return null;
-            if (todayRoutines.length > 0) return (
-              <div className="mb-5">
-                <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">오늘 해야 할 루틴</p>
-                <div className="space-y-2">
-                  {todayRoutines.map(r => {
-                    const done = completedToday.has(r.id);
-                    return (
-                      <div key={r.id} className={`flex items-center gap-3 p-3 rounded-sm border transition-all ${done ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700'}`}>
-                        <button onClick={() => toggleRoutineComplete(r.id)}
-                          className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-all ${done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
-                          {done && <Check size={12} className="text-white" />}
-                        </button>
-                        <span className={`flex-1 text-sm font-medium ${done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{r.title}</span>
-                        <span className="text-[10px] text-stone-400">{r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-            return null;
-          })()}
+            const ROUTINE_DOT: Record<string, string> = {
+              stone: 'bg-stone-500', red: 'bg-red-500', orange: 'bg-orange-500',
+              amber: 'bg-amber-500', emerald: 'bg-emerald-500', blue: 'bg-blue-500', purple: 'bg-purple-500',
+            };
+            const PRIORITY_CLS: Record<string, string> = {
+              high: 'text-red-600 dark:text-red-400',
+              medium: 'text-stone-500 dark:text-stone-400',
+              low: 'text-stone-400 dark:text-stone-500',
+            };
+            const PRIORITY_LABEL: Record<string, string> = { high: '높음', medium: '보통', low: '낮음' };
+            const DUR_LABEL = (m?: number) => !m ? '' : m < 60 ? `${m}분` : `${m / 60}시간`;
+            const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+            const recLabel = (r: CalendarRoutine) => {
+              const wdStr = (r.weekdays ?? []).length > 0
+                ? (r.weekdays ?? []).map(d => WEEKDAY_NAMES[d]).join('·')
+                : '';
+              if (r.recurrence === 'daily') return wdStr ? `매일 (${wdStr})` : '매일';
+              if (r.recurrence === 'weekly') return wdStr ? `매주 ${wdStr}` : '매주';
+              return `매월 ${r.monthDay}일`;
+            };
 
-          {/* 전체 루틴 목록 */}
-          <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">등록된 루틴</p>
-          {routines.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Repeat size={32} className="text-stone-300 dark:text-stone-600 mb-3" />
-              <p className="text-sm text-stone-400">루틴이 없습니다.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {routines.map(r => {
-                const recLabel = r.recurrence === 'daily' ? '매일' : r.recurrence === 'weekly' ? `매주 ${(r.weekdays ?? []).map(d => ['일','월','화','수','목','금','토'][d]).join(',')}` : `매월 ${r.monthDay}일`;
-                return (
-                  <div key={r.id} className="flex items-center gap-3 p-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm group">
-                    <Repeat size={13} className="text-stone-400 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-stone-800 dark:text-stone-200">{r.title}</p>
-                      <p className="text-[10px] text-stone-400">{recLabel} · {r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</p>
-                    </div>
-                    <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-                      <button onClick={() => openRoutineForm(r)} className="p-1 text-stone-400 hover:text-blue-600 rounded-sm"><Edit2 size={12} /></button>
-                      <button onClick={() => deleteRoutine(r)} className="p-1 text-stone-400 hover:text-red-600 rounded-sm"><Trash2 size={12} /></button>
+            const todayRoutines = routines.filter(isTodayRoutine);
+            return (
+              <>
+                {todayRoutines.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">오늘 해야 할 루틴 ({todayRoutines.length})</p>
+                    <div className="space-y-2">
+                      {[...todayRoutines].sort((a, b) => {
+                        const po = { high: 0, medium: 1, low: 2 };
+                        return (po[a.priority ?? 'medium'] ?? 1) - (po[b.priority ?? 'medium'] ?? 1);
+                      }).map(r => {
+                        const done = completedToday.has(r.id);
+                        return (
+                          <div key={r.id} className={`flex items-start gap-3 p-3 rounded-sm border transition-all ${done ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700'}`}>
+                            <button onClick={() => toggleRoutineComplete(r.id)}
+                              className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                              {done && <Check size={12} className="text-white" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${ROUTINE_DOT[r.color ?? 'stone'] ?? 'bg-stone-500'}`} />
+                                <span className={`text-sm font-bold ${done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{r.title}</span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] text-stone-400">{r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</span>
+                                {r.durationMinutes && <span className="text-[10px] text-stone-400">· {DUR_LABEL(r.durationMinutes)}</span>}
+                                {r.priority && r.priority !== 'medium' && <span className={`text-[10px] font-bold ${PRIORITY_CLS[r.priority]}`}>· {PRIORITY_LABEL[r.priority]}</span>}
+                              </div>
+                              {r.description && <p className="text-[11px] text-stone-400 mt-0.5 truncate">{r.description}</p>}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+
+                {/* 전체 루틴 목록 — 요일별 그룹 */}
+                <p className="text-[11px] font-bold text-stone-400 tracking-widest mb-2">등록된 루틴</p>
+                {routines.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <Repeat size={32} className="text-stone-300 dark:text-stone-600 mb-3" />
+                    <p className="text-sm text-stone-400">루틴이 없습니다.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {[...routines].sort((a, b) => {
+                      const po = { high: 0, medium: 1, low: 2 };
+                      return (po[a.priority ?? 'medium'] ?? 1) - (po[b.priority ?? 'medium'] ?? 1);
+                    }).map(r => (
+                      <div key={r.id} className="flex items-start gap-3 p-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm group">
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${ROUTINE_DOT[r.color ?? 'stone'] ?? 'bg-stone-500'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-stone-800 dark:text-stone-200">{r.title}</p>
+                          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                            <span className="text-[10px] font-bold text-stone-400">{recLabel(r)}</span>
+                            <span className="text-[10px] text-stone-300 dark:text-stone-600">·</span>
+                            <span className="text-[10px] text-stone-400">{r.timeSlot === 'morning' ? '오전' : r.timeSlot === 'afternoon' ? '오후' : '종일'}</span>
+                            {r.durationMinutes && <><span className="text-[10px] text-stone-300 dark:text-stone-600">·</span><span className="text-[10px] text-stone-400">{DUR_LABEL(r.durationMinutes)}</span></>}
+                            {r.priority && r.priority !== 'medium' && <span className={`text-[10px] font-bold ${PRIORITY_CLS[r.priority]}`}>· {PRIORITY_LABEL[r.priority]}</span>}
+                            {r.visibility === 'team' && <span className="text-[10px] px-1 py-0.5 bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-sm font-bold">팀</span>}
+                          </div>
+                          {r.description && <p className="text-[11px] text-stone-400 mt-0.5 truncate">{r.description}</p>}
+                        </div>
+                        <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                          <button onClick={() => openRoutineForm(r)} className="p-1 text-stone-400 hover:text-blue-600 rounded-sm"><Edit2 size={12} /></button>
+                          <button onClick={() => deleteRoutine(r)} className="p-1 text-stone-400 hover:text-red-600 rounded-sm"><Trash2 size={12} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* 루틴 폼 모달 */}
           {showRoutineForm && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-sm border border-stone-200 dark:border-stone-700">
-                <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
+            <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+              <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-md border border-stone-200 dark:border-stone-700 my-8">
+                <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400 sticky top-0 bg-white dark:bg-stone-900 z-10">
                   <h2 className="text-sm font-black text-stone-900 dark:text-white">{editingRoutine ? '루틴 수정' : '루틴 추가'}</h2>
                   <button onClick={() => setShowRoutineForm(false)} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
                 </div>
-                <div className="p-5 space-y-3">
+                <div className="p-5 space-y-4">
+
+                  {/* 이름 */}
                   <div>
                     <label className="block text-[11px] font-bold text-stone-500 mb-1">루틴 이름 *</label>
                     <input value={rForm.title} onChange={e => setRForm(f => ({ ...f, title: e.target.value }))}
                       placeholder="예: 매장 재고 확인"
-                      className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" autoFocus />
+                      className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:border-stone-500" autoFocus />
                   </div>
+
+                  {/* 반복 주기 + 시간대 */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-stone-500 mb-1">반복 주기</label>
@@ -514,20 +598,43 @@ export function CompanyCalendar({ currentUser }: Props) {
                       </select>
                     </div>
                   </div>
-                  {rForm.recurrence === 'weekly' && (
+
+                  {/* 요일 선택 — daily/weekly 모두 표시 */}
+                  {rForm.recurrence !== 'monthly' && (
                     <div>
-                      <label className="block text-[11px] font-bold text-stone-500 mb-1">요일 선택</label>
-                      <div className="flex gap-1 flex-wrap">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-bold text-stone-500">
+                          {rForm.recurrence === 'daily' ? '특정 요일만 (선택 없으면 매일)' : '반복 요일 *'}
+                        </label>
+                        <div className="flex gap-1">
+                          {[['평일', [1,2,3,4,5]], ['주말', [0,6]], ['전체', [0,1,2,3,4,5,6]]].map(([label, days]) => (
+                            <button key={label as string} type="button"
+                              onClick={() => setRForm(f => ({ ...f, weekdays: days as number[] }))}
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm border border-stone-300 dark:border-stone-600 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+                              {label as string}
+                            </button>
+                          ))}
+                          {rForm.weekdays.length > 0 && (
+                            <button type="button" onClick={() => setRForm(f => ({ ...f, weekdays: [] }))}
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm border border-stone-300 dark:border-stone-600 text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+                              초기화
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
                         {['일','월','화','수','목','금','토'].map((d, i) => (
                           <button key={i} type="button"
                             onClick={() => setRForm(f => ({ ...f, weekdays: f.weekdays.includes(i) ? f.weekdays.filter(w => w !== i) : [...f.weekdays, i] }))}
-                            className={`w-8 h-8 text-xs font-bold rounded-sm transition-colors ${rForm.weekdays.includes(i) ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'}`}>
+                            className={`flex-1 h-9 text-xs font-bold rounded-sm transition-colors ${rForm.weekdays.includes(i) ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'} ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : ''} ${rForm.weekdays.includes(i) ? 'text-white' : ''}`}>
                             {d}
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
+
+                  {/* 매월 날짜 */}
                   {rForm.recurrence === 'monthly' && (
                     <div>
                       <label className="block text-[11px] font-bold text-stone-500 mb-1">매월 몇 일?</label>
@@ -535,8 +642,78 @@ export function CompanyCalendar({ currentUser }: Props) {
                         className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none" />
                     </div>
                   )}
+
+                  {/* 소요 시간 + 우선순위 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">소요 시간</label>
+                      <select value={rForm.durationMinutes} onChange={e => setRForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))}
+                        className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none">
+                        <option value={0}>미설정</option>
+                        <option value={15}>15분</option>
+                        <option value={30}>30분</option>
+                        <option value={60}>1시간</option>
+                        <option value={90}>1시간 30분</option>
+                        <option value={120}>2시간</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-500 mb-1">우선순위</label>
+                      <select value={rForm.priority} onChange={e => setRForm(f => ({ ...f, priority: e.target.value as NonNullable<CalendarRoutine['priority']> }))}
+                        className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none">
+                        <option value="high">높음</option>
+                        <option value="medium">보통</option>
+                        <option value="low">낮음</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 색상 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1.5">색상</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {([
+                        { key: 'stone', cls: 'bg-stone-500' },
+                        { key: 'red', cls: 'bg-red-500' },
+                        { key: 'orange', cls: 'bg-orange-500' },
+                        { key: 'amber', cls: 'bg-amber-500' },
+                        { key: 'emerald', cls: 'bg-emerald-500' },
+                        { key: 'blue', cls: 'bg-blue-500' },
+                        { key: 'purple', cls: 'bg-purple-500' },
+                      ] as { key: string; cls: string }[]).map(({ key, cls }) => (
+                        <button key={key} type="button"
+                          onClick={() => setRForm(f => ({ ...f, color: key }))}
+                          className={`w-7 h-7 rounded-full ${cls} transition-all ${rForm.color === key ? 'ring-2 ring-offset-2 ring-stone-600 dark:ring-stone-300 scale-110' : 'hover:scale-110'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 공개 범위 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1.5">공개 범위</label>
+                    <div className="flex gap-2">
+                      {[{ v: 'personal', label: '나만 보기' }, { v: 'team', label: '팀과 공유' }].map(({ v, label }) => (
+                        <button key={v} type="button"
+                          onClick={() => setRForm(f => ({ ...f, visibility: v as CalendarRoutine['visibility'] }))}
+                          className={`flex-1 py-2 text-xs font-bold rounded-sm border transition-colors ${rForm.visibility === v ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-stone-900' : 'border-stone-300 dark:border-stone-600 text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 메모 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-500 mb-1">메모 (선택)</label>
+                    <textarea value={rForm.description} onChange={e => setRForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="루틴에 대한 추가 설명이나 주의사항"
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-stone-300 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:border-stone-500 resize-none" />
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
+
+                <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700 sticky bottom-0 bg-white dark:bg-stone-900">
                   <button onClick={() => setShowRoutineForm(false)} className="px-4 py-2 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
                   <button onClick={saveRoutine} disabled={!rForm.title.trim()}
                     className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
