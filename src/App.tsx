@@ -63,6 +63,13 @@ enum OperationType {
   LIST = 'list', GET = 'get', WRITE = 'write',
 }
 
+const SECTION_GROUP: Record<string, string> = {
+  notice: 'comm', meetings: 'comm', daily: 'comm', reports: 'comm',
+  projects: 'work', okr: 'work', workmap: 'work', sop: 'work', factory: 'work',
+  calendar: 'sch', employees: 'sch',
+  database: 'mgmt', history: 'mgmt', admin: 'mgmt', agents: 'mgmt',
+};
+
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
 type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
 
@@ -464,6 +471,12 @@ export default function App() {
 
   const [brands, setBrands] = useState<Brand[]>(DEFAULT_BRANDS);
   const [expandedBrands, setExpandedBrands] = useState<Set<BrandId>>(new Set(['dalbitgo']));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (id: string) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [showAllIntranet, setShowAllIntranet] = useState(false);
   const [sidebar, setSidebar] = useState<SidebarState>({
     brandId: null,
@@ -822,6 +835,8 @@ export default function App() {
     if (brandId && !expandedBrands.has(brandId)) {
       setExpandedBrands(prev => new Set([...prev, brandId]));
     }
+    const group = SECTION_GROUP[section];
+    if (group) setExpandedGroups(prev => new Set([...prev, group]));
   };
 
   const handleSaveCategories = async (updatedCategories: MenuCategory[]) => {
@@ -1258,42 +1273,73 @@ export default function App() {
               ))}
           </div>
 
-          {/* ── 운영 ── */}
+          {/* ── 운영 그룹 (아코디언) ── */}
           <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 pb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest">운영</p>
-            </div>
-          )}
-          <div className="mx-2 space-y-0.5 mb-1">
-            {([
-              { section: 'workmap',   icon: <LayoutList size={14} />,    label: '업무 지도' },
-              { section: 'factory',   icon: <Package size={14} />,       label: '제조실' },
-              { section: 'okr',       icon: <Target size={14} />,        label: 'OKR & KPI' },
-              { section: 'projects',  icon: <FolderKanban size={14} />,  label: '프로젝트' },
-              { section: 'daily',     icon: <FileText size={14} />,      label: '업무 보고' },
-              { section: 'calendar',  icon: <Calendar size={14} />,      label: '캘린더' },
-              { section: 'notice',    icon: <Megaphone size={14} />,     label: '공지사항' },
-              { section: 'meetings',  icon: <NotebookPen size={14} />,   label: '회의록' },
-              { section: 'sop',       icon: <BookOpen size={14} />,      label: '업무규정' },
-              { section: 'employees', icon: <Users size={14} />,         label: '팀/부서' },
-              { section: 'reports',   icon: <ClipboardList size={14} />, label: '결재보고센터' },
-            ] as { section: import('./types').SidebarSection; icon: React.ReactNode; label: string }[])
-              .map(({ section, icon, label }) => (
-                <button
-                  key={section}
-                  onClick={() => navigateAndCloseMobile(null, section)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
-                    sidebar.section === section
-                      ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                      : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-                  }`}
-                >
-                  {icon}
-                  {(!sidebarCollapsed || isMobile) && label}
-                </button>
-              ))}
-          </div>
+          {([
+            {
+              id: 'comm', label: '소통', icon: <Megaphone size={13} />,
+              items: [
+                { section: 'notice' as SidebarSection,   icon: <Megaphone size={13} />,    label: '공지사항' },
+                { section: 'meetings' as SidebarSection,  icon: <NotebookPen size={13} />,  label: '회의록' },
+                { section: 'daily' as SidebarSection,     icon: <FileText size={13} />,     label: '업무보고' },
+                { section: 'reports' as SidebarSection,   icon: <ClipboardList size={13} />, label: '결재보고센터' },
+              ],
+            },
+            {
+              id: 'work', label: '업무', icon: <FolderKanban size={13} />,
+              items: [
+                { section: 'projects' as SidebarSection,  icon: <FolderKanban size={13} />, label: '프로젝트' },
+                { section: 'okr' as SidebarSection,       icon: <Target size={13} />,       label: 'OKR & KPI' },
+                { section: 'workmap' as SidebarSection,   icon: <LayoutList size={13} />,   label: '업무지도' },
+                { section: 'sop' as SidebarSection,       icon: <BookOpen size={13} />,     label: '업무규정' },
+                { section: 'factory' as SidebarSection,   icon: <Package size={13} />,      label: '제조실' },
+              ],
+            },
+            {
+              id: 'sch', label: '일정 & 인원', icon: <Calendar size={13} />,
+              items: [
+                { section: 'calendar' as SidebarSection,  icon: <Calendar size={13} />,     label: '캘린더' },
+                { section: 'employees' as SidebarSection, icon: <Users size={13} />,        label: '팀/부서' },
+              ],
+            },
+          ]).map(group => {
+            const isOpen = expandedGroups.has(group.id) || sidebarCollapsed;
+            const hasActive = group.items.some(i => i.section === sidebar.section && sidebar.brandId === null);
+            return (
+              <div key={group.id} className="mx-2 mb-0.5">
+                {(!sidebarCollapsed || isMobile) && (
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-[11px] font-bold transition-colors ${
+                      hasActive ? 'text-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    {group.icon}
+                    <span className="flex-1 text-left tracking-wide">{group.label}</span>
+                    <ChevronDown size={11} className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+                  </button>
+                )}
+                {(isOpen || sidebarCollapsed) && (
+                  <div className={`space-y-0.5 ${(!sidebarCollapsed && !isMobile) ? 'ml-3 pl-2 border-l border-stone-200 dark:border-stone-700' : ''}`}>
+                    {group.items.map(({ section, icon, label }) => (
+                      <button
+                        key={section}
+                        onClick={() => navigateAndCloseMobile(null, section)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
+                          sidebar.section === section && sidebar.brandId === null
+                            ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                            : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                        }`}
+                      >
+                        {icon}
+                        {(!sidebarCollapsed || isMobile) && label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* ── 브랜드 ── */}
           <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
@@ -1433,52 +1479,51 @@ export default function App() {
             </div>
           )}
 
-          {/* ── 운영 도구 ── */}
-          <div className="my-3 mx-4 border-t border-stone-300 dark:border-stone-700" />
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 mb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest mb-1">관리자 도구</p>
-            </div>
-          )}
-          <div className="mx-2 space-y-0.5">
-            <button
-              onClick={() => navigateAndCloseMobile(null, 'database')}
-              className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                sidebar.section === 'database' && sidebar.brandId === null
-                  ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                  : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-              }`}
-            >
-              <Database size={14} />
-              {(!sidebarCollapsed || isMobile) && '식재료 DB'}
-            </button>
-            {(currentUser.role === 'admin' || (currentUser.departmentHeadOf?.length ?? 0) > 0) && (
-              <button
-                onClick={() => navigateAndCloseMobile(null, 'history')}
-                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                  sidebar.section === 'history'
-                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-                }`}
-              >
-                <History size={14} />
-                {(!sidebarCollapsed || isMobile) && '변경 이력'}
-              </button>
-            )}
-            {currentUser.role === 'admin' && (
-              <button
-                onClick={() => navigateAndCloseMobile(null, 'admin')}
-                className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
-                  sidebar.section === 'admin'
-                    ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
-                    : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
-                }`}
-              >
-                <Settings size={14} />
-                {(!sidebarCollapsed || isMobile) && '관리자'}
-              </button>
-            )}
-          </div>
+          {/* ── 관리 (아코디언) ── */}
+          <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
+          {(() => {
+            const mgmtItems = [
+              { section: 'database' as SidebarSection, icon: <Database size={13} />, label: '식재료 DB', always: true },
+              { section: 'history'  as SidebarSection, icon: <History size={13} />,  label: '변경 이력', always: false, cond: currentUser.role === 'admin' || (currentUser.departmentHeadOf?.length ?? 0) > 0 },
+              { section: 'admin'    as SidebarSection, icon: <Settings size={13} />, label: '관리자',    always: false, cond: currentUser.role === 'admin' },
+            ].filter(i => i.always || i.cond);
+            const isOpen = expandedGroups.has('mgmt') || sidebarCollapsed;
+            const hasActive = mgmtItems.some(i => i.section === sidebar.section && sidebar.brandId === null);
+            return (
+              <div className="mx-2 mb-1">
+                {(!sidebarCollapsed || isMobile) && (
+                  <button
+                    onClick={() => toggleGroup('mgmt')}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-[11px] font-bold transition-colors ${
+                      hasActive ? 'text-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
+                    }`}
+                  >
+                    <Settings size={13} />
+                    <span className="flex-1 text-left tracking-wide">관리</span>
+                    <ChevronDown size={11} className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+                  </button>
+                )}
+                {(isOpen || sidebarCollapsed) && (
+                  <div className={`space-y-0.5 ${(!sidebarCollapsed && !isMobile) ? 'ml-3 pl-2 border-l border-stone-200 dark:border-stone-700' : ''}`}>
+                    {mgmtItems.map(({ section, icon, label }) => (
+                      <button
+                        key={section}
+                        onClick={() => navigateAndCloseMobile(null, section)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
+                          sidebar.section === section && sidebar.brandId === null
+                            ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                            : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+                        }`}
+                      >
+                        {icon}
+                        {(!sidebarCollapsed || isMobile) && label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* 앱 설치 버튼 */}
