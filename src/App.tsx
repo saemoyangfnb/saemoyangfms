@@ -837,6 +837,7 @@ export default function App() {
     }
     const group = SECTION_GROUP[section];
     if (group) setExpandedGroups(prev => new Set([...prev, group]));
+    if (brandId) setExpandedGroups(prev => new Set([...prev, 'brands']));
   };
 
   const handleSaveCategories = async (updatedCategories: MenuCategory[]) => {
@@ -1341,15 +1342,24 @@ export default function App() {
             );
           })}
 
-          {/* ── 브랜드 ── */}
+          {/* ── 브랜드 (아코디언) ── */}
           <div className="my-2 mx-4 border-t border-stone-200 dark:border-stone-700" />
           {(!sidebarCollapsed || isMobile) && (
-            <div className="px-3 pb-1">
-              <p className="text-[10px] font-bold text-stone-400 tracking-widest">브랜드</p>
+            <div className="mx-2 mb-0.5">
+              <button
+                onClick={() => toggleGroup('brands')}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-[11px] font-bold transition-colors ${
+                  sidebar.brandId !== null ? 'text-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
+                }`}
+              >
+                <Store size={13} />
+                <span className="flex-1 text-left tracking-wide">브랜드</span>
+                <ChevronDown size={11} className={`transition-transform duration-200 ${expandedGroups.has('brands') ? '' : '-rotate-90'}`} />
+              </button>
             </div>
           )}
 
-          {[...brands].sort((a, b) => a.order - b.order).map(brand => {
+          {(expandedGroups.has('brands') || sidebarCollapsed || sidebar.brandId !== null) && [...brands].sort((a, b) => a.order - b.order).map(brand => {
             const isExpanded = expandedBrands.has(brand.id);
             const isActiveBrand = sidebar.brandId === brand.id;
             const subMenus = getBrandSubMenus(brand.id);
