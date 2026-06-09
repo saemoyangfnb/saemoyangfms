@@ -51,6 +51,7 @@ import {
   Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search,
 } from 'lucide-react';
 import { GlobalSearch } from './components/GlobalSearch';
+import { OnboardingTour } from './components/OnboardingTour';
 import Papa from 'papaparse';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
 import { auth, db, reviewDb, salesDb } from './firebase';
@@ -475,6 +476,7 @@ export default function App() {
   const [expandedBrands, setExpandedBrands] = useState<Set<BrandId>>(new Set(['dalbitgo']));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [showTour, setShowTour] = useState(false);
   const toggleGroup = (id: string) => setExpandedGroups(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -595,6 +597,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!localStorage.getItem('dalbitgo_tour_seen')) setShowTour(true);
+  }, [currentUser?.uid]);
 
   // 관리자 — 오늘 보고서 실시간 알림
   useEffect(() => {
@@ -1223,6 +1230,9 @@ export default function App() {
         />
       )}
 
+      {/* 온보딩 투어 */}
+      {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
+
       {/* 모바일 햄버거 버튼 */}
       {isMobile && (
         <header className="bg-[#FDFBF7]/95 dark:bg-stone-900/95 backdrop-blur-md fixed top-0 w-full z-40 border-b-[3px] border-double border-stone-800 dark:border-stone-400 h-14 flex items-center justify-between px-4 shadow-sm print:hidden">
@@ -1248,6 +1258,7 @@ export default function App() {
         <div className="flex items-center justify-between px-4 py-4 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
           {(!sidebarCollapsed || isMobile) && (
             <button
+              id="tour-home-btn"
               onClick={() => {
                 setSidebar({ brandId: null, section: 'home', costTab: '수도권' });
                 if (isMobile) setMobileSidebarOpen(false);
@@ -1259,7 +1270,7 @@ export default function App() {
           )}
           {!isMobile && (
             <div className="flex items-center gap-0.5 ml-auto">
-              <button onClick={() => setShowGlobalSearch(true)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500" title="검색 (Ctrl+K)">
+              <button id="tour-search-btn" onClick={() => setShowGlobalSearch(true)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500" title="검색 (Ctrl+K)">
                 <Search size={14} />
               </button>
               <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500">
@@ -1341,6 +1352,7 @@ export default function App() {
               <div key={group.id} className="mx-2 mb-0.5">
                 {(!sidebarCollapsed || isMobile) && (
                   <button
+                    id={`tour-group-${group.id}`}
                     onClick={() => toggleGroup(group.id)}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-[11px] font-bold transition-colors ${
                       hasActive ? 'text-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
@@ -1378,6 +1390,7 @@ export default function App() {
           {(!sidebarCollapsed || isMobile) && (
             <div className="mx-2 mb-0.5">
               <button
+                id="tour-brands"
                 onClick={() => toggleGroup('brands')}
                 className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-[11px] font-bold transition-colors ${
                   sidebar.brandId !== null ? 'text-stone-900 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'
@@ -1588,11 +1601,19 @@ export default function App() {
               >
                 <Type size={14} />
               </button>
-              <button onClick={toggleTheme} className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="테마">
+              <button id="tour-theme-btn" onClick={toggleTheme} className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="테마">
                 {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
               </button>
               <button onClick={() => setIsChangePasswordOpen(true)} className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="비밀번호 변경">
                 <KeyRound size={14} />
+              </button>
+              <button
+                id="tour-guide-btn"
+                onClick={() => setShowTour(true)}
+                className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 hover:text-amber-500 transition-colors"
+                title="기능 가이드"
+              >
+                <Sparkles size={14} />
               </button>
               <button onClick={handleLogout} className="p-1.5 rounded-sm text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="로그아웃">
                 <LogOut size={14} />
