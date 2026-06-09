@@ -11,6 +11,14 @@ import { TabBar } from './ui/Tabs';
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
+const FRANCHISE_PHASES: Record<string, { emoji: string; label: string }> = {
+  open:         { emoji: '🏪', label: '오픈일' },
+  construction: { emoji: '🔨', label: '공사' },
+  preTraining:  { emoji: '📚', label: '사전교육' },
+  training:     { emoji: '🎓', label: '본교육' },
+  equipmentIn:  { emoji: '🍳', label: '화구류입고' },
+};
+
 const EVENT_COLORS: Record<CalendarEventType, string> = {
   personal:  'bg-blue-500',
   company:   'bg-emerald-500',
@@ -118,6 +126,7 @@ export function CompanyCalendar({ currentUser }: Props) {
     description: '',
     visibility: 'personal' as CalendarRoutine['visibility'],
   });
+  const [openFilters, setOpenFilters] = useState<Set<string>>(new Set(['open', 'construction']));
   const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -179,27 +188,23 @@ export function CompanyCalendar({ currentUser }: Props) {
       const fEvents: CalendarEvent[] = [];
       snap.docs.forEach(d => {
         const sch = d.data() as FranchiseSchedule;
-        if (sch.openDate) {
+        if (sch.archived) return;
+        const add = (phaseKey: string, title: string, start?: string, end?: string) => {
+          if (!start) return;
           fEvents.push({
-            id: `franchise_${d.id}_open`,
+            id: `franchise_${d.id}_${phaseKey}`,
             type: 'franchise',
-            title: `🏪 ${sch.storeName}`,
-            startDate: sch.openDate, endDate: sch.openDate,
+            title,
+            startDate: start, endDate: end || start,
             allDay: true, visibility: 'all',
             createdAt: '', updatedAt: '',
           });
-        }
-        if (sch.constructionStart) {
-          fEvents.push({
-            id: `franchise_${d.id}_const`,
-            type: 'franchise',
-            title: `🔨 ${sch.storeName} 공사`,
-            startDate: sch.constructionStart,
-            endDate: sch.constructionEnd || sch.constructionStart,
-            allDay: true, visibility: 'all',
-            createdAt: '', updatedAt: '',
-          });
-        }
+        };
+        add('open',         `🏪 ${sch.storeName}`,          sch.openDate);
+        add('construction', `🔨 ${sch.storeName} 공사`,      sch.constructionStart, sch.constructionEnd);
+        add('preTraining',  `📚 ${sch.storeName} 사전교육`,  sch.preTrainingStart, sch.preTrainingEnd);
+        add('training',     `🎓 ${sch.storeName} 본교육`,    sch.trainingStart, sch.trainingEnd);
+        add('equipmentIn',  `🍳 ${sch.storeName} 화구류`,    sch.equipmentIn);
       });
       setFranchiseEvents(fEvents);
     }).catch(() => {});
@@ -310,7 +315,11 @@ export function CompanyCalendar({ currentUser }: Props) {
   /* 날짜별 이벤트 */
   const eventsForDate = (ymd: string, view: typeof activeTab = activeTab) => {
     if (view === 'open') {
-      return franchiseEvents.filter(e => e.startDate <= ymd && e.endDate >= ymd);
+      return franchiseEvents.filter(e => {
+        const parts = e.id.split('_');
+        const phaseKey = parts[parts.length - 1];
+        return openFilters.has(phaseKey) && e.startDate <= ymd && e.endDate >= ymd;
+      });
     }
     if (view === 'personal') {
       return events.filter(e =>
@@ -728,6 +737,28 @@ export function CompanyCalendar({ currentUser }: Props) {
 
       {(['all', 'personal', 'open'] as const).includes(activeTab as 'all' | 'personal' | 'open') ? (
         <>
+          {/* 오픈 일정 공정 필터 */}
+          {activeTab === 'open' && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-3">
+              <span className="text-[11px] font-bold text-stone-400 mr-1">공정 표시</span>
+              {Object.entries(FRANCHISE_PHASES).map(([key, phase]) => (
+                <button key={key}
+                  onClick={() => setOpenFilters(prev => {
+                    const next = new Set(prev);
+                    next.has(key) ? next.delete(key) : next.add(key);
+                    return next;
+                  })}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
+                    openFilters.has(key)
+                      ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 border-stone-800 dark:border-stone-200'
+                      : 'bg-white dark:bg-stone-900 text-stone-400 border-stone-200 dark:border-stone-700 hover:border-stone-400'
+                  }`}>
+                  {phase.emoji} {phase.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* 월 네비게이션 */}
           <div className="flex items-center gap-3 mb-4">
             <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-500"><ChevronLeft size={16} /></button>
@@ -785,7 +816,7 @@ export function CompanyCalendar({ currentUser }: Props) {
                       </div>
                       <div className="space-y-0.5">
                         {dayEvts.slice(0, 3).map(evt => {
-                          const isReadOnly = evt.type === 'meeting' || evt.type === 'leave';
+                          const isReadOnly = evt.type === 'meeting' || evt.type === 'leave' || evt.type === 'franchise';
                           return (
                             <div key={evt.id}
                               className={`text-white rounded truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
