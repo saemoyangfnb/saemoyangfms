@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { db, auth, salesDb } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
 import { User, Ingredient, Department, BrandId, SystemConfig } from '../types';
-import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Settings2, Tags } from 'lucide-react';
+import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Settings2, Tags, FolderOpen } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { DepartmentManager } from './admin/DepartmentManager';
 import { WorkMasterManager } from './admin/WorkMasterManager';
 import { UserPermissionManager } from './admin/UserPermissionManager';
+import { StoreImportPanel } from './admin/StoreImportPanel';
+import { EmployeeImportPanel } from './admin/EmployeeImportPanel';
 
 enum OperationType {
   CREATE = 'create',
@@ -128,6 +130,7 @@ interface Props {
 
 export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, currentUser, activeBrand }) => {
   const { confirm } = useConfirm();
+  const [adminTab, setAdminTab] = useState<'general' | 'data'>('general');
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -281,6 +284,45 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
 
   return (
     <div className="space-y-6">
+      {/* 탭 전환 */}
+      <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-sm border border-stone-200 dark:border-stone-700 w-fit">
+        <button
+          onClick={() => setAdminTab('general')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold whitespace-nowrap transition-all ${adminTab === 'general' ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'}`}
+        >
+          <Settings2 size={14} /> 일반 관리
+        </button>
+        <button
+          onClick={() => setAdminTab('data')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold whitespace-nowrap transition-all ${adminTab === 'data' ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'}`}
+        >
+          <FolderOpen size={14} /> 데이터 관리
+        </button>
+      </div>
+
+      {adminTab === 'data' ? (
+        <div className="space-y-6">
+          <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+            <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+              <FolderOpen className="text-stone-800 dark:text-stone-300" size={20} />
+              <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">매장 마스터 임포트</h2>
+            </div>
+            <div className="p-6">
+              <StoreImportPanel />
+            </div>
+          </div>
+          <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+            <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+              <FolderOpen className="text-stone-800 dark:text-stone-300" size={20} />
+              <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">직원 정보 보강 임포트</h2>
+            </div>
+            <div className="p-6">
+              <EmployeeImportPanel />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* 💡 [4단계] 시스템 공통 코드 관리 - 위쪽 배치 및 권한 체크 확실히 */}
       {(currentUser.role === 'admin' || currentUser.email === 'saemoyang_official@naver.com') && <SystemConfigManager />}
 
@@ -472,8 +514,10 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
 
     {/* 오픈 프로세스 관리 (통합) */}
     <ProcessManager brandId={brandId} departments={departments} />
-  </div>
-);
+        </>
+      )}
+    </div>
+  );
 };
 
 function ProcessManager({ brandId, departments }: { brandId: BrandId; departments: Department[] }) {

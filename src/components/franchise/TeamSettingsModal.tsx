@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { salesDb as db } from '../../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { TeamSetting, BrandId } from '../../types';
+import { TeamSetting, BrandId, Employee } from '../../types';
 import { Plus, X, Trash2, Edit2, Users } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
@@ -16,6 +16,7 @@ export function TeamSettingsModal({ brandId, onClose }: Props) {
   const { confirm } = useConfirm();
 
   const [teams, setTeams] = useState<TeamSetting[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New Team states
@@ -27,7 +28,7 @@ export function TeamSettingsModal({ brandId, onClose }: Props) {
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editTeamName, setEditTeamName] = useState('');
   const [editTeamColor, setEditTeamColor] = useState('blue');
-  const [newMemberName, setNewMemberName] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<Record<string, string>>({});
 
   const PRESET_COLORS = [
     { id: 'blue', bgClass: 'bg-blue-500' },
@@ -43,13 +44,17 @@ export function TeamSettingsModal({ brandId, onClose }: Props) {
   const fetchTeams = async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, 'team_settings'));
+      const [teamSnap, empSnap] = await Promise.all([
+        getDocs(collection(db, 'team_settings')),
+        getDocs(collection(db, 'employees')),
+      ]);
       const data: TeamSetting[] = [];
-      snap.forEach(d => {
+      teamSnap.forEach(d => {
         const t = d.data() as TeamSetting;
         if (t.brandId === brandId) data.push(t);
       });
       setTeams(data);
+      setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)).filter(e => e.isActive !== false));
     } catch (err) {
       toast.error('팀 설정 데이터를 불러오지 못했습니다.');
     } finally {
@@ -109,11 +114,18 @@ export function TeamSettingsModal({ brandId, onClose }: Props) {
   };
 
   const handleAddMember = async (team: TeamSetting) => {
-    if (!newMemberName.trim()) return;
+    const empId = selectedEmployeeId[team.id];
+    if (!empId) return;
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return;
+    if (team.members.some(m => m.id === empId)) {
+      toast.error('이미 추가된 팀원입니다.');
+      return;
+    }
     try {
-      const newMembers = [...team.members, { id: `member_${Date.now()}`, name: newMemberName.trim() }];
+      const newMembers = [...team.members, { id: emp.id, name: emp.name }];
       await updateDoc(doc(db, 'team_settings', team.id), { members: newMembers });
-      setNewMemberName('');
+      setSelectedEmployeeId(prev => ({ ...prev, [team.id]: '' }));
       fetchTeams();
     } catch (err) {
       toast.error('멤버 추가 실패');
@@ -235,20 +247,21 @@ export function TeamSettingsModal({ brandId, onClose }: Props) {
                           </div>
                         ))}
                         
-                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50 block">
-                           <input 
-                             placeholder="새 팀원 이름"
+                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                           <select
+                             value={selectedEmployeeId[team.id] || ''}
+                             onChange={e => setSelectedEmployeeId(prev => ({ ...prev, [team.id]: e.target.value }))}
                              className="flex-1 px-2 py-1 text-xs rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 outline-none"
-                             onKeyDown={e => {
-                               if (e.key === 'Enter') {
-                                 setNewMemberName(e.currentTarget.value);
-                                 handleAddMember(team);
-                                 e.currentTarget.value = '';
-                               }
-                             }}
-                             onChange={e => setNewMemberName(e.target.value)}
-                           />
-                           <button onClick={() => handleAddMember(team)} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-slate-300">추가</button>
+                           >
+                             <option value="">직원 선택...</option>
+                             {employees
+                               .filter(e => !team.members.some(m => m.id === e.id))
+                               .sort((a, b) => a.name.localeCompare(b.name))
+                               .map(e => (
+                                 <option key={e.id} value={e.id}>{e.name} ({e.position})</option>
+                               ))}
+                           </select>
+                           <button onClick={() => handleAddMember(team)} disabled={!selectedEmployeeId[team.id]} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-slate-300 disabled:opacity-40">추가</button>
                         </div>
                      </div>
                    </div>

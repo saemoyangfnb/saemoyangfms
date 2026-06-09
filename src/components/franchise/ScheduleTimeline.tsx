@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FranchiseSchedule, WorkItem } from '../../types';
+import { FranchiseSchedule, WorkItem, Employee } from '../../types';
 import { diffDays, addDays } from '../../utils';
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   viewStartDate: string;
   viewEndDate: string;
   workItems?: WorkItem[];
+  employees?: Employee[];
 }
 
 const LABEL_WIDTH = 200; // px
@@ -88,7 +89,7 @@ function computeWorkItemDates(workItems: WorkItem[], schedule: FranchiseSchedule
 const TASK_ROW_H = 26;
 const TASK_TOP_OFFSET = 4;
 
-export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workItems = [] }: Props) {
+export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workItems = [], employees = [] }: Props) {
   const visibleSchedules = useMemo(() => schedules.filter(s => s.showInCalendar !== false), [schedules]);
   const totalDays = useMemo(() => Math.max(diffDays(viewStartDate, viewEndDate) + 1, 1), [viewStartDate, viewEndDate]);
   const timelineWidth = totalDays * DAY_WIDTH;
@@ -191,9 +192,15 @@ export function ScheduleTimeline({ schedules, viewStartDate, viewEndDate, workIt
                   <div className={`w-2 h-2 rounded-full bg-${storeColor}-500 shadow-sm`} />
                   <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">{schedule.storeName}</span>
                 </div>
-                {(schedule.team || schedule.supervisor) && (
+                {(schedule.team || schedule.supervisor || schedule.supervisorId) && (
                   <span className="text-[10px] text-slate-400">
-                    {schedule.team}{schedule.supervisor ? ` / ${schedule.supervisor}` : ''}
+                    {schedule.team}{(() => {
+                      if (schedule.supervisorId) {
+                        const emp = employees.find(e => e.id === schedule.supervisorId);
+                        if (emp) return ` / ${emp.name}`;
+                      }
+                      return schedule.supervisor ? ` / ${schedule.supervisor}` : '';
+                    })()}
                   </span>
                 )}
               </div>

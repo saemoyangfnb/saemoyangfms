@@ -253,6 +253,7 @@ export interface FranchiseSchedule {
   team: string;         // 담당 팀
   supervisor: string;   // 슈퍼바이저 이름 (표시용, 하위 호환)
   supervisorId?: string; // Employee.id 참조 (연동 시 저장)
+  storeId?: string;      // stores.id 참조 (수동 매핑 후)
 
   // 세부 사항
   constructionType: string; // 더원, 감리, 직접입력
@@ -429,9 +430,34 @@ export interface Employee {
   hireDate?: string;        // YYYY-MM-DD
   annualLeaveBalance: number; // 잔여 연차 (일)
   linkedUid?: string;       // Firebase Auth UID (없으면 계정 미연결)
+  crmId?: number;           // CRM 관리번호 (엑셀 임포트 연동)
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==========================================
+// 매장 마스터 (salesDb: stores)
+// ==========================================
+export interface Store {
+  id: string;              // 관리번호 → string 변환 (doc ID)
+  storeCode: string;       // 매장코드 8자리
+  name: string;            // 매장명
+  region: string;          // 지역
+  address: string;         // 주소
+  status: string;          // 운영상태 (운영중 / 준비중 / 폐점 등)
+  franchiseType: string;   // 가맹 / 직영
+  contractStatus: string;  // 계약상태
+  ceoName: string;         // 대표자명
+  operatorName: string;    // 운영자명
+  phone: string;
+  mobile: string;
+  email: string;
+  openDate: string;        // 개점일 YYYY-MM-DD
+  seatCount?: number;      // 좌석수
+  registeredAt: string;    // CRM 등록일
+  scheduleId?: string;     // franchise_schedules.id 참조 (수동 매핑 후)
+  importedAt: string;      // 최종 엑셀 임포트 일시
 }
 
 // ==========================================

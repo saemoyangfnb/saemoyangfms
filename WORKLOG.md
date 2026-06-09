@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-06-09 (2) — Claude Code
+
+### 완료
+- **PLAN_code_consistency.md Phase 2 완료**
+  - [P2-A] FranchiseScheduleView에서 employees 로드 → supervisorId 있으면 이름 표시 (매장 카드 + ScheduleTimeline)
+  - [P2-B] TeamSettingsModal 팀원 추가 UI: 자유 텍스트 → employees 드롭다운으로 교체, member.id = Employee.id
+- **PLAN_store_master_import.md 전체 구현 완료**
+  - `types.ts`: `Store` 인터페이스 추가, `FranchiseSchedule.storeId`, `Employee.crmId` 추가
+  - `admin/StoreImportPanel.tsx` 신규: xlsx 파싱 → 미리보기(신규/변경/동일) → 수동 [저장] 버튼 클릭 시 배치 upsert
+  - `admin/StoreMappingModal.tsx` 신규: 신규 매장 ↔ 오픈 스케줄 수동 매핑 팝업
+  - `admin/EmployeeImportPanel.tsx` 신규: 직원 phone/email/crmId 보강 + supervisorId 자동 연결
+  - `AdminPanel.tsx`: [일반 관리] / [데이터 관리] 탭 추가
+
+### 미완
+- `PLAN_code_consistency.md` Phase 3 (CalendarEvent linkedId, preTrainingMemo UI) — 우선순위 낮음, 추후
+
+### 주의
+- 실제 Firestore 배치 저장은 반드시 미리보기 확인 후 수동 [저장] 버튼 클릭 — 자동 실행 없음
+- `MEETING_VIEW_PROPOSAL.md`는 malang-fnb SaaS 설계 문서 (이 레포 구현 아님) — 방치 가능
+
+---
+
 ## 2026-06-09 — Claude Code
 
 ### 완료

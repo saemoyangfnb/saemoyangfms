@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb as db, db as mainDb, auth } from '../../firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc, getDoc, setDoc, onSnapshot, query, where, writeBatch, orderBy } from 'firebase/firestore';
-import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig, DepartmentTask } from '../../types';
+import { FranchiseSchedule, TeamSetting, BrandId, Department, User, WorkItem, SystemActionType, SystemConfig, DepartmentTask, Employee } from '../../types';
 import { Plus, Search, Settings, CheckCircle2, Eye, EyeOff, X, Layers, CheckCheck, Sparkles, Bot, Send, User as UserIcon, CalendarDays, AlertTriangle, FileText, CheckSquare, LayoutList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
@@ -62,6 +62,7 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
   const [filterTeam, setFilterTeam] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('all');
   const [dbDepartments, setDbDepartments] = useState<Department[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [sysConfig, setSysConfig] = useState<SystemConfig>({
     constTypes: [], signTypes: [], kitchenVendors: [], preTrainingLocations: [], gasTypes: []
   });
@@ -82,6 +83,10 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
       if (cancelled) return;
       setDbDepartments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Department))
         .filter(d => d.brandId === brandId));
+    });
+    getDocs(collection(db, 'employees')).then(snap => {
+      if (cancelled) return;
+      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
     });
     return () => { cancelled = true; };
   }, [brandId]);
@@ -1266,7 +1271,16 @@ ${transcript}`;
                                 )}
                               </div>
                               <div className="text-xs text-stone-500 font-bold ml-5 tracking-widest flex items-center gap-3">
-                                <span>{sch.team || '팀 미정'}</span>
+                                <span>{sch.team || '팀 미정'}{(() => {
+                                  if (sch.supervisorId) {
+                                    const emp = employees.find(e => e.id === sch.supervisorId);
+                                    if (emp) {
+                                      const dept = dbDepartments.find(d => d.id === emp.departmentId);
+                                      return ` / ${emp.name}${dept ? ` (${dept.name})` : ''}`;
+                                    }
+                                  }
+                                  return sch.supervisor ? ` / ${sch.supervisor}` : '';
+                                })()}</span>
                                 {sch.finalDrawingPdfUrl && (
                                   <a href={sch.finalDrawingPdfUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-1 text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 transition-colors hover:bg-blue-100">
                                     <FileText size={10} /> 도면 보기
