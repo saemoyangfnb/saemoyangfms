@@ -466,7 +466,7 @@ export interface Store {
 // ==========================================
 // 캘린더 이벤트 (salesDb: calendar_events)
 // ==========================================
-export type CalendarEventType = 'personal' | 'company' | 'holiday' | 'leave' | 'meeting' | 'franchise';
+export type CalendarEventType = 'personal' | 'company' | 'holiday' | 'leave' | 'meeting' | 'franchise' | 'daily_report' | 'weekly_report';
 
 export interface CalendarEvent {
   id: string;

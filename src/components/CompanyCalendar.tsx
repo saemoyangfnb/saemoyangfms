@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
-import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine, FranchiseSchedule, WorkItem, Task, TaskStatus } from '../types';
+import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine, FranchiseSchedule, WorkItem, Task, TaskStatus, DailyReport, WeeklyReport } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2, CheckSquare } from 'lucide-react';
@@ -14,7 +14,6 @@ const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', 
 
 const FRANCHISE_PHASES: Record<string, { emoji: string; label: string }> = {
   open:         { emoji: '🏪', label: '오픈일' },
-  construction: { emoji: '🔨', label: '공사' },
   preTraining:  { emoji: '📚', label: '사전교육' },
   training:     { emoji: '🎓', label: '본교육' },
   equipmentIn:  { emoji: '🍳', label: '화구류입고' },
@@ -35,20 +34,24 @@ const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 const EVENT_COLORS: Record<CalendarEventType, string> = {
-  personal:  'bg-blue-500',
-  company:   'bg-emerald-500',
-  holiday:   'bg-red-400',
-  leave:     'bg-amber-400',
-  meeting:   'bg-purple-500',
-  franchise: 'bg-orange-400',
+  personal:     'bg-blue-500',
+  company:      'bg-emerald-500',
+  holiday:      'bg-red-400',
+  leave:        'bg-amber-400',
+  meeting:      'bg-purple-500',
+  franchise:    'bg-orange-400',
+  daily_report: 'bg-teal-500',
+  weekly_report:'bg-violet-500',
 };
 const EVENT_TEXT: Record<CalendarEventType, string> = {
-  personal:  '개인',
-  company:   '회사',
-  holiday:   '공휴일',
-  leave:     '연차',
-  meeting:   '회의',
-  franchise: '오픈',
+  personal:     '개인',
+  company:      '회사',
+  holiday:      '공휴일',
+  leave:        '연차',
+  meeting:      '회의',
+  franchise:    '오픈',
+  daily_report: '일일보고',
+  weekly_report:'주간보고',
 };
 const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   annual:   '연차',
@@ -162,12 +165,15 @@ export function CompanyCalendar({ currentUser }: Props) {
       const endDate = new Date(year, month + 1, 0);
       const endStr = toYMD(endDate);
 
-      const [evtSnap, leaveSnap, empSnap, meetingSnap] = await Promise.all([
+      const [evtSnap, leaveSnap, empSnap, meetingSnap, dailySnap, weeklySnap] = await Promise.all([
         getDocs(query(collection(salesDb, 'calendar_events'),
           where('startDate', '<=', endStr), orderBy('startDate'))),
         getDocs(query(collection(salesDb, 'leave_requests'), orderBy('startDate', 'desc'))),
         getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
         getDocs(collection(salesDb, 'meetings')),
+        getDocs(query(collection(salesDb, 'daily_reports'),
+          where('date', '>=', startStr), where('date', '<=', endStr), where('type', '==', 'morning'))),
+        getDocs(query(collection(salesDb, 'weekly_reports'), where('weekStart', '<=', endStr))),
       ]);
 
       /* 캘린더 이벤트 */
@@ -188,7 +194,43 @@ export function CompanyCalendar({ currentUser }: Props) {
           createdAt: '', updatedAt: '',
         }));
 
-      setEvents([...calEvents, ...meetingEvents]);
+      /* 일일보고 → 날짜별 그룹으로 가상 이벤트 */
+      const dailyByDate: Record<string, number> = {};
+      dailySnap.docs.forEach(d => {
+        const r = d.data() as DailyReport;
+        dailyByDate[r.date] = (dailyByDate[r.date] || 0) + 1;
+      });
+      const dailyEvents: CalendarEvent[] = Object.entries(dailyByDate).map(([date, count]) => ({
+        id: `daily_${date}`,
+        type: 'daily_report' as CalendarEventType,
+        title: `📝 일일보고 ${count}명`,
+        startDate: date, endDate: date,
+        allDay: true,
+        visibility: 'all',
+        createdAt: '', updatedAt: '',
+      }));
+
+      /* 주간보고 → 주차별 그룹으로 가상 이벤트 */
+      const weeklyByWeek: Record<string, { weekStart: string; weekEnd: string; count: number }> = {};
+      weeklySnap.docs.forEach(d => {
+        const r = d.data() as WeeklyReport;
+        if (r.weekEnd < startStr) return;
+        if (!weeklyByWeek[r.weekStart]) {
+          weeklyByWeek[r.weekStart] = { weekStart: r.weekStart, weekEnd: r.weekEnd, count: 0 };
+        }
+        weeklyByWeek[r.weekStart].count++;
+      });
+      const weeklyEvents: CalendarEvent[] = Object.values(weeklyByWeek).map(({ weekStart, weekEnd, count }) => ({
+        id: `weekly_${weekStart}`,
+        type: 'weekly_report' as CalendarEventType,
+        title: `📊 주간보고 ${count}명`,
+        startDate: weekStart, endDate: weekEnd,
+        allDay: true,
+        visibility: 'all',
+        createdAt: '', updatedAt: '',
+      }));
+
+      setEvents([...calEvents, ...meetingEvents, ...dailyEvents, ...weeklyEvents]);
 
       const allLeave = leaveSnap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest));
       setLeaveRequests(allLeave);
@@ -346,7 +388,6 @@ export function CompanyCalendar({ currentUser }: Props) {
       };
       // 앵커 마일스톤 (직접 필드)
       add('fop', `🏪 ${s.storeName}`, s.openDate);
-      add('fco', `🔨 ${s.storeName} 공사`, s.constructionStart, s.constructionEnd);
 
       const workItems = processSettingsMap[s.brandId] || [];
       const taskItems = workItems.filter(wt => wt.category === 'task' && wt.calendarVisible !== false);
@@ -391,7 +432,6 @@ export function CompanyCalendar({ currentUser }: Props) {
     if (view === 'open') {
       return franchiseEvents.filter(e => {
         const phaseKey = e.id.startsWith('fop_') ? 'open'
-          : e.id.startsWith('fco_') ? 'construction'
           : e.id.startsWith('fpt_') ? 'preTraining'
           : e.id.startsWith('ftr_') ? 'training'
           : e.id.startsWith('feq_') ? 'equipmentIn'
@@ -920,7 +960,7 @@ export function CompanyCalendar({ currentUser }: Props) {
               {/* 날짜 셀 */}
               <div className="grid grid-cols-7">
                 {calendarDays.map((day, idx) => {
-                  if (!day) return <div key={idx} className="min-h-14 sm:min-h-24 border-b border-r border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 last:border-r-0" />;
+                  if (!day) return <div key={idx} className="min-h-20 sm:min-h-36 border-b border-r border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/50 last:border-r-0" />;
                   const ymd = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                   const isToday = ymd === toYMD(today);
                   const dayOfWeek = idx % 7;
@@ -928,7 +968,7 @@ export function CompanyCalendar({ currentUser }: Props) {
                   const dayTasks = calendarTasks.filter(t => t.dueDate === ymd && t.status !== 'done' && t.status !== 'rejected');
                   return (
                     <div key={idx}
-                      className={`min-h-14 sm:min-h-24 p-1 sm:p-1.5 border-b border-r border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer ${idx % 7 === 6 ? 'border-r-0' : ''}`}
+                      className={`min-h-20 sm:min-h-36 p-1 sm:p-1.5 border-b border-r border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer ${idx % 7 === 6 ? 'border-r-0' : ''}`}
                       onClick={() => { setSelectedDate(ymd); setEventForm(emptyEventForm(ymd)); setShowEventModal(true); }}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => { e.preventDefault(); const raw = e.dataTransfer.getData('calTask'); if (raw) { try { const { taskId } = JSON.parse(raw); handleTaskDrop(taskId, ymd); } catch {} } }}>
@@ -945,8 +985,8 @@ export function CompanyCalendar({ currentUser }: Props) {
                         )}
                       </div>
                       <div className="space-y-0.5">
-                        {dayEvts.slice(0, 2).map(evt => {
-                          const isReadOnly = evt.type === 'meeting' || evt.type === 'leave' || evt.type === 'franchise';
+                        {dayEvts.slice(0, 3).map(evt => {
+                          const isReadOnly = evt.type === 'meeting' || evt.type === 'leave' || evt.type === 'franchise' || evt.type === 'daily_report' || evt.type === 'weekly_report';
                           return (
                             <div key={evt.id}
                               className={`text-white rounded truncate ${EVENT_COLORS[evt.type]} ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'}`}
@@ -972,8 +1012,8 @@ export function CompanyCalendar({ currentUser }: Props) {
                             </span>
                           </div>
                         ))}
-                        {(dayEvts.length + dayTasks.length) > 4 && (
-                          <div className="text-[10px] text-stone-400 pl-1">+{dayEvts.length + dayTasks.length - 4}개</div>
+                        {(dayEvts.length + dayTasks.length) > 5 && (
+                          <div className="text-[10px] text-stone-400 pl-1">+{dayEvts.length + dayTasks.length - 5}개</div>
                         )}
                       </div>
                     </div>

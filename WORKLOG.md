@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-06-11 (3) — Claude Code
+
+### 완료 — 캘린더 개선: 일일/주간보고 표시 + 공사일정 제거 + 셀 확대
+
+- `CalendarEventType`에 `daily_report`, `weekly_report` 추가 (`types.ts`)
+- 캘린더에 일일보고(teal), 주간보고(violet) 가상 이벤트 표시 — 날짜/주차별 그룹카운트 ("📝 일일보고 3명")
+- `FRANCHISE_PHASES`에서 `construction` 제거 → 공사 일정 캘린더에서 완전 제거
+- `franchiseEvents` useMemo에서 `fco_` (공사) 이벤트 생성 라인 삭제
+- 셀 높이: `min-h-14 sm:min-h-24` → `min-h-20 sm:min-h-36`, 셀당 이벤트 표시 2→3개, overflow 기준 4→5
+
+---
+
+## 2026-06-11 (2) — Claude Code
+
+### 완료 — 제조실 데이터 로드 복구
+
+**원인**: `5425efb`에서 catch-all 제거 시 `factory_settings` 컬렉션 규칙 누락 → `loadAll()` Promise.all 전체 실패 → 빈 화면
+- `firestore.rules`에 `factory_settings` 규칙 추가 + Firestore rules 재배포
+- `loadAll()` 에서 `factory_settings` 로드 `.catch(() => null)` 방어 처리 + `settingsDoc?.data()` optional chaining
+
+**데이터는 Firestore에 보존됨** — 삭제된 것 없음, 표시 실패였음
+
+---
+
 ## 2026-06-10 — Claude Code (컨텍스트 이어받기)
 
 ### 완료 — 캘린더 ↔ 오픈일정 싱크 수정 + TickTick 업무 오버레이
