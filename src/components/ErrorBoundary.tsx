@@ -1,6 +1,11 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
+const isChunkLoadError = (err: Error) =>
+  err?.message?.includes('Failed to fetch dynamically imported module') ||
+  err?.message?.includes('Importing a module script failed') ||
+  err?.name === 'ChunkLoadError';
+
 interface Props {
   children: React.ReactNode;
 }
@@ -24,6 +29,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo);
     this.setState({ errorInfo });
+    // PWA 구 청크 캐시 충돌 — 즉시 새로고침으로 복구
+    if (isChunkLoadError(error)) {
+      window.location.reload();
+    }
   }
 
   handleReload = () => {
@@ -39,6 +48,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
     const { error, errorInfo } = this.state;
     const isFirestoreInternal = error?.message?.includes('INTERNAL ASSERTION FAILED');
+    const isChunkError = error ? isChunkLoadError(error) : false;
 
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-stone-100 dark:bg-stone-950">
@@ -57,9 +67,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
           <div className="px-6 py-5 space-y-4">
             <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
-              {isFirestoreInternal
-                ? '데이터베이스 연결 상태에 일시적 문제가 발생했습니다. 페이지를 새로고침하면 대부분 해결됩니다.'
-                : '예기치 않은 오류로 화면이 멈췄습니다. 새로고침 또는 다시 시도를 눌러 주세요.'}
+              {isChunkError
+                ? '앱이 업데이트되었습니다. 자동으로 새로고침 중...'
+                : isFirestoreInternal
+                  ? '데이터베이스 연결 상태에 일시적 문제가 발생했습니다. 페이지를 새로고침하면 대부분 해결됩니다.'
+                  : '예기치 않은 오류로 화면이 멈췄습니다. 새로고침 또는 다시 시도를 눌러 주세요.'}
             </p>
 
             {error && (

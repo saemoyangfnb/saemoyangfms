@@ -39,6 +39,8 @@ export default defineConfig(({mode}) => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB (번들 크기 대응)
           globPatterns: ['**/*.{js,css,html,svg,woff2}'],
           runtimeCaching: [
