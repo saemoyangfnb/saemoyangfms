@@ -38,7 +38,7 @@ interface MeetingTemplate { id: string; name: string; agendas: Omit<Agenda, 'id'
 
 const MEETING_TYPES = ['주간업무', '정기경영', '브랜드별', '임시'] as const;
 type MeetingType = typeof MEETING_TYPES[number];
-interface MeetingItem { id: string; content: string; category: '공지' | '진행' | '결정'; memo?: string }
+interface MeetingItem { id: string; content: string; category: '공지' | '진행' | '결정'; memo?: string; assignee?: string; deadline?: string; done?: boolean }
 
 interface Meeting {
   id: string; title: string; date: string;
@@ -116,6 +116,20 @@ function formatMeetingShare(m: Meeting): string {
     m.agendas.forEach((ag, i) => {
       const p = calcProg(ag);
       lines.push(`${i + 1}. ${ag.title} (${urgLabel(ag.urgency)}) ${p}%`);
+    });
+  }
+  if (m.items?.length) {
+    (['공지', '진행', '결정'] as const).forEach(cat => {
+      const catItems = m.items!.filter(i => i.category === cat);
+      if (!catItems.length) return;
+      lines.push(''); lines.push(`[ ${cat} ]`);
+      catItems.forEach(item => {
+        const parts = [`${cat === '공지' ? '•' : item.done ? '✓' : '□'} ${item.content}`];
+        if (item.assignee) parts.push(`담당: ${item.assignee}`);
+        if (item.deadline) parts.push(`기한: ${item.deadline}`);
+        lines.push(parts.join(' / '));
+        if (item.memo) lines.push(`  → ${item.memo}`);
+      });
     });
   }
   return lines.join('\n');
@@ -764,8 +778,9 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
 }
 
 /* ─── Quick Meeting Form (3+1 키보드 입력) ──────────────────────────────── */
-function QuickMeetingForm({ initial, onSave, onCancel }: {
-  initial?: Meeting; onSave: (m: Meeting) => void; onCancel: () => void;
+function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }: {
+  initial?: Meeting; prevMeeting?: Meeting | null; employees: Employee[];
+  onSave: (m: Meeting) => void; onCancel: () => void;
 }) {
   const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
   const toast = useToast();
@@ -783,6 +798,32 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
   const [aiSummary, setAiSummary] = useState(initial?.summary || '');
   const [aiLoading, setAiLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [carriedIds, setCarriedIds] = useState<Set<string>>(new Set());
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [showCarry, setShowCarry] = useState(true);
+
+  const prevNewItems = (prevMeeting?.items || []).filter(i => i.category !== '공지' && !i.done);
+  const prevAgendas = (prevMeeting?.agendas || []).filter(a => calcProg(a) < 100);
+  const prevDecisions = prevMeeting?.decisions || [];
+  const prevActionItems = (prevMeeting?.actionItems || []).filter(a => !a.done);
+  const prevCarryTotal = prevNewItems.length + prevAgendas.length + prevDecisions.length + prevActionItems.length;
+
+  const carryNewItem = (item: MeetingItem) => {
+    setItems(p => [...p, { id: genId(), content: '[이월] ' + item.content, category: item.category, assignee: item.assignee, deadline: item.deadline, done: false }]);
+    setCarriedIds(p => new Set([...p, item.id]));
+  };
+  const carryAgendaItem = (a: Agenda, idx: number) => {
+    setItems(p => [...p, { id: genId(), content: '[이월] ' + a.title, category: '진행', assignee: a.assignee, deadline: a.deadline, done: false }]);
+    setCarriedIds(p => new Set([...p, 'ag_' + idx]));
+  };
+  const carryDecisionItem = (d: Decision) => {
+    setItems(p => [...p, { id: genId(), content: '[이월] ' + d.text, category: '결정', done: false }]);
+    setCarriedIds(p => new Set([...p, 'dec_' + d.id]));
+  };
+  const carryActionItem = (a: ActionItem) => {
+    setItems(p => [...p, { id: genId(), content: '[이월] ' + a.text, category: '결정', assignee: a.assignee, deadline: a.deadline, done: false }]);
+    setCarriedIds(p => new Set([...p, 'act_' + a.id]));
+  };
 
   // 방향키 캡처 (pendingItem 대기 중)
   useEffect(() => {
@@ -883,6 +924,78 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
           className="text-xs outline-none bg-transparent text-stone-700 dark:text-stone-200 placeholder:text-stone-300 dark:placeholder:text-stone-600 min-w-[80px]" />
       </div>
 
+      {/* 이전 회의 이월 */}
+      {prevMeeting && prevCarryTotal > 0 && (
+        <div className="border border-amber-200 dark:border-amber-800 rounded-xl overflow-hidden">
+          <button onClick={() => setShowCarry(p => !p)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 text-left hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+            <RefreshCw size={12} className="text-amber-500 shrink-0" />
+            <span className="text-xs font-black text-amber-700 dark:text-amber-400 flex-1">이전 회의 미결 {prevCarryTotal}건</span>
+            <span className="text-[10px] text-amber-500 truncate max-w-[120px]">{prevMeeting.title}</span>
+            <ChevronRight size={12} className={`text-amber-400 transition-transform shrink-0 ${showCarry ? 'rotate-90' : ''}`} />
+          </button>
+          {showCarry && (
+            <div className="px-4 py-3 space-y-1.5 bg-white dark:bg-stone-900">
+              {prevNewItems.map(item => {
+                const carried = carriedIds.has(item.id);
+                const cfg = CAT_CFG[item.category];
+                return (
+                  <div key={item.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cfg.color}`}>{item.category}</span>
+                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{item.content}</span>
+                    {item.assignee && <span className="text-[10px] text-stone-400 shrink-0">{item.assignee}</span>}
+                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
+                      <button onClick={() => carryNewItem(item)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                    )}
+                  </div>
+                );
+              })}
+              {prevAgendas.map((a, i) => {
+                const key = 'ag_' + i;
+                const carried = carriedIds.has(key);
+                return (
+                  <div key={key} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">진행</span>
+                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{a.title}</span>
+                    {a.assignee && <span className="text-[10px] text-stone-400 shrink-0">{a.assignee}</span>}
+                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
+                      <button onClick={() => carryAgendaItem(a, i)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                    )}
+                  </div>
+                );
+              })}
+              {prevDecisions.map(d => {
+                const key = 'dec_' + d.id;
+                const carried = carriedIds.has(key);
+                return (
+                  <div key={d.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">결정</span>
+                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{d.text}</span>
+                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
+                      <button onClick={() => carryDecisionItem(d)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                    )}
+                  </div>
+                );
+              })}
+              {prevActionItems.map(a => {
+                const key = 'act_' + a.id;
+                const carried = carriedIds.has(key);
+                return (
+                  <div key={a.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">결정</span>
+                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{a.text}</span>
+                    {a.assignee && <span className="text-[10px] text-stone-400 shrink-0">{a.assignee}</span>}
+                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
+                      <button onClick={() => carryActionItem(a)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 내용 입력 */}
       <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-200 dark:border-stone-700">
@@ -910,7 +1023,17 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
                 {catItems.map(item => (
                   <div key={item.id} className={`ml-1 mb-1.5 pl-3 border-l-2 ${cfg.border}`}>
                     <div className="flex items-center gap-2 group">
-                      <span className="text-sm text-stone-800 dark:text-stone-200 flex-1 leading-snug">{item.content}</span>
+                      {cat !== '공지' && (
+                        <button onClick={() => setItems(p => p.map(x => x.id === item.id ? { ...x, done: !x.done } : x))}
+                          className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                          {item.done && <Check size={8} className="text-white" />}
+                        </button>
+                      )}
+                      <span className={`text-sm flex-1 leading-snug ${item.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{item.content}</span>
+                      <button onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
+                        className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {(item.assignee || item.deadline) ? '담당✓' : '+담당'}
+                      </button>
                       <button onClick={() => setMemoOpenId(memoOpenId === item.id ? null : item.id)}
                         className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         {item.memo ? '메모✓' : '+메모'}
@@ -918,6 +1041,23 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
                       <button onClick={() => setItems(p => p.filter(x => x.id !== item.id))}
                         className="text-stone-200 hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
                     </div>
+                    {expandedItemId === item.id && (
+                      <div className="mt-1 flex gap-2">
+                        <select value={item.assignee || ''} onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, assignee: e.target.value || undefined } : x))}
+                          className="flex-1 text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300">
+                          <option value="">담당자</option>
+                          {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
+                        </select>
+                        <input type="date" value={item.deadline || ''} onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, deadline: e.target.value || undefined } : x))}
+                          className="text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300" />
+                      </div>
+                    )}
+                    {(item.assignee || item.deadline) && expandedItemId !== item.id && (
+                      <div className="flex gap-2 mt-0.5">
+                        {item.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full">{item.assignee}</span>}
+                        {item.deadline && <span className={`text-[10px] font-semibold ${isOverdue(item.deadline) && !item.done ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{item.deadline}</span>}
+                      </div>
+                    )}
                     {memoOpenId === item.id && (
                       <input autoFocus value={item.memo || ''}
                         onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, memo: e.target.value } : x))}
@@ -996,10 +1136,11 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
 }
 
 /* ─── Meeting Detail ─────────────────────────────────────────────────────── */
-function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onToggleActionItem, currentUser }: {
+function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onToggleActionItem, onToggleItem, currentUser }: {
   meeting: Meeting; onBack: () => void; onEdit: () => void; onDelete: () => void;
   onToggleCheck: (agIdx: number, checkIdx: number) => void;
   onToggleActionItem: (itemIdx: number) => void;
+  onToggleItem?: (itemId: string) => void;
   currentUser: User;
 }) {
   const ags = meeting.agendas || [];
@@ -1106,8 +1247,24 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
                 <div className="space-y-2">
                   {catItems.map(item => (
                     <div key={item.id} className={`pl-3 border-l-2 ${cfg.border}`}>
-                      <p className="text-sm text-stone-800 dark:text-stone-200 leading-snug">{item.content}</p>
-                      {item.memo && <p className="text-xs text-stone-400 mt-0.5 italic">{item.memo}</p>}
+                      <div className="flex items-start gap-2">
+                        {cat !== '공지' && (
+                          <button onClick={() => onToggleItem?.(item.id)}
+                            className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
+                            {item.done && <Check size={8} className="text-white" />}
+                          </button>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm leading-snug ${item.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{item.content}</p>
+                          {item.memo && <p className="text-xs text-stone-400 mt-0.5 italic">{item.memo}</p>}
+                          {(item.assignee || item.deadline) && (
+                            <div className="flex gap-2 mt-0.5 flex-wrap">
+                              {item.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full">{item.assignee}</span>}
+                              {item.deadline && <span className={`text-[10px] font-semibold ${isOverdue(item.deadline) && !item.done ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{item.deadline}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1118,25 +1275,55 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
       )}
 
       {/* 요약 바 */}
-      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4 flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-1.5"><span className="text-2xl font-black">{ags.length}</span><span className="text-stone-500 text-xs">안건</span></div>
-        {decisions.length > 0 && <>
-          <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
-          <div className="flex items-center gap-1.5"><span className="text-2xl font-black">{decisions.length}</span><span className="text-stone-500 text-xs">결정</span></div>
-        </>}
-        {actionItems.length > 0 && <>
-          <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
-          <div className="flex items-center gap-1.5">
-            <span className={`text-2xl font-black ${incompleteActions > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{incompleteActions}</span>
-            <span className="text-stone-500 text-xs">실행 미완료</span>
+      {(() => {
+        const hasNewItems = meeting.items && meeting.items.length > 0;
+        if (hasNewItems) {
+          const trackable = meeting.items!.filter(i => i.category !== '공지');
+          const doneCount = trackable.filter(i => i.done).length;
+          const total = trackable.length;
+          const pct = total ? Math.round(doneCount / total * 100) : 0;
+          const noticeCount = meeting.items!.filter(i => i.category === '공지').length;
+          return (
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4 flex items-center gap-4 flex-wrap">
+              {noticeCount > 0 && (
+                <><div className="flex items-center gap-1.5"><span className="text-2xl font-black">{noticeCount}</span><span className="text-stone-500 text-xs">공지</span></div><div className="w-px h-6 bg-stone-200 dark:bg-stone-700" /></>
+              )}
+              <div className="flex items-center gap-1.5"><span className="text-2xl font-black">{total}</span><span className="text-stone-500 text-xs">안건</span></div>
+              <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
+              <div className="flex items-center gap-1.5">
+                <span className={`text-2xl font-black ${total - doneCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{total - doneCount}</span>
+                <span className="text-stone-500 text-xs">미완료</span>
+              </div>
+              <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
+              <div className="flex-1 min-w-40">
+                <div className="flex justify-between text-[11px] text-stone-500 mb-1.5"><span>진행·결정 완료율</span><span className="font-bold">{pct}%</span></div>
+                <ProgressBar value={pct} height={8} />
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4 flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-1.5"><span className="text-2xl font-black">{ags.length}</span><span className="text-stone-500 text-xs">안건</span></div>
+            {decisions.length > 0 && <>
+              <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
+              <div className="flex items-center gap-1.5"><span className="text-2xl font-black">{decisions.length}</span><span className="text-stone-500 text-xs">결정</span></div>
+            </>}
+            {actionItems.length > 0 && <>
+              <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
+              <div className="flex items-center gap-1.5">
+                <span className={`text-2xl font-black ${incompleteActions > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{incompleteActions}</span>
+                <span className="text-stone-500 text-xs">실행 미완료</span>
+              </div>
+            </>}
+            <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
+            <div className="flex-1 min-w-40">
+              <div className="flex justify-between text-[11px] text-stone-500 mb-1.5"><span>전체 진행율</span><span className="font-bold">{avgP}%</span></div>
+              <ProgressBar value={avgP} height={8} />
+            </div>
           </div>
-        </>}
-        <div className="w-px h-6 bg-stone-200 dark:bg-stone-700" />
-        <div className="flex-1 min-w-40">
-          <div className="flex justify-between text-[11px] text-stone-500 mb-1.5"><span>전체 진행율</span><span className="font-bold">{avgP}%</span></div>
-          <ProgressBar value={avgP} height={8} />
-        </div>
-      </div>
+        );
+      })()}
 
       {/* 회의 결론 */}
       {meeting.summary && (
@@ -1380,8 +1567,11 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
       const exists = prev.find(x => x.id === m.id);
       return exists ? prev.map(x => x.id === m.id ? m : x) : [m, ...prev];
     });
-    const agendaTexts = (m.agendas ?? []).map(a => a.title).filter(Boolean);
-    saveMentions(agendaTexts, 'meeting', m.id, m.title, m.date);
+    const mentionTexts = [
+      ...(m.agendas ?? []).map(a => a.title),
+      ...(m.items ?? []).map(i => i.content),
+    ].filter(Boolean);
+    saveMentions(mentionTexts, 'meeting', m.id, m.title, m.date);
     setSelectedId(m.id);
     setEditingId(null);
     setView('detail');
@@ -1414,6 +1604,14 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
     if (!meeting.actionItems) return;
     const actionItems = meeting.actionItems.map((a, i) => i === itemIdx ? { ...a, done: !a.done } : a);
     const updated = scrub({ ...meeting, actionItems, updatedAt: new Date().toISOString() });
+    setMeetings(prev => prev.map(m => m.id === meeting.id ? updated : m));
+    await setDoc(doc(db, 'meetings', meeting.id), updated);
+  };
+
+  const toggleItem = async (meeting: Meeting, itemId: string) => {
+    if (!meeting.items) return;
+    const items = meeting.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i);
+    const updated = scrub({ ...meeting, items, updatedAt: new Date().toISOString() });
     setMeetings(prev => prev.map(m => m.id === meeting.id ? updated : m));
     await setDoc(doc(db, 'meetings', meeting.id), updated);
   };
@@ -1457,7 +1655,9 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   const allAg = meetings.flatMap(m => m.agendas || []);
   const urgCount = allAg.filter(a => a.urgency === 'high').length;
   const avgProg = allAg.length ? Math.round(allAg.reduce((s, a) => s + calcProg(a), 0) / allAg.length) : 0;
-  const totalIncomplete = meetings.reduce((s, m) => s + (m.actionItems || []).filter(a => !a.done).length, 0);
+  const allNewItems = meetings.flatMap(m => m.items || []);
+  const newItemIncomplete = allNewItems.filter(i => i.category !== '공지' && !i.done).length;
+  const totalIncomplete = meetings.reduce((s, m) => s + (m.actionItems || []).filter(a => !a.done).length, 0) + newItemIncomplete;
 
   if (loading) return (
     <div className="flex items-center justify-center py-32 text-stone-400">
@@ -1466,20 +1666,42 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   );
 
   /* ── FORM ── */
-  if (view === 'form') return (
-    <div>
-      <div className="flex items-center gap-3 mb-5">
-        <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">회의록</h1>
-        <ChevronRight size={16} className="text-stone-400" />
-        <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록'}</span>
+  if (view === 'form') {
+    const editingMeeting = editingId ? meetings.find(m => m.id === editingId) : undefined;
+    const useOldForm = editingMeeting && (editingMeeting.agendas?.length ?? 0) > 0 && !editingMeeting.items?.length;
+    const handleCancel = () => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); };
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">회의록</h1>
+          <ChevronRight size={16} className="text-stone-400" />
+          <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록'}</span>
+          {useOldForm && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">구 형식</span>}
+        </div>
+        {useOldForm ? (
+          <MeetingForm
+            initial={editingMeeting}
+            prevMeeting={getPrev(editingId)}
+            employees={employees}
+            templates={templates}
+            onSave={saveMeeting}
+            onCancel={handleCancel}
+            currentUser={currentUser}
+            onValidationError={msg => toast.error(msg)}
+            onTemplatesChange={t => setTemplates(t)}
+          />
+        ) : (
+          <QuickMeetingForm
+            initial={editingMeeting}
+            prevMeeting={getPrev(editingId)}
+            employees={employees}
+            onSave={saveMeeting}
+            onCancel={handleCancel}
+          />
+        )}
       </div>
-      <QuickMeetingForm
-        initial={editingId ? meetings.find(m => m.id === editingId) : undefined}
-        onSave={saveMeeting}
-        onCancel={() => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); }}
-      />
-    </div>
-  );
+    );
+  }
 
   /* ── DETAIL ── */
   if (view === 'detail' && selected) return (
@@ -1496,6 +1718,7 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
         onDelete={() => deleteMeeting(selected.id)}
         onToggleCheck={(agIdx, checkIdx) => toggleCheck(selected, agIdx, checkIdx)}
         onToggleActionItem={itemIdx => toggleActionItem(selected, itemIdx)}
+        onToggleItem={itemId => toggleItem(selected, itemId)}
         currentUser={currentUser}
       />
     </div>
