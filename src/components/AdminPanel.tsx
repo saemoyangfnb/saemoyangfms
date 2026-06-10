@@ -198,6 +198,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
   const handleApprove = async (uid: string, isApproved: boolean) => {
     try {
       await updateDoc(doc(db, 'users', uid), { isApproved });
+      await setDoc(doc(salesDb, 'user_status', uid), { isApproved }, { merge: true });
     } catch (error) {
       onFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
     }
@@ -206,6 +207,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
   const handleToggleActive = async (uid: string, isActive: boolean) => {
     try {
       await updateDoc(doc(db, 'users', uid), { isActive });
+      await setDoc(doc(salesDb, 'user_status', uid), { isActive }, { merge: true });
     } catch (error) {
       onFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
     }
@@ -216,6 +218,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
     if (!ok) return;
     try {
       await deleteDoc(doc(db, 'users', uid));
+      await deleteDoc(doc(salesDb, 'user_status', uid));
     } catch (error) {
       onFirestoreError(error, OperationType.DELETE, `users/${uid}`);
     }

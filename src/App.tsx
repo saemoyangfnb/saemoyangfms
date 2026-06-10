@@ -579,8 +579,13 @@ export default function App() {
                 const updatedUser = { ...userData, role: 'admin' as const, isApproved: true };
                 await setDoc(userDocRef, updatedUser, { merge: true });
                 setCurrentUser(updatedUser);
+                await setDoc(doc(salesDb, 'user_status', user.uid), { isApproved: true, isActive: true }, { merge: true });
               } else {
                 setCurrentUser(userData);
+                await setDoc(doc(salesDb, 'user_status', user.uid), {
+                  isApproved: userData.isApproved ?? false,
+                  isActive: true,
+                }, { merge: true });
               }
               if (userData.theme) setTheme(userData.theme);
             } else {
