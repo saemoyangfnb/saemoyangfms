@@ -919,7 +919,15 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
       if (!text) throw new Error('empty response');
       setAiSummary(text);
       toast.success('AI 요약 완료');
-    } catch (err: any) { toast.error(`Gemini 요약 실패: ${err?.message ?? '알 수 없는 오류'}`); }
+    } catch (err: any) {
+      const msg: string = err?.message ?? '';
+      const errMsg =
+        msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') ? 'API 크레딧 소진 — AI Studio에서 충전 필요' :
+        msg.includes('API key') || msg.includes('401') ? 'API 키 오류 — Vercel 환경변수 확인' :
+        msg.includes('empty response') ? '응답이 비어있습니다. 다시 시도해주세요' :
+        'Gemini 요약 실패';
+      toast.error(errMsg);
+    }
     finally { setAiLoading(false); }
   };
 
