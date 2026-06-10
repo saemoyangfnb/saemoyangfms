@@ -1738,7 +1738,7 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   /* ── FORM ── */
   if (view === 'form') {
     const editingMeeting = editingId ? meetings.find(m => m.id === editingId) : undefined;
-    const useOldForm = editingMeeting && (editingMeeting.agendas?.length ?? 0) > 0 && !editingMeeting.items?.length;
+    const useQuickForm = !!(editingMeeting?.items?.length && !editingMeeting.agendas?.length);
     const handleCancel = () => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); };
     return (
       <div>
@@ -1746,9 +1746,16 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
           <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">회의록</h1>
           <ChevronRight size={16} className="text-stone-400" />
           <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록'}</span>
-          {useOldForm && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded-full">구 형식</span>}
         </div>
-        {useOldForm ? (
+        {useQuickForm ? (
+          <QuickMeetingForm
+            initial={editingMeeting}
+            prevMeeting={getPrev(editingId)}
+            employees={employees}
+            onSave={saveMeeting}
+            onCancel={handleCancel}
+          />
+        ) : (
           <MeetingForm
             initial={editingMeeting}
             prevMeeting={getPrev(editingId)}
@@ -1759,14 +1766,6 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
             currentUser={currentUser}
             onValidationError={msg => toast.error(msg)}
             onTemplatesChange={t => setTemplates(t)}
-          />
-        ) : (
-          <QuickMeetingForm
-            initial={editingMeeting}
-            prevMeeting={getPrev(editingId)}
-            employees={employees}
-            onSave={saveMeeting}
-            onCancel={handleCancel}
           />
         )}
       </div>
