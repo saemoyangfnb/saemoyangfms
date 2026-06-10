@@ -48,7 +48,7 @@ import {
   Archive, AlertTriangle, Trash2, X, ChevronLeft, ChevronRight,
   ChevronDown, LayoutDashboard, Database, Settings,
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
-  ArrowRight, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
+  ArrowRight, ArrowLeft, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
   Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search,
 } from 'lucide-react';
@@ -491,6 +491,7 @@ export default function App() {
     section: 'home',
     costTab: '수도권',
   });
+  const [navHistory, setNavHistory] = useState<SidebarState[]>([]);
 
   const [editingBrandId, setEditingBrandId] = useState<BrandId | null>(null);
   const [editingBrandName, setEditingBrandName] = useState('');
@@ -861,18 +862,35 @@ export default function App() {
   };
 
   const navigateTo = (brandId: BrandId | null, section: SidebarSection, costTab?: CostTabType, reviewTab?: string) => {
-    // 접근제한 섹션은 이동 자체를 차단 (홈 카드, 사이드바 모두 동일하게 적용)
     if (currentUser && currentUser.role !== 'admin') {
       const perm = (currentUser.sectionPermissions as any)?.[section] ?? 'edit';
       if (perm === 'none') return;
     }
-    setSidebar({ brandId, section, costTab: costTab || '수도권', reviewTab });
+    // 같은 위치면 히스토리 push 안 함
+    setSidebar(prev => {
+      if (prev.brandId !== brandId || prev.section !== section) {
+        setNavHistory(h => [...h.slice(-19), prev]);
+      }
+      return { brandId, section, costTab: costTab || prev.costTab || '수도권', reviewTab };
+    });
     if (brandId && !expandedBrands.has(brandId)) {
       setExpandedBrands(prev => new Set([...prev, brandId]));
     }
     const group = SECTION_GROUP[section];
     if (group) setExpandedGroups(prev => new Set([...prev, group]));
     if (brandId) setExpandedGroups(prev => new Set([...prev, 'brands']));
+  };
+
+  const goBack = () => {
+    setNavHistory(h => {
+      if (h.length === 0) return h;
+      const prev = h[h.length - 1];
+      setSidebar(prev);
+      if (prev.brandId && !expandedBrands.has(prev.brandId)) {
+        setExpandedBrands(s => new Set([...s, prev.brandId!]));
+      }
+      return h.slice(0, -1);
+    });
   };
 
   const handleSaveCategories = async (updatedCategories: MenuCategory[]) => {
@@ -1264,10 +1282,15 @@ export default function App() {
       {/* 모바일 햄버거 버튼 */}
       {isMobile && (
         <header className="bg-[#FDFBF7]/95 dark:bg-stone-900/95 backdrop-blur-md fixed top-0 w-full z-40 border-b-[3px] border-double border-stone-800 dark:border-stone-400 h-14 flex items-center justify-between px-4 shadow-sm print:hidden">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button onClick={() => setMobileSidebarOpen(true)} className="text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 p-1.5 rounded-sm transition-colors active:scale-95">
               <MenuIcon size={20} />
             </button>
+            {navHistory.length > 0 && (
+              <button onClick={goBack} className="text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 p-1.5 rounded-sm transition-colors active:scale-95" title="뒤로가기">
+                <ArrowLeft size={18} />
+              </button>
+            )}
             <h1 className="text-lg font-black tracking-tight text-stone-900 dark:text-stone-100 select-none">SAEMOYANG F&B</h1>
           </div>
           <button onClick={() => setShowGlobalSearch(true)} className="p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-sm transition-colors">
@@ -1287,10 +1310,7 @@ export default function App() {
           {(!sidebarCollapsed || isMobile) && (
             <button
               id="tour-home-btn"
-              onClick={() => {
-                setSidebar({ brandId: null, section: 'home', costTab: '수도권' });
-                if (isMobile) setMobileSidebarOpen(false);
-              }}
+              onClick={() => navigateAndCloseMobile(null, 'home')}
               className="font-black text-base text-stone-900 dark:text-white tracking-tighter hover:text-stone-600 dark:hover:text-stone-300 transition-colors"
             >
               가맹관리시스템
@@ -1298,6 +1318,11 @@ export default function App() {
           )}
           {!isMobile && (
             <div className="flex items-center gap-0.5 ml-auto">
+              {navHistory.length > 0 && (
+                <button onClick={goBack} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors" title="뒤로가기">
+                  <ArrowLeft size={14} />
+                </button>
+              )}
               <button id="tour-search-btn" onClick={() => setShowGlobalSearch(true)} className="p-1.5 rounded-sm hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500" title="검색 (Ctrl+K)">
                 <Search size={14} />
               </button>

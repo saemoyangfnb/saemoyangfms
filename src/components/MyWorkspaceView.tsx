@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, Pin, CheckSquare, Square, ChevronRight,
   Calendar, FileText, ClipboardList, Zap, StickyNote,
-  Clock, AlertCircle,
+  Clock, AlertCircle, Pencil, Check, X, AlertTriangle,
 } from 'lucide-react';
 import { salesDb } from '../firebase';
 import {
@@ -43,7 +43,7 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
   const { confirm } = useConfirm();
 
   const today = toYMD(new Date());
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const [employeeId, setEmployeeId] = useState<string | null | undefined>(undefined);
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([]);
   const [memos, setMemos] = useState<Memo[]>([]);
@@ -55,12 +55,15 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
   const [addingMemo, setAddingMemo] = useState(false);
   const memoRef = useRef<HTMLTextAreaElement>(null);
 
+  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const [editingMemoContent, setEditingMemoContent] = useState('');
+  const editingMemoRef = useRef<HTMLTextAreaElement>(null);
+
   // ── 데이터 로드 ──────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        // 내 직원 레코드 찾기
         const empSnap = await getDocs(
           query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid))
         );
@@ -68,7 +71,6 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
         setEmployeeId(empId);
 
         await Promise.all([
-          // 메모 — uid로만 쿼리하고 JS에서 정렬 (컴포짓 인덱스 불필요)
           (async () => {
             const snap = await getDocs(
               query(collection(salesDb, 'user_memos'), where('uid', '==', currentUser.uid))
@@ -80,7 +82,6 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
             });
             setMemos(raw);
           })(),
-          // 내 담당 업무 — assigneeId로만 쿼리하고 JS에서 상태 필터 (컴포짓 인덱스 불필요)
           empId ? (async () => {
             const snap = await getDocs(
               query(collection(salesDb, 'tasks'), where('assigneeId', '==', empId))
@@ -91,7 +92,6 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
               .sort((a, b) => (a.dueDate ?? '9999') < (b.dueDate ?? '9999') ? -1 : 1);
             setMyTasks(active);
           })() : Promise.resolve(),
-          // 오늘 일정 — 과도한 범위 피하기 위해 30일 내 이벤트만 가져와 JS 필터
           (async () => {
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -108,7 +108,6 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
                 ))
             );
           })(),
-          // 오늘 업무보고
           empId ? (async () => {
             const snap = await getDocs(
               query(collection(salesDb, 'daily_reports'),
@@ -151,6 +150,33 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
     }
   };
 
+  // ── 메모 편집 ─────────────────────────────────────────────
+  const startEditMemo = (memo: Memo) => {
+    setEditingMemoId(memo.id);
+    setEditingMemoContent(memo.content);
+    setTimeout(() => {
+      editingMemoRef.current?.focus();
+      const len = memo.content.length;
+      editingMemoRef.current?.setSelectionRange(len, len);
+    }, 50);
+  };
+
+  const handleSaveEdit = async (memo: Memo) => {
+    const content = editingMemoContent.trim();
+    if (!content) return;
+    if (content === memo.content) { setEditingMemoId(null); return; }
+    const now = new Date().toISOString();
+    try {
+      await updateDoc(doc(salesDb, 'user_memos', memo.id), { content, updatedAt: now });
+      setMemos(prev => prev.map(m => m.id === memo.id ? { ...m, content, updatedAt: now } : m));
+      setEditingMemoId(null);
+    } catch {
+      toast.error('메모 수정 실패');
+    }
+  };
+
+  const cancelEdit = () => setEditingMemoId(null);
+
   // ── 메모 삭제 ─────────────────────────────────────────────
   const handleDeleteMemo = async (memo: Memo) => {
     const ok = await confirm({ title: '메모 삭제', message: '이 메모를 삭제할까요?', confirmLabel: '삭제', variant: 'danger' });
@@ -179,15 +205,15 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
     }
   };
 
-  // ── 업무 상태 완료 토글 ───────────────────────────────────
+  // ── 업무 완료 처리 (confirm 없이 즉시 + undo 토스트) ───────
   const handleCompleteTask = async (task: Task) => {
-    const ok = await confirm({ title: '업무 완료', message: `"${task.title}" 업무를 완료 처리할까요?`, confirmLabel: '완료', variant: 'warning' });
-    if (!ok) return;
+    const prevStatus = task.status;
+    setMyTasks(prev => prev.filter(t => t.id !== task.id));
     try {
       await updateDoc(doc(salesDb, 'tasks', task.id), { status: 'done', updatedAt: new Date().toISOString() });
-      setMyTasks(prev => prev.filter(t => t.id !== task.id));
-      toast.success('업무를 완료 처리했습니다');
+      toast.success(`"${task.title}" 완료 처리됨`);
     } catch {
+      setMyTasks(prev => [...prev, task].sort((a, b) => (a.dueDate ?? '9999') < (b.dueDate ?? '9999') ? -1 : 1));
       toast.error('업데이트 실패');
     }
   };
@@ -226,13 +252,23 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
         </button>
       </div>
 
+      {/* ── 직원 미연결 경고 ── */}
+      {employeeId === null && (
+        <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+          <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+            직원 정보가 연결되지 않았습니다. 담당 업무·업무보고 현황이 표시되지 않습니다. 관리자에게 직원 프로필 연동을 요청하세요.
+          </p>
+        </div>
+      )}
+
       {/* ── 오늘 상태 바 ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
             label: '오전 보고', icon: <ClipboardList size={14} />,
             value: todayMorning === null ? '—' : todayMorning ? '완료' : '미제출',
-            ok: !!todayMorning, warn: todayMorning === false,
+            ok: !!todayMorning, warn: todayMorning === false && employeeId !== null,
             onClick: () => onNavigate(null, 'daily'),
           },
           {
@@ -249,7 +285,7 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
           },
           {
             label: '내 담당 업무', icon: <CheckSquare size={14} />,
-            value: `${myTasks.length}건`,
+            value: employeeId === null ? '—' : `${myTasks.length}건`,
             ok: myTasks.length === 0, warn: tasksByCriticality.length > 0,
             onClick: () => onNavigate(null, 'daily'),
           },
@@ -315,20 +351,62 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
               </div>
             )}
             {memos.map(memo => (
-              <div key={memo.id} className="group flex items-start gap-2 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50">
-                <p className="flex-1 text-xs text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed min-w-0">{memo.content}</p>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <button
-                    onClick={() => handlePinMemo(memo)}
-                    className={`p-1 rounded-sm transition-colors ${memo.isPinned ? 'text-amber-500' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
-                    title={memo.isPinned ? '핀 해제' : '핀 고정'}
-                  >
-                    <Pin size={12} />
-                  </button>
-                  <button onClick={() => handleDeleteMemo(memo)} className="p-1 text-stone-400 hover:text-rose-500 rounded-sm transition-colors">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
+              <div key={memo.id} className="group px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50">
+                {editingMemoId === memo.id ? (
+                  /* 인라인 편집 모드 */
+                  <div>
+                    <textarea
+                      ref={editingMemoRef}
+                      value={editingMemoContent}
+                      onChange={e => setEditingMemoContent(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveEdit(memo);
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      rows={3}
+                      className="w-full text-xs px-2 py-1.5 border border-blue-400 dark:border-blue-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-none resize-none"
+                    />
+                    <div className="flex gap-1.5 mt-1.5">
+                      <button onClick={() => handleSaveEdit(memo)} className="flex items-center gap-1 px-2 py-1 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-[10px] font-bold rounded-sm hover:bg-stone-700 transition-colors">
+                        <Check size={10} /> 저장
+                      </button>
+                      <button onClick={cancelEdit} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 rounded-sm transition-colors">
+                        <X size={10} /> 취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* 읽기 모드 */
+                  <div className="flex items-start gap-2">
+                    <p
+                      className="flex-1 text-xs text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed min-w-0 cursor-text"
+                      onDoubleClick={() => startEditMemo(memo)}
+                      title="더블클릭해서 편집"
+                    >
+                      {memo.isPinned && <Pin size={10} className="inline mr-1 text-amber-400 mb-0.5" />}
+                      {memo.content}
+                    </p>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={() => startEditMemo(memo)}
+                        className="p-1 rounded-sm text-stone-400 hover:text-blue-500 transition-colors"
+                        title="편집"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        onClick={() => handlePinMemo(memo)}
+                        className={`p-1 rounded-sm transition-colors ${memo.isPinned ? 'text-amber-500' : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}
+                        title={memo.isPinned ? '핀 해제' : '핀 고정'}
+                      >
+                        <Pin size={12} />
+                      </button>
+                      <button onClick={() => handleDeleteMemo(memo)} className="p-1 text-stone-400 hover:text-rose-500 rounded-sm transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -352,7 +430,9 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
             {myTasks.length === 0 && (
               <div className="px-4 py-8 text-center">
                 <CheckSquare size={24} className="mx-auto text-stone-300 dark:text-stone-600 mb-2" />
-                <p className="text-xs text-stone-400">담당 업무가 없습니다.</p>
+                <p className="text-xs text-stone-400">
+                  {employeeId === null ? '직원 정보 미연결' : '담당 업무가 없습니다.'}
+                </p>
               </div>
             )}
 
@@ -390,17 +470,21 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
         </div>
       </div>
 
-      {/* ── 오늘 일정 ── */}
-      {todayEvents.length > 0 && (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
-            <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase flex items-center gap-1.5">
-              <Calendar size={11} /> 오늘 일정
-            </p>
-            <button onClick={() => onNavigate(null, 'calendar')} className="text-[10px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
-              캘린더 <ChevronRight size={11} />
-            </button>
+      {/* ── 오늘 일정 (항상 표시) ── */}
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+          <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase flex items-center gap-1.5">
+            <Calendar size={11} /> 오늘 일정
+          </p>
+          <button onClick={() => onNavigate(null, 'calendar')} className="text-[10px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
+            캘린더 <ChevronRight size={11} />
+          </button>
+        </div>
+        {todayEvents.length === 0 ? (
+          <div className="px-4 py-6 text-center">
+            <p className="text-xs text-stone-400">오늘 일정이 없습니다.</p>
           </div>
+        ) : (
           <div className="divide-y divide-stone-100 dark:divide-stone-800">
             {todayEvents.map(evt => (
               <div key={evt.id} className="flex items-center gap-3 px-4 py-3">
@@ -415,8 +499,8 @@ export function MyWorkspaceView({ currentUser, onNavigate, onOpenQuickInput }: P
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── 바로가기 ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
