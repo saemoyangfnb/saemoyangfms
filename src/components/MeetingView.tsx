@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { salesDb as db, salesDb } from '../firebase';
 import {
   collection, getDocs, doc, setDoc, deleteDoc, orderBy, query, where,
@@ -441,6 +441,8 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   const [newActAssignee, setNewActAssignee] = useState('');
   const [newActDeadline, setNewActDeadline] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [meetingType, setMeetingType] = useState<MeetingType>(initial?.type || '주간업무');
+  const [aiLoading, setAiLoading] = useState(false);
   const { confirm } = useConfirm();
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -513,12 +515,50 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
     setNewActText(''); setNewActAssignee(''); setNewActDeadline('');
   };
 
+  const callGemini = async () => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) { onValidationError('API 키가 설정되지 않았습니다'); return; }
+    const hasContent = agendas.some(a => a.title.trim()) || decisions.length > 0;
+    if (!hasContent) { onValidationError('안건 또는 결정사항을 먼저 입력해주세요'); return; }
+    setAiLoading(true);
+    try {
+      const agendaLines = agendas.filter(a => a.title.trim()).map((a, i) => {
+        const checks = a.checklist.length
+          ? '\n' + a.checklist.map(c => `  ${c.done ? '✓' : '·'} ${c.text}`).join('\n') : '';
+        return `${i + 1}. ${a.title}${checks}`;
+      }).join('\n') || '없음';
+      const decLines = decisions.map((d, i) => `${i + 1}. [${impLabel(d.importance)}] ${d.text}`).join('\n') || '없음';
+      const actLines = actionItems.map(a =>
+        `- ${a.text}${a.assignee ? ` (담당: ${a.assignee})` : ''}${a.deadline ? ` / 기한: ${a.deadline}` : ''}`
+      ).join('\n') || '없음';
+      const prompt = `다음은 "${title || '회의'}" 회의 내용입니다.\n\n[안건]\n${agendaLines}\n\n[결정사항]\n${decLines}\n\n[실행항목]\n${actLines}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항과 실행항목 중심으로, 핵심만.`;
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      const text = response.text ?? '';
+      if (!text) throw new Error('empty response');
+      setSummary(text);
+    } catch (err: any) {
+      const msg: string = err?.message ?? '';
+      const errMsg =
+        msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') ? 'API 크레딧 소진 — AI Studio에서 충전 필요' :
+        msg.includes('API key') || msg.includes('401') ? 'API 키 오류 — Vercel 환경변수 확인' :
+        msg.includes('empty response') ? '응답이 비어있습니다. 다시 시도해주세요' :
+        'Gemini 요약 실패';
+      onValidationError(errMsg);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleSave = () => {
     if (!title.trim()) { onValidationError('회의 제목을 입력해주세요'); return; }
     if (!date) { onValidationError('회의 일자를 선택해주세요'); return; }
     const m: Meeting = {
       id: initial?.id || genId(),
-      title: title.trim(), date,
+      title: title.trim(), date, type: meetingType,
       author: author.trim() || undefined,
       location: location.trim() || undefined,
       attendees: attendees.length ? attendees : undefined,
@@ -710,10 +750,31 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
                 ))}
               </div>
             </div>
+
+            {/* 회의 종류 */}
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 dark:text-stone-400 mb-1.5">회의 종류</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {MEETING_TYPES.map(t => (
+                  <button key={t} type="button" onClick={() => setMeetingType(t)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${meetingType === t ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-transparent' : 'border-stone-200 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:border-stone-400'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
           </Section>
 
           {/* 2. 회의 결론 */}
           <Section label="회의 결론">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-stone-400">핵심 결론 요약 또는 AI 자동 정리</p>
+              <button type="button" onClick={callGemini} disabled={aiLoading}
+                className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg disabled:opacity-40 shrink-0">
+                {aiLoading ? <RefreshCw size={11} className="animate-spin" /> : <span>✨</span>}
+                {aiLoading ? '요약 중...' : 'AI 정리'}
+              </button>
+            </div>
             <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3}
               placeholder="회의의 핵심 결론을 한두 문장으로 요약해주세요"
               className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 resize-none" />
@@ -822,389 +883,6 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   );
 }
 
-/* ─── Quick Meeting Form (3+1 키보드 입력) ──────────────────────────────── */
-function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }: {
-  initial?: Meeting; prevMeeting?: Meeting | null; employees: Employee[];
-  onSave: (m: Meeting) => void; onCancel: () => void;
-}) {
-  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
-  const toast = useToast();
-
-  const [title, setTitle] = useState(initial?.title || '');
-  const [date, setDate] = useState(initial?.date || today);
-  const [meetingType, setMeetingType] = useState<MeetingType>((initial?.type) || '주간업무');
-  const [location, setLocation] = useState(initial?.location || '');
-  const [attendeeInput, setAttendeeInput] = useState('');
-  const [attendees, setAttendees] = useState<string[]>(initial?.attendees || []);
-  const [items, setItems] = useState<MeetingItem[]>(initial?.items || []);
-  const [inputValue, setInputValue] = useState('');
-  const [pendingItem, setPendingItem] = useState<{ content: string; category: '공지' | '진행' | '결정' } | null>(null);
-  const [memoOpenId, setMemoOpenId] = useState<string | null>(null);
-  const [aiSummary, setAiSummary] = useState(initial?.summary || '');
-  const [aiLoading, setAiLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [carriedIds, setCarriedIds] = useState<Set<string>>(new Set());
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [editingContentId, setEditingContentId] = useState<string | null>(null);
-  const [editingContentValue, setEditingContentValue] = useState('');
-  const [showCarry, setShowCarry] = useState(true);
-
-  const prevNewItems = (prevMeeting?.items || []).filter(i => i.category !== '공지' && !i.done);
-  const prevAgendas = (prevMeeting?.agendas || []).filter(a => calcProg(a) < 100);
-  const prevDecisions = prevMeeting?.decisions || [];
-  const prevActionItems = (prevMeeting?.actionItems || []).filter(a => !a.done);
-  const prevCarryTotal = prevNewItems.length + prevAgendas.length + prevDecisions.length + prevActionItems.length;
-
-  const carryNewItem = (item: MeetingItem) => {
-    setItems(p => [...p, { id: genId(), content: '[이월] ' + item.content, category: item.category, assignee: item.assignee, deadline: item.deadline, done: false }]);
-    setCarriedIds(p => new Set([...p, item.id]));
-  };
-  const carryAgendaItem = (a: Agenda, idx: number) => {
-    setItems(p => [...p, { id: genId(), content: '[이월] ' + a.title, category: '진행', assignee: a.assignee, deadline: a.deadline, done: false }]);
-    setCarriedIds(p => new Set([...p, 'ag_' + idx]));
-  };
-  const carryDecisionItem = (d: Decision) => {
-    setItems(p => [...p, { id: genId(), content: '[이월] ' + d.text, category: '결정', done: false }]);
-    setCarriedIds(p => new Set([...p, 'dec_' + d.id]));
-  };
-  const carryActionItem = (a: ActionItem) => {
-    setItems(p => [...p, { id: genId(), content: '[이월] ' + a.text, category: '결정', assignee: a.assignee, deadline: a.deadline, done: false }]);
-    setCarriedIds(p => new Set([...p, 'act_' + a.id]));
-  };
-
-  // 방향키 캡처 (pendingItem 대기 중)
-  useEffect(() => {
-    if (!pendingItem) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '공지' } : null); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '진행' } : null); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '결정' } : null); }
-      else if (e.key === 'Enter') {
-        e.preventDefault();
-        setItems(prev => [...prev, { id: genId(), content: pendingItem.content, category: pendingItem.category }]);
-        setPendingItem(null);
-        setTimeout(() => inputRef.current?.focus(), 0);
-      } else if (e.key === 'Escape') {
-        setPendingItem(null);
-        setTimeout(() => inputRef.current?.focus(), 0);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [pendingItem]);
-
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && inputValue.trim()) {
-      e.preventDefault();
-      setPendingItem({ content: inputValue.trim(), category: '진행' });
-      setInputValue('');
-    }
-  };
-
-  const callGemini = async () => {
-    if (items.length === 0) { toast.error('항목을 먼저 입력해주세요'); return; }
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) { toast.error('API 키가 설정되지 않았습니다'); return; }
-    setAiLoading(true);
-    try {
-      const fmt = (cat: '공지' | '진행' | '결정') =>
-        items.filter(i => i.category === cat).map(i => `• ${i.content}${i.memo ? ` (메모: ${i.memo})` : ''}`).join('\n') || '없음';
-      const prompt = `다음은 "${title}" 회의 내용입니다.\n\n[공지]\n${fmt('공지')}\n\n[진행]\n${fmt('진행')}\n\n[결정]\n${fmt('결정')}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항 중심으로, 핵심만.`;
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      });
-      const text = response.text ?? '';
-      if (!text) throw new Error('empty response');
-      setAiSummary(text);
-      toast.success('AI 요약 완료');
-    } catch (err: any) {
-      const msg: string = err?.message ?? '';
-      const errMsg =
-        msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429') ? 'API 크레딧 소진 — AI Studio에서 충전 필요' :
-        msg.includes('API key') || msg.includes('401') ? 'API 키 오류 — Vercel 환경변수 확인' :
-        msg.includes('empty response') ? '응답이 비어있습니다. 다시 시도해주세요' :
-        'Gemini 요약 실패';
-      toast.error(errMsg);
-    }
-    finally { setAiLoading(false); }
-  };
-
-  const handleSave = () => {
-    if (!title.trim()) { toast.error('회의 제목을 입력해주세요'); return; }
-    const finalItems = pendingItem
-      ? [...items, { id: genId(), content: pendingItem.content, category: pendingItem.category }]
-      : items;
-    const m: Meeting = {
-      id: initial?.id || genId(), title: title.trim(), date, type: meetingType,
-      location: location.trim() || undefined,
-      attendees: attendees.length ? attendees : undefined,
-      items: finalItems.length ? finalItems : undefined,
-      summary: aiSummary.trim() || undefined,
-      createdAt: initial?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    onSave(m);
-  };
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-10">
-      {/* 기본 정보 */}
-      <div className="space-y-2">
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="회의 제목 *"
-          className="w-full px-3 py-2.5 text-sm font-bold border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500" />
-        <div className="grid grid-cols-2 gap-2">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none" />
-          <input value={location} onChange={e => setLocation(e.target.value)} placeholder="장소 (선택)"
-            className="px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none placeholder:text-stone-300" />
-        </div>
-      </div>
-
-      {/* 종류 + 참석자 */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {MEETING_TYPES.map(t => (
-          <button key={t} onClick={() => setMeetingType(t)}
-            className={`px-3 py-1 text-xs font-bold rounded-lg border transition-colors ${meetingType === t ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-transparent' : 'border-stone-200 dark:border-stone-600 text-stone-500 hover:border-stone-400'}`}>
-            {t}
-          </button>
-        ))}
-        <div className="w-px h-4 bg-stone-200 dark:bg-stone-700" />
-        {attendees.map(a => (
-          <span key={a} className="flex items-center gap-1 px-2 py-0.5 bg-stone-100 dark:bg-stone-800 rounded-full text-xs font-bold text-stone-700 dark:text-stone-200">
-            {a}<button onClick={() => setAttendees(p => p.filter(x => x !== a))} className="text-stone-400 hover:text-red-400 ml-0.5"><X size={9} /></button>
-          </span>
-        ))}
-        <input value={attendeeInput} onChange={e => setAttendeeInput(e.target.value)}
-          onKeyDown={e => { if ((e.key === 'Enter' || e.key === ',') && attendeeInput.trim()) { e.preventDefault(); if (!attendees.includes(attendeeInput.trim())) setAttendees(p => [...p, attendeeInput.trim()]); setAttendeeInput(''); } }}
-          placeholder={attendees.length === 0 ? '참석자 입력 후 Enter' : '+ 추가'}
-          className="text-xs outline-none bg-transparent text-stone-700 dark:text-stone-200 placeholder:text-stone-300 dark:placeholder:text-stone-600 min-w-[80px]" />
-      </div>
-
-      {/* 이전 회의 이월 */}
-      {prevMeeting && prevCarryTotal > 0 && (
-        <div className="border border-amber-200 dark:border-amber-800 rounded-xl overflow-hidden">
-          <button onClick={() => setShowCarry(p => !p)}
-            className="w-full flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 text-left hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-            <RefreshCw size={12} className="text-amber-500 shrink-0" />
-            <span className="text-xs font-black text-amber-700 dark:text-amber-400 flex-1">이전 회의 미결 {prevCarryTotal}건</span>
-            <span className="text-[10px] text-amber-500 truncate max-w-[120px]">{prevMeeting.title}</span>
-            <ChevronRight size={12} className={`text-amber-400 transition-transform shrink-0 ${showCarry ? 'rotate-90' : ''}`} />
-          </button>
-          {showCarry && (
-            <div className="px-4 py-3 space-y-1.5 bg-white dark:bg-stone-900">
-              {prevNewItems.map(item => {
-                const carried = carriedIds.has(item.id);
-                const cfg = CAT_CFG[item.category];
-                return (
-                  <div key={item.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cfg.color}`}>{item.category}</span>
-                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{item.content}</span>
-                    {item.assignee && <span className="text-[10px] text-stone-400 shrink-0">{item.assignee}</span>}
-                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
-                      <button onClick={() => carryNewItem(item)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
-                    )}
-                  </div>
-                );
-              })}
-              {prevAgendas.map((a, i) => {
-                const key = 'ag_' + i;
-                const carried = carriedIds.has(key);
-                return (
-                  <div key={key} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">진행</span>
-                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{a.title}</span>
-                    {a.assignee && <span className="text-[10px] text-stone-400 shrink-0">{a.assignee}</span>}
-                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
-                      <button onClick={() => carryAgendaItem(a, i)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
-                    )}
-                  </div>
-                );
-              })}
-              {prevDecisions.map(d => {
-                const key = 'dec_' + d.id;
-                const carried = carriedIds.has(key);
-                return (
-                  <div key={d.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">결정</span>
-                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{d.text}</span>
-                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
-                      <button onClick={() => carryDecisionItem(d)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
-                    )}
-                  </div>
-                );
-              })}
-              {prevActionItems.map(a => {
-                const key = 'act_' + a.id;
-                const carried = carriedIds.has(key);
-                return (
-                  <div key={a.id} className={`flex items-center gap-2 p-2 rounded-lg ${carried ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">결정</span>
-                    <span className={`flex-1 text-xs text-stone-700 dark:text-stone-300 truncate ${carried ? 'line-through text-stone-400' : ''}`}>{a.text}</span>
-                    {a.assignee && <span className="text-[10px] text-stone-400 shrink-0">{a.assignee}</span>}
-                    {carried ? <Check size={12} className="text-emerald-500 shrink-0" /> : (
-                      <button onClick={() => carryActionItem(a)} className="shrink-0 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 border border-stone-200 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 내용 입력 */}
-      <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-200 dark:border-stone-700">
-          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">회의 내용</span>
-          <div className="flex gap-2 ml-auto">
-            {(['공지', '진행', '결정'] as const).map(cat => (
-              <span key={cat} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${CAT_CFG[cat].color}`}>
-                <kbd className="font-mono text-[9px]">{CAT_CFG[cat].key}</kbd>{cat}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-4 space-y-3">
-          {/* 확정 항목 */}
-          {(['공지', '진행', '결정'] as const).map(cat => {
-            const catItems = items.filter(i => i.category === cat);
-            if (!catItems.length) return null;
-            const cfg = CAT_CFG[cat];
-            return (
-              <div key={cat}>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full mb-2 ${cfg.color}`}>
-                  {cfg.key} {cat}
-                </span>
-                {catItems.map(item => (
-                  <div key={item.id} className={`ml-1 mb-1.5 pl-3 border-l-2 ${cfg.border}`}>
-                    <div className="flex items-center gap-2 group">
-                      {cat !== '공지' && (
-                        <button onClick={() => setItems(p => p.map(x => x.id === item.id ? { ...x, done: !x.done } : x))}
-                          className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'}`}>
-                          {item.done && <Check size={8} className="text-white" />}
-                        </button>
-                      )}
-                      {editingContentId === item.id ? (
-                        <input autoFocus value={editingContentValue}
-                          onChange={e => setEditingContentValue(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') { setItems(p => p.map(x => x.id === item.id ? { ...x, content: editingContentValue.trim() || x.content } : x)); setEditingContentId(null); }
-                            else if (e.key === 'Escape') setEditingContentId(null);
-                          }}
-                          onBlur={() => { setItems(p => p.map(x => x.id === item.id ? { ...x, content: editingContentValue.trim() || x.content } : x)); setEditingContentId(null); }}
-                          className="text-sm flex-1 bg-transparent border-b border-stone-400 dark:border-stone-500 outline-none text-stone-800 dark:text-stone-200 min-w-0" />
-                      ) : (
-                        <span onClick={() => { setEditingContentId(item.id); setEditingContentValue(item.content); }}
-                          className={`text-sm flex-1 leading-snug cursor-text ${item.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{item.content}</span>
-                      )}
-                      <button onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
-                        className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {(item.assignee || item.deadline) ? '담당✓' : '+담당'}
-                      </button>
-                      <button onClick={() => setMemoOpenId(memoOpenId === item.id ? null : item.id)}
-                        className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {item.memo ? '메모✓' : '+메모'}
-                      </button>
-                      <button onClick={() => setItems(p => p.filter(x => x.id !== item.id))}
-                        className="text-stone-200 hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
-                    </div>
-                    {expandedItemId === item.id && (
-                      <div className="mt-1 flex gap-2">
-                        <EmployeeSearchInput
-                          employees={employees}
-                          value={item.assignee || ''}
-                          onChange={v => setItems(p => p.map(x => x.id === item.id ? { ...x, assignee: v || undefined } : x))}
-                        />
-                        <input type="date" value={item.deadline || ''} onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, deadline: e.target.value || undefined } : x))}
-                          className="text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300 shrink-0" />
-                      </div>
-                    )}
-                    {(item.assignee || item.deadline) && expandedItemId !== item.id && (
-                      <div className="flex gap-2 mt-0.5">
-                        {item.assignee && <span className="text-[10px] text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full">{item.assignee}</span>}
-                        {item.deadline && <span className={`text-[10px] font-semibold ${isOverdue(item.deadline) && !item.done ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{item.deadline}</span>}
-                      </div>
-                    )}
-                    {memoOpenId === item.id && (
-                      <input autoFocus value={item.memo || ''}
-                        onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, memo: e.target.value } : x))}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setMemoOpenId(null); }}
-                        placeholder="메모..."
-                        className="mt-1 w-full text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300 placeholder:text-stone-300" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-
-          {/* 대기 중 항목 */}
-          {pendingItem && (
-            <div className="p-3 bg-stone-900 dark:bg-stone-100 rounded-xl">
-              <p className="text-sm font-semibold text-white dark:text-stone-900 mb-3 leading-snug">{pendingItem.content}</p>
-              <div className="grid grid-cols-3 gap-2 mb-2">
-                {(['공지', '진행', '결정'] as const).map(cat => {
-                  const cfg = CAT_CFG[cat];
-                  const active = pendingItem.category === cat;
-                  return (
-                    <button key={cat} onClick={() => setPendingItem(p => p ? { ...p, category: cat } : null)}
-                      className={`py-2 text-xs font-black rounded-lg border-2 transition-all ${active ? `${cfg.color} ${cfg.border} scale-105` : 'border-stone-600 dark:border-stone-300 text-stone-400 dark:text-stone-500'}`}>
-                      <span className="font-mono">{cfg.key}</span> {cat}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-stone-500 text-center">방향키로 선택 후 <kbd className="px-1 bg-stone-700 dark:bg-stone-200 dark:text-stone-800 text-white rounded font-mono text-[9px]">Enter</kbd> 확정 · <kbd className="px-1 bg-stone-700 dark:bg-stone-200 dark:text-stone-800 text-white rounded font-mono text-[9px]">Esc</kbd> 취소</p>
-            </div>
-          )}
-
-          {/* 입력창 */}
-          {!pendingItem && (
-            <div className="relative">
-              <input ref={inputRef} autoFocus={!initial}
-                value={inputValue} onChange={e => setInputValue(e.target.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder={items.length === 0 ? '내용 입력 후 Enter — 방향키(← ↓ →)로 분류...' : '다음 항목 입력...'}
-                className="w-full px-3 py-2.5 text-sm border border-dashed border-stone-300 dark:border-stone-600 rounded-lg bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 placeholder:text-stone-300 dark:placeholder:text-stone-600" />
-              {inputValue && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-300 font-mono pointer-events-none">Enter ↵</span>}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* AI 요약 */}
-      {items.length >= 2 && (
-        <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
-          <div className="flex items-center px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-200 dark:border-stone-700">
-            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest flex-1">AI 회의 요약</span>
-            <button onClick={callGemini} disabled={aiLoading}
-              className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg disabled:opacity-40">
-              {aiLoading ? <RefreshCw size={11} className="animate-spin" /> : '✨'}
-              {aiLoading ? '요약 중...' : 'Gemini 정리'}
-            </button>
-          </div>
-          <div className="p-4">
-            <textarea value={aiSummary} onChange={e => setAiSummary(e.target.value)}
-              placeholder="완료 후 Gemini 정리 버튼 클릭 — 직접 수정도 가능합니다."
-              rows={3}
-              className="w-full text-sm bg-transparent text-stone-800 dark:text-stone-200 outline-none resize-none placeholder:text-stone-300 dark:placeholder:text-stone-600 leading-relaxed" />
-          </div>
-        </div>
-      )}
-
-      {/* 저장/취소 */}
-      <div className="flex gap-2 justify-end">
-        <button onClick={onCancel} className="px-4 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-300 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800">취소</button>
-        <button onClick={handleSave} disabled={!title.trim()}
-          className="px-5 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-black rounded-lg hover:opacity-80 disabled:opacity-40">저장</button>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Meeting Detail ─────────────────────────────────────────────────────── */
 function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onToggleActionItem, onToggleItem, currentUser }: {
   meeting: Meeting; onBack: () => void; onEdit: () => void; onDelete: () => void;
@@ -1219,7 +897,17 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
   const avgP = ags.length ? Math.round(ags.reduce((s, a) => s + calcProg(a), 0) / ags.length) : 0;
   const incompleteActions = actionItems.filter(a => !a.done).length;
   const [taskModal, setTaskModal] = useState<{ agendaTitle: string } | null>(null);
+  const [linkedTasks, setLinkedTasks] = useState<Array<{ id: string; title: string; status: string; assigneeName?: string }>>([]);
   const toast = useToast();
+
+  useEffect(() => {
+    getDocs(query(collection(salesDb, 'tasks'), where('sourceMeetingId', '==', meeting.id)))
+      .then(snap => setLinkedTasks(snap.docs.map(d => {
+        const data = d.data();
+        return { id: data.id, title: data.title, status: data.status || 'pending', assigneeName: data.assigneeName };
+      })))
+      .catch(() => {});
+  }, [meeting.id]);
 
   const handleSelfTask = async (taskTitle: string) => {
     try {
@@ -1438,6 +1126,32 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
                 {a.deadline && <span className={`text-[10px] font-semibold shrink-0 ${isOverdue(a.deadline) && !a.done ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{a.deadline}</span>}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 연결된 업무 */}
+      {linkedTasks.length > 0 && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4">
+          <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-3">연결된 업무 {linkedTasks.length}건</p>
+          <div className="space-y-2">
+            {linkedTasks.map(t => {
+              const isDone = t.status === 'done' || t.status === 'completed';
+              const isProgress = t.status === 'in_progress';
+              const statusCls = isDone
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                : isProgress
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+              const statusLabel = isDone ? '완료' : isProgress ? '진행중' : '대기';
+              return (
+                <div key={t.id} className="flex items-center gap-3 p-2.5 bg-stone-50 dark:bg-stone-800/50 rounded-lg">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusCls}`}>{statusLabel}</span>
+                  <span className="flex-1 text-xs text-stone-800 dark:text-stone-200 truncate">{t.title}</span>
+                  {t.assigneeName && <span className="text-[10px] text-stone-400 shrink-0">{t.assigneeName}</span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1738,7 +1452,6 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   /* ── FORM ── */
   if (view === 'form') {
     const editingMeeting = editingId ? meetings.find(m => m.id === editingId) : undefined;
-    const useQuickForm = !!(editingMeeting?.items?.length && !editingMeeting.agendas?.length);
     const handleCancel = () => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); };
     return (
       <div>
@@ -1747,27 +1460,17 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
           <ChevronRight size={16} className="text-stone-400" />
           <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록'}</span>
         </div>
-        {useQuickForm ? (
-          <QuickMeetingForm
-            initial={editingMeeting}
-            prevMeeting={getPrev(editingId)}
-            employees={employees}
-            onSave={saveMeeting}
-            onCancel={handleCancel}
-          />
-        ) : (
-          <MeetingForm
-            initial={editingMeeting}
-            prevMeeting={getPrev(editingId)}
-            employees={employees}
-            templates={templates}
-            onSave={saveMeeting}
-            onCancel={handleCancel}
-            currentUser={currentUser}
-            onValidationError={msg => toast.error(msg)}
-            onTemplatesChange={t => setTemplates(t)}
-          />
-        )}
+        <MeetingForm
+          initial={editingMeeting}
+          prevMeeting={getPrev(editingId)}
+          employees={employees}
+          templates={templates}
+          onSave={saveMeeting}
+          onCancel={handleCancel}
+          currentUser={currentUser}
+          onValidationError={msg => toast.error(msg)}
+          onTemplatesChange={t => setTemplates(t)}
+        />
       </div>
     );
   }

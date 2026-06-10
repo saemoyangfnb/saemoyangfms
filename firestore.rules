@@ -2,47 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    // Collection: users
-    // Document ID: userId
-    // Fields:
-    //   - uid: string (required, immutable)
-    //   - email: string (required, immutable)
-    //   - name: string (required)
-    //   - role: string (required, 'admin' or 'user')
-    //   - isApproved: boolean (required)
-    //   - isActive: boolean (required)
-    //   - createdAt: string (required, immutable)
-    //
-    // Collection: menus
-    // Document ID: menuId
-    // Fields:
-    //   - id: string (required, immutable)
-    //   - name: string (required)
-    //   - prices: map (required)
-    //   - recipe: list (required)
-    //   - isArchived: boolean (required)
-    //   - createdAt: string (required, immutable)
-    //
-    // Collection: ingredients
-    // Document ID: ingredientId
-    // Fields:
-    //   - id: string (required, immutable)
-    //   - name: string (required)
-    //   - boxCost: number (required)
-    //   - boxQuantity: number (required)
-    //   - unitCost: number (required)
-    //   - unit: string (required, 'kg', 'g', 'ea', '미')
-    //   - isArchived: boolean (required)
-    //   - createdAt: string (required, immutable)
+    // salesDb (default DB) 규칙 파일
+    // - users 컬렉션은 named DB에 있으므로 isApprovedUser()는 salesDb에서 동작 안 함
+    // - isAdmin()은 하드코딩 이메일로 fallback되어 작동
+    // - 일반 접근제어는 request.auth != null 사용
     // ===============================================================
 
-    // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -50,14 +19,12 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.email == "saemoyang_official@naver.com" ||
-        request.auth.token.email == "wnsdl9331@gmail.com" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        request.auth.token.email == "wnsdl9331@gmail.com"
       );
     }
 
     function isApprovedUser() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isApproved == true &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
@@ -71,7 +38,7 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
-    // Domain Validators
+    // Domain Validators (named DB 컬렉션 - menus/ingredients/users 등)
     function isValidUser(data) {
       return hasOnlyAllowedFields(['uid', 'email', 'name', 'role', 'isApproved', 'isActive', 'theme', 'createdAt', 'alertThresholdType', 'alertThresholdValue']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 200 &&
@@ -140,89 +107,139 @@ service cloud.firestore {
              data.timestamp is string;
     }
 
-    // Rules
+    // ── named DB 컬렉션 (menus/ingredients/users/etc.) ──────────────
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      
-      // Users can create their own profile, but must be 'user', not approved, and active.
+      allow read: if isOwner(userId) || isAdmin() || isApprovedUser();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
                     (
                       (request.resource.data.role == 'user' && request.resource.data.isApproved == false && request.resource.data.isActive == true) ||
                       isAdmin()
                     ) &&
                     request.resource.data.uid == userId;
-                    
-      // Users can update their own name, but not role, approval, active status, etc.
       allow update: if (isOwner(userId) && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'email', 'role', 'isApproved', 'isActive', 'createdAt'])) ||
                     (isAdmin() && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']));
-                    
       allow delete: if isAdmin();
     }
 
     match /menu_categories/{categoryId} {
-      allow read: if isAdmin() || isApprovedUser();
+      allow read: if isAuthenticated();
       allow create: if isAdmin() && isValidMenuCategory(request.resource.data);
       allow update: if isAdmin() && isValidMenuCategory(request.resource.data) && areImmutableFieldsUnchanged(['id']);
       allow delete: if isAdmin();
     }
 
     match /menus/{menuId} {
-      allow read: if isAdmin() || isApprovedUser();
-      allow create: if (isAdmin() || isApprovedUser()) && isValidMenu(request.resource.data);
-      allow update: if (isAdmin() || isApprovedUser()) && isValidMenu(request.resource.data) && areImmutableFieldsUnchanged(['id', 'createdAt']);
-      allow delete: if isAdmin() || isApprovedUser();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidMenu(request.resource.data);
+      allow update: if isAuthenticated() && isValidMenu(request.resource.data) && areImmutableFieldsUnchanged(['id', 'createdAt']);
+      allow delete: if isAdmin() || isAuthenticated();
     }
 
     match /ingredients/{ingredientId} {
-      allow read: if isAdmin() || isApprovedUser();
-      allow create: if (isAdmin() || isApprovedUser()) && isValidIngredient(request.resource.data);
-      allow update: if (isAdmin() || isApprovedUser()) && 
-                    isValidIngredient(request.resource.data) && 
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidIngredient(request.resource.data);
+      allow update: if isAuthenticated() &&
+                    isValidIngredient(request.resource.data) &&
                     (isAdmin() || (areImmutableFieldsUnchanged(['id', 'createdAt']) || !('createdAt' in resource.data)));
-      allow delete: if isAdmin() || isApprovedUser();
+      allow delete: if isAuthenticated();
     }
 
     match /ingredient_changes/{changeId} {
-      allow read: if isAdmin() || isApprovedUser();
-      allow create: if (isAdmin() || isApprovedUser()) && isValidIngredientChange(request.resource.data);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidIngredientChange(request.resource.data);
       allow delete: if isAdmin();
     }
 
+    // ── salesDb 운영 컬렉션 ─────────────────────────────────────────
+
+    // 회의록: 읽기/생성/수정 = 인증 사용자, 삭제 = 관리자만
     match /meetings/{meetingId} {
-      allow read, write: if request.auth != null;
+      allow read, create, update: if isAuthenticated();
+      allow delete: if isAdmin();
     }
 
-    // salesDb 운영 컬렉션 — 인증된 사용자 전체 접근
-    match /employees/{docId}        { allow read, write: if request.auth != null; }
-    match /calendar_events/{docId}  { allow read, write: if request.auth != null; }
-    match /leave_requests/{docId}   { allow read, write: if request.auth != null; }
-    match /daily_reports/{docId}    { allow read, write: if request.auth != null;
-      match /comments/{commentId}   { allow read, write: if request.auth != null; }
+    // 회의 템플릿: 읽기 = 인증 사용자, 쓰기 = 관리자만
+    match /meeting_templates/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
-    match /tasks/{docId}            { allow read, write: if request.auth != null; }
-    match /notices/{docId}          { allow read, write: if request.auth != null; }
-    match /projects/{docId}         { allow read, write: if request.auth != null;
-      match /{sub}/{subId}          { allow read, write: if request.auth != null; }
+
+    // 직원: 읽기 = 인증 사용자, 쓰기 = 관리자만
+    match /employees/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
-    match /weekly_reports/{docId}   { allow read, write: if request.auth != null; }
-    match /departments/{docId}      { allow read, write: if request.auth != null; }
-    match /franchise_schedules/{docId} { allow read, write: if request.auth != null; }
-    match /store_mentions/{docId}   { allow read, write: if request.auth != null; }
-    match /stores/{docId}           { allow read, write: if request.auth != null; }
-    match /sop_documents/{docId}    { allow read, write: if request.auth != null; }
-    match /process_settings/{docId} { allow read, write: if request.auth != null; }
-    match /system_settings/{docId}  { allow read, write: if request.auth != null; }
+
+    // 공지: 읽기 = 인증 사용자, 쓰기 = 관리자만
+    match /notices/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 일정: 읽기/쓰기 = 인증 사용자
+    match /calendar_events/{docId}     { allow read, write: if isAuthenticated(); }
+    match /calendar_routines/{docId}   { allow read, write: if isAuthenticated(); }
+    match /routine_completions/{docId} { allow read, write: if isAuthenticated(); }
+
+    // 휴가: 읽기 = 인증 사용자, 쓰기 = 인증 사용자 (본인 신청 + 관리자 승인)
+    match /leave_requests/{docId}      { allow read, write: if isAuthenticated(); }
+
+    // 업무일지: 읽기/쓰기 = 인증 사용자
+    match /daily_reports/{docId} {
+      allow read, write: if isAuthenticated();
+      match /comments/{commentId} { allow read, write: if isAuthenticated(); }
+    }
+
+    // 업무(tasks): 읽기/쓰기 = 인증 사용자
+    match /tasks/{docId}               { allow read, write: if isAuthenticated(); }
+
+    // 프로젝트: 읽기/쓰기 = 인증 사용자
+    match /projects/{docId} {
+      allow read, write: if isAuthenticated();
+      match /{sub}/{subId}             { allow read, write: if isAuthenticated(); }
+    }
+    match /project_folders/{docId}     { allow read, write: if isAuthenticated(); }
+    match /project_items/{docId}       { allow read, write: if isAuthenticated(); }
+    match /reports/{docId}             { allow read, write: if isAuthenticated(); }
+
+    // 보고서/SOP: 읽기 = 인증, 쓰기 = 관리자
+    match /sop_documents/{docId}       { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /sop_project_templates/{docId} { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /process_settings/{docId}    { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /system_settings/{docId}     { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+
+    // 매장/프랜차이즈: 읽기 = 인증, 쓰기 = 인증 (슈퍼바이저 필요)
+    match /stores/{docId}                  { allow read, write: if isAuthenticated(); }
+    match /store_mentions/{docId}          { allow read, write: if isAuthenticated(); }
+    match /franchise_schedules/{docId}     { allow read, write: if isAuthenticated(); }
+    match /department_tasks/{docId}        { allow read, write: if isAuthenticated(); }
+    match /departments/{docId}             { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /team_settings/{docId}           { allow read, write: if isAuthenticated(); }
+    match /task_templates/{docId}          { allow read, write: if isAuthenticated(); }
+
+    // 직원 관련 추가
+    match /weekly_reports/{docId}      { allow read, write: if isAuthenticated(); }
+    match /okr_quarters/{docId}        { allow read, write: if isAuthenticated(); }
+    match /brand_milestones/{docId}    { allow read, write: if isAuthenticated(); }
+    match /company_info/{docId}        { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+
+    // 제조실
+    match /factory_items/{docId}       { allow read, write: if isAuthenticated(); }
+    match /factory_daily/{docId}       { allow read, write: if isAuthenticated(); }
+
+    // 마케팅
+    match /menu_sales/{docId}          { allow read, write: if isAuthenticated(); }
 
     // 개인 메모 — 본인만 읽기/쓰기
     match /user_memos/{memoId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
-      allow create:               if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.uid;
+      allow create:               if isAuthenticated() && request.resource.data.uid == request.auth.uid;
     }
 
-    // salesDb 미지정 컬렉션 전체 — 인증된 사용자 허용 (catch-all)
-    // ⚠️ 이 규칙이 없으면 sop_project_templates, reports, project_items 등이 DENY됨
+    // 기타 컬렉션 catch-all — 인증된 사용자 허용
+    // ⚠️ 이 규칙이 없으면 미열거 컬렉션이 DENY됨 — 규칙 추가 후 제거 가능
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
   }
 }
