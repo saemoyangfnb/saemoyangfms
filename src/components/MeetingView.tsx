@@ -912,7 +912,7 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
       const prompt = `다음은 "${title}" 회의 내용입니다.\n\n[공지]\n${fmt('공지')}\n\n[진행]\n${fmt('진행')}\n\n[결정]\n${fmt('결정')}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항 중심으로, 핵심만.`;
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
       });
       const text = response.text ?? '';
