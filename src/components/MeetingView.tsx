@@ -22,6 +22,7 @@ import { User, Employee } from '../types';
 import { TaskRequestModal } from './TaskRequestModal';
 import { shareKakao } from '../utils/kakao';
 import { AtMentionInput, saveMentions } from './ui/AtMentionInput';
+import { GoogleGenAI } from '@google/genai';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface CheckItem { text: string; done: boolean; assignee?: string }
@@ -815,22 +816,19 @@ function QuickMeetingForm({ initial, onSave, onCancel }: {
   const callGemini = async () => {
     if (items.length === 0) { toast.error('항목을 먼저 입력해주세요'); return; }
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) { toast.error('VITE_GEMINI_API_KEY 가 .env 에 없습니다'); return; }
+    if (!apiKey) { toast.error('API 키가 설정되지 않았습니다'); return; }
     setAiLoading(true);
     try {
       const fmt = (cat: '공지' | '진행' | '결정') =>
         items.filter(i => i.category === cat).map(i => `• ${i.content}${i.memo ? ` (메모: ${i.memo})` : ''}`).join('\n') || '없음';
       const prompt = `다음은 "${title}" 회의 내용입니다.\n\n[공지]\n${fmt('공지')}\n\n[진행]\n${fmt('진행')}\n\n[결정]\n${fmt('결정')}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항 중심으로, 핵심만.`;
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
-      );
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+      const text = response.text ?? '';
       if (!text) throw new Error('empty');
       setAiSummary(text);
       toast.success('AI 요약 완료');
-    } catch { toast.error('Gemini 요약 실패 — API 키 또는 네트워크 확인'); }
+    } catch { toast.error('Gemini 요약 실패'); }
     finally { setAiLoading(false); }
   };
 
