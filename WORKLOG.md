@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-06-10 (2) — Claude Code
+
+### 완료
+- **카톡 복사 버그 수정**: `kakao.ts` `onCopied` 단일콜백 → `onSuccess`/`onError` 분리. 실패 시 초록 토스트 뜨던 버그 해결. DailyReport·Factory·Meeting·Report 호출부 전체 수정.
+- **회의록 이월 확장**: 기존 안건만 이월 → **결정사항·미완료 실행항목도 개별 이월 버튼** 추가. 왼쪽 패널에 섹션 분리 표시.
+- **매장 태그 확대**: `AtMentionTextarea` 컴포넌트 신규. `ReportView` 보고서 본문에 @매장명 태그 지원 + 저장 시 `store_mentions` 자동 기록.
+- **Firestore rules 긴급 수정**: 이전 배포로 `sop_project_templates`, `reports`, `project_items`, `factory_items` 등 미열거 컬렉션이 DENY된 문제. `match /{document=**}` catch-all 추가 후 재배포 → 복구 완료.
+
+### 원인 기록 (재발 방지)
+- `firebase deploy --only firestore:rules` 는 salesDb(default DB) 규칙을 **Firebase Console 설정까지 덮어씀**. 명시 안 한 컬렉션은 DENY 기본값. 규칙 배포 후 반드시 전체 컬렉션 접근 검증 필요.
+
+---
+
+## 2026-06-10 — Claude Code
+
+### 완료
+- **내 업무공간 (`my` 섹션)**: `MyWorkspaceView.tsx` 신규 생성
+  - 개인 메모 (salesDb `user_memos` 컬렉션 — 신규), 내 담당 업무 집계, 오늘 일정, 바로가기 카드
+  - `types.ts` SidebarSection / PERMISSION_SECTIONS / SECTION_LABELS에 'my' 추가
+  - App.tsx 사이드바 상단 '내 업무공간' 버튼 + renderContent 케이스 추가
+- **빠른 입력 팔레트 (`QuickInputPalette.tsx`)**: Ctrl+N 전역 단축키
+  - 메뉴: 빠른 메모 / 업무보고 / 회의록 / 내 업무공간 — 화살표키+Enter 탐색
+  - 메모 모드: 텍스트 입력 후 즉시 `user_memos`에 저장
+- **홈 대시보드**: quickNavItems에 '내 업무공간' 추가 (첫 번째 항목)
+- **빌드**: `npm run build` 통과 ✓
+
+### 추가 완료 (보완)
+- **런타임 버그 3건 수정**: `useToast()` 구조분해 오류, `useConfirm()` 구조분해 오류, 복합 Firestore 쿼리(인덱스 의존) → JS 필터로 대체
+- **`alert()` 위반 제거**: App.tsx 587번 줄 `alert()` → `toast.error()` 교체
+- **Firestore 규칙 배포**: `firestore.rules`에 salesDb 전체 컬렉션 + `user_memos` 본인만 읽쓰 규칙 추가
+  - `npx firebase deploy --only firestore:rules` 완료 (gen-lang-client-0562618804)
+
+---
+
 ## 2026-06-09 (6) — Claude Code
 
 ### 완료

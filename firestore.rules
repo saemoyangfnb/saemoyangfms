@@ -218,5 +218,11 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
       allow create:               if request.auth != null && request.resource.data.uid == request.auth.uid;
     }
+
+    // salesDb 미지정 컬렉션 전체 — 인증된 사용자 허용 (catch-all)
+    // ⚠️ 이 규칙이 없으면 sop_project_templates, reports, project_items 등이 DENY됨
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

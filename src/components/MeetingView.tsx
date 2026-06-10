@@ -34,15 +34,28 @@ type DecisionImportance = 'important' | 'normal' | 'reference';
 interface Decision { id: string; text: string; importance: DecisionImportance }
 interface ActionItem { id: string; text: string; assignee?: string; deadline?: string; done: boolean }
 interface MeetingTemplate { id: string; name: string; agendas: Omit<Agenda, 'id'>[] }
+
+const MEETING_TYPES = ['주간업무', '정기경영', '브랜드별', '임시'] as const;
+type MeetingType = typeof MEETING_TYPES[number];
+interface MeetingItem { id: string; content: string; category: '공지' | '진행' | '결정'; memo?: string }
+
 interface Meeting {
   id: string; title: string; date: string;
+  type?: MeetingType;
   author?: string; location?: string; attendees?: string[];
-  agendas?: Agenda[];
+  items?: MeetingItem[];       // 새 형식 (3+1)
+  agendas?: Agenda[];          // 구 형식
   decisions?: Decision[];
   actionItems?: ActionItem[];
   summary?: string;
   createdAt?: string; updatedAt?: string;
 }
+
+const CAT_CFG = {
+  '공지': { key: '←', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',   border: 'border-blue-400 dark:border-blue-700' },
+  '진행': { key: '↓', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', border: 'border-amber-400 dark:border-amber-700' },
+  '결정': { key: '→', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300', border: 'border-emerald-400 dark:border-emerald-700' },
+} as const;
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function scrub<T>(v: T): T {
@@ -749,6 +762,241 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   );
 }
 
+/* ─── Quick Meeting Form (3+1 키보드 입력) ──────────────────────────────── */
+function QuickMeetingForm({ initial, onSave, onCancel }: {
+  initial?: Meeting; onSave: (m: Meeting) => void; onCancel: () => void;
+}) {
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const toast = useToast();
+
+  const [title, setTitle] = useState(initial?.title || '');
+  const [date, setDate] = useState(initial?.date || today);
+  const [meetingType, setMeetingType] = useState<MeetingType>((initial?.type) || '주간업무');
+  const [location, setLocation] = useState(initial?.location || '');
+  const [attendeeInput, setAttendeeInput] = useState('');
+  const [attendees, setAttendees] = useState<string[]>(initial?.attendees || []);
+  const [items, setItems] = useState<MeetingItem[]>(initial?.items || []);
+  const [inputValue, setInputValue] = useState('');
+  const [pendingItem, setPendingItem] = useState<{ content: string; category: '공지' | '진행' | '결정' } | null>(null);
+  const [memoOpenId, setMemoOpenId] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState(initial?.summary || '');
+  const [aiLoading, setAiLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 방향키 캡처 (pendingItem 대기 중)
+  useEffect(() => {
+    if (!pendingItem) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '공지' } : null); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '진행' } : null); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setPendingItem(p => p ? { ...p, category: '결정' } : null); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        setItems(prev => [...prev, { id: genId(), content: pendingItem.content, category: pendingItem.category }]);
+        setPendingItem(null);
+        setTimeout(() => inputRef.current?.focus(), 0);
+      } else if (e.key === 'Escape') {
+        setPendingItem(null);
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [pendingItem]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && inputValue.trim()) {
+      e.preventDefault();
+      setPendingItem({ content: inputValue.trim(), category: '진행' });
+      setInputValue('');
+    }
+  };
+
+  const callGemini = async () => {
+    if (items.length === 0) { toast.error('항목을 먼저 입력해주세요'); return; }
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) { toast.error('VITE_GEMINI_API_KEY 가 .env 에 없습니다'); return; }
+    setAiLoading(true);
+    try {
+      const fmt = (cat: '공지' | '진행' | '결정') =>
+        items.filter(i => i.category === cat).map(i => `• ${i.content}${i.memo ? ` (메모: ${i.memo})` : ''}`).join('\n') || '없음';
+      const prompt = `다음은 "${title}" 회의 내용입니다.\n\n[공지]\n${fmt('공지')}\n\n[진행]\n${fmt('진행')}\n\n[결정]\n${fmt('결정')}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항 중심으로, 핵심만.`;
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
+      );
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (!text) throw new Error('empty');
+      setAiSummary(text);
+      toast.success('AI 요약 완료');
+    } catch { toast.error('Gemini 요약 실패 — API 키 또는 네트워크 확인'); }
+    finally { setAiLoading(false); }
+  };
+
+  const handleSave = () => {
+    if (!title.trim()) { toast.error('회의 제목을 입력해주세요'); return; }
+    const finalItems = pendingItem
+      ? [...items, { id: genId(), content: pendingItem.content, category: pendingItem.category }]
+      : items;
+    const m: Meeting = {
+      id: initial?.id || genId(), title: title.trim(), date, type: meetingType,
+      location: location.trim() || undefined,
+      attendees: attendees.length ? attendees : undefined,
+      items: finalItems.length ? finalItems : undefined,
+      summary: aiSummary.trim() || undefined,
+      createdAt: initial?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    onSave(m);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-4 pb-10">
+      {/* 기본 정보 */}
+      <div className="space-y-2">
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="회의 제목 *"
+          className="w-full px-3 py-2.5 text-sm font-bold border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500" />
+        <div className="grid grid-cols-2 gap-2">
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none" />
+          <input value={location} onChange={e => setLocation(e.target.value)} placeholder="장소 (선택)"
+            className="px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none placeholder:text-stone-300" />
+        </div>
+      </div>
+
+      {/* 종류 + 참석자 */}
+      <div className="flex flex-wrap gap-2 items-center">
+        {MEETING_TYPES.map(t => (
+          <button key={t} onClick={() => setMeetingType(t)}
+            className={`px-3 py-1 text-xs font-bold rounded-lg border transition-colors ${meetingType === t ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-transparent' : 'border-stone-200 dark:border-stone-600 text-stone-500 hover:border-stone-400'}`}>
+            {t}
+          </button>
+        ))}
+        <div className="w-px h-4 bg-stone-200 dark:bg-stone-700" />
+        {attendees.map(a => (
+          <span key={a} className="flex items-center gap-1 px-2 py-0.5 bg-stone-100 dark:bg-stone-800 rounded-full text-xs font-bold text-stone-700 dark:text-stone-200">
+            {a}<button onClick={() => setAttendees(p => p.filter(x => x !== a))} className="text-stone-400 hover:text-red-400 ml-0.5"><X size={9} /></button>
+          </span>
+        ))}
+        <input value={attendeeInput} onChange={e => setAttendeeInput(e.target.value)}
+          onKeyDown={e => { if ((e.key === 'Enter' || e.key === ',') && attendeeInput.trim()) { e.preventDefault(); if (!attendees.includes(attendeeInput.trim())) setAttendees(p => [...p, attendeeInput.trim()]); setAttendeeInput(''); } }}
+          placeholder={attendees.length === 0 ? '참석자 입력 후 Enter' : '+ 추가'}
+          className="text-xs outline-none bg-transparent text-stone-700 dark:text-stone-200 placeholder:text-stone-300 dark:placeholder:text-stone-600 min-w-[80px]" />
+      </div>
+
+      {/* 내용 입력 */}
+      <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-200 dark:border-stone-700">
+          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">회의 내용</span>
+          <div className="flex gap-2 ml-auto">
+            {(['공지', '진행', '결정'] as const).map(cat => (
+              <span key={cat} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${CAT_CFG[cat].color}`}>
+                <kbd className="font-mono text-[9px]">{CAT_CFG[cat].key}</kbd>{cat}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* 확정 항목 */}
+          {(['공지', '진행', '결정'] as const).map(cat => {
+            const catItems = items.filter(i => i.category === cat);
+            if (!catItems.length) return null;
+            const cfg = CAT_CFG[cat];
+            return (
+              <div key={cat}>
+                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full mb-2 ${cfg.color}`}>
+                  {cfg.key} {cat}
+                </span>
+                {catItems.map(item => (
+                  <div key={item.id} className={`ml-1 mb-1.5 pl-3 border-l-2 ${cfg.border}`}>
+                    <div className="flex items-center gap-2 group">
+                      <span className="text-sm text-stone-800 dark:text-stone-200 flex-1 leading-snug">{item.content}</span>
+                      <button onClick={() => setMemoOpenId(memoOpenId === item.id ? null : item.id)}
+                        className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {item.memo ? '메모✓' : '+메모'}
+                      </button>
+                      <button onClick={() => setItems(p => p.filter(x => x.id !== item.id))}
+                        className="text-stone-200 hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
+                    </div>
+                    {memoOpenId === item.id && (
+                      <input autoFocus value={item.memo || ''}
+                        onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, memo: e.target.value } : x))}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setMemoOpenId(null); }}
+                        placeholder="메모..."
+                        className="mt-1 w-full text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300 placeholder:text-stone-300" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          {/* 대기 중 항목 */}
+          {pendingItem && (
+            <div className="p-3 bg-stone-900 dark:bg-stone-100 rounded-xl">
+              <p className="text-sm font-semibold text-white dark:text-stone-900 mb-3 leading-snug">{pendingItem.content}</p>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                {(['공지', '진행', '결정'] as const).map(cat => {
+                  const cfg = CAT_CFG[cat];
+                  const active = pendingItem.category === cat;
+                  return (
+                    <button key={cat} onClick={() => setPendingItem(p => p ? { ...p, category: cat } : null)}
+                      className={`py-2 text-xs font-black rounded-lg border-2 transition-all ${active ? `${cfg.color} ${cfg.border} scale-105` : 'border-stone-600 dark:border-stone-300 text-stone-400 dark:text-stone-500'}`}>
+                      <span className="font-mono">{cfg.key}</span> {cat}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-stone-500 text-center">방향키로 선택 후 <kbd className="px-1 bg-stone-700 dark:bg-stone-200 dark:text-stone-800 text-white rounded font-mono text-[9px]">Enter</kbd> 확정 · <kbd className="px-1 bg-stone-700 dark:bg-stone-200 dark:text-stone-800 text-white rounded font-mono text-[9px]">Esc</kbd> 취소</p>
+            </div>
+          )}
+
+          {/* 입력창 */}
+          {!pendingItem && (
+            <div className="relative">
+              <input ref={inputRef} autoFocus={!initial}
+                value={inputValue} onChange={e => setInputValue(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                placeholder={items.length === 0 ? '내용 입력 후 Enter — 방향키(← ↓ →)로 분류...' : '다음 항목 입력...'}
+                className="w-full px-3 py-2.5 text-sm border border-dashed border-stone-300 dark:border-stone-600 rounded-lg bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500 placeholder:text-stone-300 dark:placeholder:text-stone-600" />
+              {inputValue && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-300 font-mono pointer-events-none">Enter ↵</span>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI 요약 */}
+      {items.length >= 2 && (
+        <div className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
+          <div className="flex items-center px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-200 dark:border-stone-700">
+            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest flex-1">AI 회의 요약</span>
+            <button onClick={callGemini} disabled={aiLoading}
+              className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg disabled:opacity-40">
+              {aiLoading ? <RefreshCw size={11} className="animate-spin" /> : '✨'}
+              {aiLoading ? '요약 중...' : 'Gemini 정리'}
+            </button>
+          </div>
+          <div className="p-4">
+            <textarea value={aiSummary} onChange={e => setAiSummary(e.target.value)}
+              placeholder="완료 후 Gemini 정리 버튼 클릭 — 직접 수정도 가능합니다."
+              rows={3}
+              className="w-full text-sm bg-transparent text-stone-800 dark:text-stone-200 outline-none resize-none placeholder:text-stone-300 dark:placeholder:text-stone-600 leading-relaxed" />
+          </div>
+        </div>
+      )}
+
+      {/* 저장/취소 */}
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="px-4 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-300 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800">취소</button>
+        <button onClick={handleSave} disabled={!title.trim()}
+          className="px-5 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm font-black rounded-lg hover:opacity-80 disabled:opacity-40">저장</button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Meeting Detail ─────────────────────────────────────────────────────── */
 function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onToggleActionItem, currentUser }: {
   meeting: Meeting; onBack: () => void; onEdit: () => void; onDelete: () => void;
@@ -831,6 +1079,45 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
           </button>
         )}
       </div>
+
+      {/* ── 새 형식 (items) ── */}
+      {meeting.items && meeting.items.length > 0 && (
+        <div className="space-y-3 mb-4">
+          {/* 카운트 배지 */}
+          <div className="flex gap-2 flex-wrap">
+            {(['공지', '진행', '결정'] as const).map(cat => {
+              const cnt = meeting.items!.filter(i => i.category === cat).length;
+              if (!cnt) return null;
+              return (
+                <span key={cat} className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${CAT_CFG[cat].color}`}>
+                  {CAT_CFG[cat].key} {cat} {cnt}건
+                </span>
+              );
+            })}
+          </div>
+          {/* 항목 표시 */}
+          {(['공지', '진행', '결정'] as const).map(cat => {
+            const catItems = meeting.items!.filter(i => i.category === cat);
+            if (!catItems.length) return null;
+            const cfg = CAT_CFG[cat];
+            return (
+              <div key={cat} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4">
+                <p className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full mb-3 ${cfg.color}`}>
+                  {cfg.key} {cat}
+                </p>
+                <div className="space-y-2">
+                  {catItems.map(item => (
+                    <div key={item.id} className={`pl-3 border-l-2 ${cfg.border}`}>
+                      <p className="text-sm text-stone-800 dark:text-stone-200 leading-snug">{item.content}</p>
+                      {item.memo && <p className="text-xs text-stone-400 mt-0.5 italic">{item.memo}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* 요약 바 */}
       <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4 flex items-center gap-4 flex-wrap">
@@ -1060,6 +1347,8 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<MeetingType | '전체'>('전체');
+  const [openMonths, setOpenMonths] = useState<Set<string>>(new Set([new Date().toISOString().slice(0, 7)]));
   const toast = useToast();
   const { confirm } = useConfirm();
   // suppress unused warning — kept for API compatibility
@@ -1135,17 +1424,37 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   const selected = meetings.find(m => m.id === selectedId);
   const getPrev = (excludeId?: string | null) => sorted.filter(m => m.id !== excludeId)[0] || null;
 
-  const filtered = search.trim() ? meetings.filter(m => {
+  const filtered = sorted.filter(m => {
+    if (typeFilter !== '전체' && m.type !== typeFilter) return false;
+    if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
       m.title?.toLowerCase().includes(q) ||
       m.summary?.toLowerCase().includes(q) ||
+      (m.items || []).some(i => i.content.toLowerCase().includes(q) || (i.memo || '').toLowerCase().includes(q)) ||
       (m.agendas || []).some(a => a.title.toLowerCase().includes(q)) ||
       (m.decisions || []).some(d => d.text.toLowerCase().includes(q)) ||
       (m.actionItems || []).some(a => a.text.toLowerCase().includes(q)) ||
       (m.attendees || []).some(a => a.toLowerCase().includes(q))
     );
-  }) : sorted;
+  });
+
+  // 월별 그루핑
+  const byMonth: Record<string, Meeting[]> = {};
+  filtered.forEach(m => {
+    const key = m.date?.slice(0, 7) || '0000-00';
+    if (!byMonth[key]) byMonth[key] = [];
+    byMonth[key].push(m);
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+
+  const toggleMonth = (key: string) =>
+    setOpenMonths(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const fmtMonth = (key: string) => {
+    const [y, m] = key.split('-');
+    return `${y}년 ${Number(m)}월`;
+  };
 
   const allAg = meetings.flatMap(m => m.agendas || []);
   const urgCount = allAg.filter(a => a.urgency === 'high').length;
@@ -1161,21 +1470,15 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
   /* ── FORM ── */
   if (view === 'form') return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-5">
         <h1 className="text-xl font-black text-stone-900 dark:text-stone-100">회의록</h1>
         <ChevronRight size={16} className="text-stone-400" />
-        <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록 작성'}</span>
+        <span className="text-sm text-stone-500">{editingId ? '수정' : '새 회의록'}</span>
       </div>
-      <MeetingForm
+      <QuickMeetingForm
         initial={editingId ? meetings.find(m => m.id === editingId) : undefined}
-        prevMeeting={getPrev(editingId)}
-        employees={employees}
-        templates={templates}
         onSave={saveMeeting}
         onCancel={() => { setEditingId(null); setView(selectedId ? 'detail' : 'list'); }}
-        currentUser={currentUser}
-        onValidationError={msg => toast.error(msg)}
-        onTemplatesChange={setTemplates}
       />
     </div>
   );
@@ -1222,90 +1525,107 @@ export function MeetingView({ currentUserName, currentUser }: { currentUserName:
       </div>
 
       {/* 검색 */}
-      <div className="relative mb-5">
+      <div className="relative mb-3">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="제목, 안건, 결정사항, 요약, 참석자 검색..."
+          placeholder="제목, 내용, 참석자 검색..."
           className="w-full pl-9 pr-4 py-2 text-sm border border-stone-200 dark:border-stone-700 rounded-xl bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-400 dark:focus:border-stone-500" />
       </div>
 
+      {/* 종류 필터 탭 */}
+      <div className="flex gap-2 flex-wrap mb-5">
+        {(['전체', ...MEETING_TYPES] as const).map(t => (
+          <button key={t} onClick={() => setTypeFilter(t)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${typeFilter === t ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 border-transparent' : 'border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400'}`}>
+            {t}
+            {t !== '전체' && <span className="ml-1.5 text-[10px] opacity-60">{meetings.filter(m => m.type === t).length}</span>}
+            {t === '전체' && <span className="ml-1.5 text-[10px] opacity-60">{meetings.length}</span>}
+          </button>
+        ))}
+      </div>
+
       {/* 통계 카드 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-5">
         {[
-          { label: '전체 회의록', value: meetings.length, unit: '건', color: '' },
-          { label: '전체 안건', value: allAg.length, unit: '건', color: '' },
-          { label: '긴급 안건', value: urgCount, unit: '건', color: urgCount > 0 ? 'text-red-600 dark:text-red-400' : '' },
-          { label: totalIncomplete > 0 ? '미완료 실행항목' : '평균 진행율', value: totalIncomplete > 0 ? totalIncomplete : avgProg + '%', unit: totalIncomplete > 0 ? '건' : '', color: totalIncomplete > 0 ? 'text-amber-600 dark:text-amber-400' : '' },
+          { label: '전체 회의', value: meetings.length + '건' },
+          { label: '미완료 실행', value: totalIncomplete > 0 ? totalIncomplete + '건' : '없음', cls: totalIncomplete > 0 ? 'text-amber-600 dark:text-amber-400' : '' },
+          { label: urgCount > 0 ? '긴급 안건' : '평균 진행율', value: urgCount > 0 ? urgCount + '건' : avgProg + '%', cls: urgCount > 0 ? 'text-red-600 dark:text-red-400' : '' },
         ].map(c => (
-          <div key={c.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4">
-            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-wider mb-2">{c.label}</p>
-            <p className={`text-2xl font-black ${c.color}`}>{c.value}<span className="text-sm font-medium text-stone-400 ml-1">{c.unit}</span></p>
+          <div key={c.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-3">
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">{c.label}</p>
+            <p className={`text-xl font-black ${c.cls || ''}`}>{c.value}</p>
           </div>
         ))}
       </div>
 
-      {/* 긴급 안건 알림 */}
-      {urgCount > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle size={15} className="text-red-500" />
-            <span className="text-sm font-bold text-red-700 dark:text-red-400">긴급 안건</span>
-          </div>
-          <div className="space-y-2">
-            {allAg.filter(a => a.urgency === 'high').slice(0, 5).map((a, i) => {
-              const m = meetings.find(mt => (mt.agendas || []).some(ag => ag === a));
-              return (
-                <div key={i} onClick={() => { setSelectedId(m?.id || ''); setView('detail'); }}
-                  className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
-                  <span className="flex-1 text-sm font-semibold text-red-700 dark:text-red-300 truncate">{a.title}</span>
-                  <span className="text-xs text-red-500">{a.assignee || '-'} · {a.deadline || '-'}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 회의록 목록 */}
-      {filtered.length === 0 ? (
+      {/* 월별 아코디언 목록 */}
+      {months.length === 0 ? (
         <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl py-20 text-center text-stone-400">
-          <p className="text-sm mb-2">{search ? `"${search}" 검색 결과 없음` : '저장된 회의록이 없습니다'}</p>
-          {!search && <p className="text-xs">새 회의록을 작성해보세요</p>}
+          <p className="text-sm">{search || typeFilter !== '전체' ? '검색 결과 없음' : '저장된 회의록이 없습니다'}</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(m => {
-            const ags = m.agendas || [];
-            const avgP = ags.length ? Math.round(ags.reduce((s, a) => s + calcProg(a), 0) / ags.length) : 0;
-            const hasUrgent = ags.some(a => a.urgency === 'high');
-            const incompleteActs = (m.actionItems || []).filter(a => !a.done).length;
-            const d = m.date ? new Date(m.date + 'T00:00:00') : null;
+          {months.map(monthKey => {
+            const mts = byMonth[monthKey];
+            const open = openMonths.has(monthKey);
             return (
-              <div key={m.id} onClick={() => { setSelectedId(m.id); setView('detail'); }}
-                className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:border-stone-400 dark:hover:border-stone-500 hover:shadow-sm transition-all">
-                <div className="text-center min-w-10 font-mono">
-                  <div className="text-[10px] text-stone-400 uppercase">{d ? d.toLocaleDateString('ko-KR', { month: 'short' }) : ''}</div>
-                  <div className="text-xl font-black text-stone-800 dark:text-stone-200">{d ? d.getDate() : '-'}</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm text-stone-900 dark:text-stone-100 truncate mb-1">{m.title}</div>
-                  <div className="flex items-center gap-3 text-[11px] text-stone-400 flex-wrap">
-                    {m.author && <span>{m.author}</span>}
-                    {ags.length > 0 && <span>안건 {ags.length}건</span>}
-                    {(m.decisions || []).length > 0 && <span>결정 {m.decisions!.length}건</span>}
-                    {incompleteActs > 0 && <span className="text-amber-500">실행 미완료 {incompleteActs}건</span>}
-                    {m.attendees?.length ? <span className="truncate max-w-[120px]">{m.attendees.join(', ')}</span> : null}
+              <div key={monthKey} className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden">
+                {/* 월 헤더 */}
+                <button onClick={() => toggleMonth(monthKey)}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left">
+                  <ChevronRight size={14} className={`text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+                  <span className="text-sm font-black text-stone-800 dark:text-stone-200">{fmtMonth(monthKey)}</span>
+                  <span className="text-xs text-stone-400 font-mono">{mts.length}건</span>
+                  <div className="flex gap-1 ml-auto">
+                    {Array.from(new Set(mts.map(m => m.type).filter(Boolean))).map(t => (
+                      <span key={t} className="text-[10px] text-stone-400 bg-stone-200 dark:bg-stone-700 px-1.5 py-0.5 rounded font-bold">{t}</span>
+                    ))}
                   </div>
-                  {m.summary && <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 truncate">{m.summary}</p>}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {hasUrgent && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-                  <div className="w-20">
-                    <ProgressBar value={avgP} height={4} />
-                    <p className="text-[10px] text-stone-400 mt-1 font-mono text-right">{avgP}%</p>
+                </button>
+
+                {/* 회의 목록 */}
+                {open && (
+                  <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                    {mts.map(m => {
+                      const hasItems = m.items && m.items.length > 0;
+                      const ags = m.agendas || [];
+                      const incompleteActs = (m.actionItems || []).filter(a => !a.done).length;
+                      const d = m.date ? new Date(m.date + 'T00:00:00') : null;
+                      return (
+                        <div key={m.id} onClick={() => { setSelectedId(m.id); setView('detail'); }}
+                          className="flex items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                          {/* 날짜 */}
+                          <div className="text-center w-8 shrink-0">
+                            <div className="text-xl font-black text-stone-800 dark:text-stone-200 leading-none">{d ? d.getDate() : '-'}</div>
+                            <div className="text-[9px] text-stone-400 uppercase font-mono">{d ? ['일', '월', '화', '수', '목', '금', '토'][d.getDay()] : ''}</div>
+                          </div>
+                          {/* 내용 */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              {m.type && <span className="text-[10px] font-bold text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded shrink-0">{m.type}</span>}
+                              <span className="font-bold text-sm text-stone-900 dark:text-stone-100 truncate">{m.title}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-stone-400 flex-wrap">
+                              {m.attendees?.length ? <span className="truncate max-w-[120px]">{m.attendees.join(', ')}</span> : null}
+                              {hasItems && (
+                                <>
+                                  {(['공지', '진행', '결정'] as const).map(cat => {
+                                    const cnt = m.items!.filter(i => i.category === cat).length;
+                                    return cnt > 0 ? <span key={cat} className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${CAT_CFG[cat].color}`}>{cat} {cnt}</span> : null;
+                                  })}
+                                </>
+                              )}
+                              {!hasItems && ags.length > 0 && <span>안건 {ags.length}건</span>}
+                              {incompleteActs > 0 && <span className="text-amber-500">실행 미완료 {incompleteActs}건</span>}
+                            </div>
+                            {m.summary && <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5 truncate">{m.summary}</p>}
+                          </div>
+                          <ChevronRight size={14} className="text-stone-300 shrink-0" />
+                        </div>
+                      );
+                    })}
                   </div>
-                  <ChevronRight size={16} className="text-stone-300" />
-                </div>
+                )}
               </div>
             );
           })}
