@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FranchiseSchedule, TeamSetting, WorkItem } from '../../types';
-import { isDateInRange, addDays } from '../../utils';
+import { isDateInRange, addDays, computeWorkItemDates } from '../../utils';
 import { Calendar as CalendarIcon, List, CheckSquare, Pencil } from 'lucide-react';
 
 const BG_CLASSES: Record<string, string> = {
@@ -11,82 +11,6 @@ const BG_CLASSES: Record<string, string> = {
   stone: 'bg-stone-500', zinc: 'bg-zinc-500', slate: 'bg-slate-500', neutral: 'bg-neutral-500'
 };
 
-// 날짜를 계산한 후 토·일이면 직전 금요일로 스냅 (skipWeekends 옵션 적용)
-function snapToWeekday(d: Date): Date {
-  const result = new Date(d);
-  const dow = result.getDay();
-  if (dow === 6) result.setDate(result.getDate() - 1); // 토 → 금
-  else if (dow === 0) result.setDate(result.getDate() - 2); // 일 → 금
-  return result;
-}
-
-function addDaysSnap(startDate: Date, days: number): Date {
-  const d = new Date(startDate);
-  d.setDate(d.getDate() + days);
-  return snapToWeekday(d);
-}
-
-function computeWorkItemDates(workItems: WorkItem[], schedule: FranchiseSchedule): Record<string, { start: string; end: string }> {
-  // 1단계: 순수 D-day 계산 (fixedDate 미사용) — anchor 체인 해소용
-  const pureDates: Record<string, { start: string; end: string }> = {};
-  let changed = true;
-  let pass = 0;
-  while (changed && pass < 50) {
-    changed = false;
-    pass++;
-    workItems.forEach(wt => {
-      if (pureDates[wt.id] || wt.dDayOffset === undefined) return;
-      const anchor = wt.anchorField || 'constructionStart';
-      let anchorDate = '';
-      if (anchor === 'constructionStart') anchorDate = schedule.constructionStart || '';
-      else if (anchor === 'constructionEnd') anchorDate = schedule.constructionEnd || '';
-      else anchorDate = pureDates[anchor]?.start || '';
-      if (!anchorDate) return;
-
-      const base = new Date(anchorDate);
-      const startD = wt.skipWeekends
-        ? addDaysSnap(base, wt.dDayOffset!)
-        : (() => { const d = new Date(base); d.setDate(d.getDate() + wt.dDayOffset!); return d; })();
-      const startStr = startD.toISOString().split('T')[0];
-      let endStr = startStr;
-      if (wt.dDayEndOffset !== undefined && wt.dDayOffset !== undefined) {
-        const durDays = wt.dDayEndOffset - wt.dDayOffset;
-        if (durDays > 0) {
-          // 다일 이벤트: 종료일만 스냅. 토→금, 일→금 이동
-          const endD = wt.skipWeekends
-            ? snapToWeekday(new Date(new Date(startStr).setDate(new Date(startStr).getDate() + durDays)))
-            : (() => { const d = new Date(startStr); d.setDate(d.getDate() + durDays); return d; })();
-          endStr = endD.toISOString().split('T')[0];
-        }
-      }
-      pureDates[wt.id] = { start: startStr, end: endStr };
-      changed = true;
-    });
-  }
-
-  // 2단계: 매장별 fixedDate override 적용 (표시용, anchor 체인에는 영향 없음)
-  // anchorLocked=true 인 항목은 기준일자 연동 고정 — fixedDate 무시
-  const displayDates: Record<string, { start: string; end: string }> = { ...pureDates };
-  workItems.forEach(wt => {
-    if (wt.anchorLocked) return;
-    const fixedDate = schedule.checklistData?.[wt.id]?.fixedDate;
-    if (!fixedDate) return;
-    const orig = pureDates[wt.id];
-    let endStr = fixedDate;
-    if (orig) {
-      const durMs = new Date(orig.end).getTime() - new Date(orig.start).getTime();
-      const durDays = Math.round(durMs / (1000 * 60 * 60 * 24));
-      if (durDays > 0) {
-        const endD = new Date(fixedDate);
-        endD.setDate(endD.getDate() + durDays);
-        endStr = endD.toISOString().split('T')[0];
-      }
-    }
-    displayDates[wt.id] = { start: fixedDate, end: endStr };
-  });
-
-  return displayDates;
-}
 
 interface Props {
   schedules: FranchiseSchedule[];

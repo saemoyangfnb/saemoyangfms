@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { salesDb } from '../firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy } from 'firebase/firestore';
-import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine, FranchiseSchedule } from '../types';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, query, where, orderBy, onSnapshot, getDoc } from 'firebase/firestore';
+import { CalendarEvent, CalendarEventType, LeaveRequest, LeaveType, LeaveStatus, Employee, User, CalendarRoutine, FranchiseSchedule, WorkItem, Task, TaskStatus } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2 } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Clock, RefreshCw, Repeat, Trash2, Edit2, CheckSquare } from 'lucide-react';
 import { TabBar } from './ui/Tabs';
+import { computeWorkItemDates } from '../utils';
 
 /* ── 상수 ──────────────────────────────────────────────── */
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -17,6 +18,20 @@ const FRANCHISE_PHASES: Record<string, { emoji: string; label: string }> = {
   preTraining:  { emoji: '📚', label: '사전교육' },
   training:     { emoji: '🎓', label: '본교육' },
   equipmentIn:  { emoji: '🍳', label: '화구류입고' },
+  task:         { emoji: '📋', label: '공정 업무' },
+};
+
+const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
+  pending:     'bg-stone-400',
+  in_progress: 'bg-blue-500',
+  done:        'bg-emerald-500',
+  rejected:    'bg-red-400',
+};
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  pending:     '대기중',
+  in_progress: '진행중',
+  done:        '완료',
+  rejected:    '반려',
 };
 
 const EVENT_COLORS: Record<CalendarEventType, string> = {
@@ -107,7 +122,14 @@ export function CompanyCalendar({ currentUser }: Props) {
   const [eventForm, setEventForm] = useState<EventForm>(emptyEventForm());
   const [leaveForm, setLeaveForm] = useState<LeaveForm>(emptyLeaveForm());
   const [activeTab, setActiveTab] = useState<'all' | 'personal' | 'open' | 'leave' | 'routine'>('all');
-  const [franchiseEvents, setFranchiseEvents] = useState<CalendarEvent[]>([]);
+  const [rawSchedules, setRawSchedules] = useState<FranchiseSchedule[]>([]);
+  const [processSettingsMap, setProcessSettingsMap] = useState<Record<string, WorkItem[]>>({});
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [taskScope, setTaskScope] = useState<'my' | 'team'>('my');
+  const [taskPopup, setTaskPopup] = useState<{ task: Task; x: number; y: number } | null>(null);
+  const [addingTaskDate, setAddingTaskDate] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const taskPopupRef = useRef<HTMLDivElement>(null);
 
   // ── 루틴 상태 ──
   const [routines, setRoutines] = useState<CalendarRoutine[]>([]);
@@ -126,7 +148,7 @@ export function CompanyCalendar({ currentUser }: Props) {
     description: '',
     visibility: 'personal' as CalendarRoutine['visibility'],
   });
-  const [openFilters, setOpenFilters] = useState<Set<string>>(new Set(['open', 'construction']));
+  const [openFilters, setOpenFilters] = useState<Set<string>>(new Set(Object.keys(FRANCHISE_PHASES)));
   const [pendingReject, setPendingReject] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -183,32 +205,44 @@ export function CompanyCalendar({ currentUser }: Props) {
 
   useEffect(() => { fetchData(); }, [year, month]);
 
+  // 프랜차이즈 일정 실시간 구독
   useEffect(() => {
-    getDocs(collection(salesDb, 'franchise_schedules')).then(snap => {
-      const fEvents: CalendarEvent[] = [];
-      snap.docs.forEach(d => {
-        const sch = d.data() as FranchiseSchedule;
-        if (sch.archived) return;
-        const add = (phaseKey: string, title: string, start?: string, end?: string) => {
-          if (!start) return;
-          fEvents.push({
-            id: `franchise_${d.id}_${phaseKey}`,
-            type: 'franchise',
-            title,
-            startDate: start, endDate: end || start,
-            allDay: true, visibility: 'all',
-            createdAt: '', updatedAt: '',
-          });
-        };
-        add('open',         `🏪 ${sch.storeName}`,          sch.openDate);
-        add('construction', `🔨 ${sch.storeName} 공사`,      sch.constructionStart, sch.constructionEnd);
-        add('preTraining',  `📚 ${sch.storeName} 사전교육`,  sch.preTrainingStart, sch.preTrainingEnd);
-        add('training',     `🎓 ${sch.storeName} 본교육`,    sch.trainingStart, sch.trainingEnd);
-        add('equipmentIn',  `🍳 ${sch.storeName} 화구류`,    sch.equipmentIn);
-      });
-      setFranchiseEvents(fEvents);
-    }).catch(() => {});
+    const unsub = onSnapshot(collection(salesDb, 'franchise_schedules'), snap => {
+      setRawSchedules(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as FranchiseSchedule))
+          .filter(s => !(s as any).archived && (s as any).showInCalendar !== false)
+      );
+    });
+    return unsub;
   }, []);
+
+  // processSettings 로드 (brandId별)
+  useEffect(() => {
+    const brandIds = [...new Set(rawSchedules.map(s => s.brandId).filter(Boolean))];
+    if (!brandIds.length) { setProcessSettingsMap({}); return; }
+    Promise.all(brandIds.map(async bId => {
+      const snap = await getDoc(doc(salesDb, 'process_settings', bId));
+      const items: WorkItem[] = snap.exists()
+        ? ((snap.data()?.masterItems || []) as WorkItem[]).filter((w: WorkItem) => !w.isArchived)
+        : [];
+      return { bId, items };
+    })).then(results => {
+      const map: Record<string, WorkItem[]> = {};
+      results.forEach(({ bId, items }) => { map[bId] = items; });
+      setProcessSettingsMap(map);
+    });
+  }, [rawSchedules]);
+
+  // tasks 로드 (현재 월 dueDate 기준)
+  useEffect(() => {
+    const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const endStr = toYMD(new Date(year, month + 1, 0));
+    getDocs(query(collection(salesDb, 'tasks'),
+      where('dueDate', '>=', startStr),
+      where('dueDate', '<=', endStr)
+    )).then(snap => setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Task)))).catch(() => {});
+  }, [year, month]);
 
   /* ── 루틴 로드 ── */
   const fetchRoutines = async () => {
@@ -302,6 +336,46 @@ export function CompanyCalendar({ currentUser }: Props) {
     await fetchRoutines();
   };
 
+  /* 프랜차이즈 이벤트 빌드 (onSnapshot + computeWorkItemDates) */
+  const franchiseEvents = useMemo<CalendarEvent[]>(() => {
+    const fEvents: CalendarEvent[] = [];
+    rawSchedules.forEach(s => {
+      const add = (prefix: string, title: string, start?: string, end?: string) => {
+        if (!start) return;
+        fEvents.push({ id: `${prefix}_${s.id}`, type: 'franchise', title, startDate: start, endDate: end || start, allDay: true, visibility: 'all', createdAt: '', updatedAt: '' });
+      };
+      // 앵커 마일스톤 (직접 필드)
+      add('fop', `🏪 ${s.storeName}`, s.openDate);
+      add('fco', `🔨 ${s.storeName} 공사`, s.constructionStart, s.constructionEnd);
+
+      const workItems = processSettingsMap[s.brandId] || [];
+      const taskItems = workItems.filter(wt => wt.category === 'task' && wt.calendarVisible !== false);
+      if (workItems.length > 0 && taskItems.length > 0) {
+        // computeWorkItemDates로 드래그 오버라이드 반영
+        const dates = computeWorkItemDates(workItems, s);
+        taskItems.forEach(wt => {
+          const d = dates[wt.id];
+          if (!d?.start) return;
+          fEvents.push({ id: `ftk_${s.id}_${wt.id}`, type: 'franchise', title: `${wt.text} — ${s.storeName}`, startDate: d.start, endDate: d.end, allDay: true, visibility: 'all', createdAt: '', updatedAt: '' });
+        });
+      } else {
+        // 폴백: processSettings 없으면 레거시 필드 사용
+        add('fpt', `📚 ${s.storeName} 사전교육`, s.preTrainingStart, s.preTrainingEnd);
+        add('ftr', `🎓 ${s.storeName} 본교육`, s.trainingStart, s.trainingEnd);
+        add('feq', `🍳 ${s.storeName} 화구류`, s.equipmentIn);
+      }
+    });
+    return fEvents;
+  }, [rawSchedules, processSettingsMap]);
+
+  /* 업무 필터 (내 업무 / 팀 업무) */
+  const calendarTasks = useMemo<Task[]>(() => {
+    if (!myEmployee) return [];
+    if (taskScope === 'my') return tasks.filter(t => t.assigneeId === myEmployee.id);
+    const teamIds = new Set(employees.filter(e => e.departmentId === myEmployee.departmentId).map(e => e.id));
+    return tasks.filter(t => teamIds.has(t.assigneeId));
+  }, [tasks, taskScope, myEmployee, employees]);
+
   /* 달력 셀 계산 */
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month, 1).getDay();
@@ -316,8 +390,12 @@ export function CompanyCalendar({ currentUser }: Props) {
   const eventsForDate = (ymd: string, view: typeof activeTab = activeTab) => {
     if (view === 'open') {
       return franchiseEvents.filter(e => {
-        const parts = e.id.split('_');
-        const phaseKey = parts[parts.length - 1];
+        const phaseKey = e.id.startsWith('fop_') ? 'open'
+          : e.id.startsWith('fco_') ? 'construction'
+          : e.id.startsWith('fpt_') ? 'preTraining'
+          : e.id.startsWith('ftr_') ? 'training'
+          : e.id.startsWith('feq_') ? 'equipmentIn'
+          : 'task';
         return openFilters.has(phaseKey) && e.startDate <= ymd && e.endDate >= ymd;
       });
     }
@@ -412,6 +490,34 @@ export function CompanyCalendar({ currentUser }: Props) {
     }
     toast.success(action === 'approved' ? '승인되었습니다' : '반려되었습니다');
     fetchData();
+  };
+
+  /* 업무 핸들러 */
+  const handleUpdateTaskStatus = async (task: Task, newStatus: TaskStatus) => {
+    await updateDoc(doc(salesDb, 'tasks', task.id), { status: newStatus, updatedAt: new Date().toISOString() });
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+    setTaskPopup(null);
+  };
+
+  const handleTaskDrop = async (taskId: string, newDate: string) => {
+    await updateDoc(doc(salesDb, 'tasks', taskId), { dueDate: newDate, updatedAt: new Date().toISOString() });
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, dueDate: newDate } : t));
+  };
+
+  const handleAddTask = async () => {
+    if (!newTaskTitle.trim() || !addingTaskDate || !myEmployee) return;
+    const id = `tsk_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+    const task: Task = {
+      id, title: newTaskTitle.trim(), sourceType: 'manual',
+      assigneeId: myEmployee.id, assigneeName: myEmployee.name,
+      dueDate: addingTaskDate, status: 'pending',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    await setDoc(doc(salesDb, 'tasks', id), task);
+    setTasks(prev => [...prev, task]);
+    setNewTaskTitle('');
+    setAddingTaskDate(null);
+    toast.success('업무 추가됨');
   };
 
   const prevMonth = () => { if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1); };
@@ -760,13 +866,25 @@ export function CompanyCalendar({ currentUser }: Props) {
           )}
 
           {/* 월 네비게이션 */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
             <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-500"><ChevronLeft size={16} /></button>
             <h2 className="text-lg font-black text-stone-900 dark:text-stone-100 min-w-28 text-center">{year}년 {MONTHS[month]}</h2>
             <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-500"><ChevronRight size={16} /></button>
             <button onClick={goToday} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 font-semibold ml-2">
               <RefreshCw size={11} /> 오늘
             </button>
+            {myEmployee && activeTab !== 'open' && (
+              <div className="flex items-center border border-stone-200 dark:border-stone-600 rounded-lg overflow-hidden">
+                <button onClick={() => setTaskScope('my')}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold transition-colors ${taskScope === 'my' ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                  <CheckSquare size={11} /> 내 업무
+                </button>
+                <button onClick={() => setTaskScope('team')}
+                  className={`px-2.5 py-1.5 text-[11px] font-bold transition-colors border-l border-stone-200 dark:border-stone-600 ${taskScope === 'team' ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                  팀 업무
+                </button>
+              </div>
+            )}
             {/* 범례 */}
             <div className="ml-auto hidden sm:flex items-center gap-3 flex-wrap">
               {activeTab === 'open' ? (
@@ -807,15 +925,27 @@ export function CompanyCalendar({ currentUser }: Props) {
                   const isToday = ymd === toYMD(today);
                   const dayOfWeek = idx % 7;
                   const dayEvts = eventsForDate(ymd);
+                  const dayTasks = calendarTasks.filter(t => t.dueDate === ymd && t.status !== 'done' && t.status !== 'rejected');
                   return (
                     <div key={idx}
                       className={`min-h-14 sm:min-h-24 p-1 sm:p-1.5 border-b border-r border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors cursor-pointer ${idx % 7 === 6 ? 'border-r-0' : ''}`}
-                      onClick={() => { setSelectedDate(ymd); setEventForm(emptyEventForm(ymd)); setShowEventModal(true); }}>
-                      <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${isToday ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : dayOfWeek === 0 ? 'text-red-500' : dayOfWeek === 6 ? 'text-blue-500' : 'text-stone-700 dark:text-stone-300'}`}>
-                        {day}
+                      onClick={() => { setSelectedDate(ymd); setEventForm(emptyEventForm(ymd)); setShowEventModal(true); }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); const raw = e.dataTransfer.getData('calTask'); if (raw) { try { const { taskId } = JSON.parse(raw); handleTaskDrop(taskId, ymd); } catch {} } }}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${isToday ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : dayOfWeek === 0 ? 'text-red-500' : dayOfWeek === 6 ? 'text-blue-500' : 'text-stone-700 dark:text-stone-300'}`}>
+                          {day}
+                        </div>
+                        {myEmployee && (
+                          <button className="hidden group-hover:flex sm:flex items-center justify-center w-4 h-4 text-stone-300 hover:text-blue-500 transition-colors"
+                            onClick={e => { e.stopPropagation(); setAddingTaskDate(ymd); setNewTaskTitle(''); }}
+                            title="업무 추가">
+                            <Plus size={11} />
+                          </button>
+                        )}
                       </div>
                       <div className="space-y-0.5">
-                        {dayEvts.slice(0, 3).map(evt => {
+                        {dayEvts.slice(0, 2).map(evt => {
                           const isReadOnly = evt.type === 'meeting' || evt.type === 'leave' || evt.type === 'franchise';
                           return (
                             <div key={evt.id}
@@ -823,14 +953,27 @@ export function CompanyCalendar({ currentUser }: Props) {
                               onClick={e => { e.stopPropagation(); if (!isReadOnly) setSelectedEvent(evt); }}
                               title={evt.title}
                             >
-                              {/* 모바일: 점, 데스크탑: 텍스트 */}
                               <span className="block sm:hidden w-2 h-2 rounded-full mx-auto mt-0.5" />
                               <span className="hidden sm:block text-[10px] px-1 py-0.5">{evt.title}</span>
                             </div>
                           );
                         })}
-                        {dayEvts.length > 3 && (
-                          <div className="text-[10px] text-stone-400 pl-1">+{dayEvts.length - 3}개</div>
+                        {/* 업무 바 */}
+                        {dayTasks.slice(0, 2).map(task => (
+                          <div key={task.id}
+                            draggable
+                            onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('calTask', JSON.stringify({ taskId: task.id })); }}
+                            className={`text-white rounded truncate cursor-grab ${TASK_STATUS_COLORS[task.status]} opacity-90 hover:opacity-100`}
+                            onClick={e => { e.stopPropagation(); setTaskPopup({ task, x: e.clientX, y: e.clientY }); }}
+                            title={task.title}>
+                            <span className="block sm:hidden w-2 h-2 rounded-full mx-auto mt-0.5" />
+                            <span className="hidden sm:flex items-center gap-0.5 text-[10px] px-1 py-0.5">
+                              <CheckSquare size={8} className="shrink-0" />{task.title}
+                            </span>
+                          </div>
+                        ))}
+                        {(dayEvts.length + dayTasks.length) > 4 && (
+                          <div className="text-[10px] text-stone-400 pl-1">+{dayEvts.length + dayTasks.length - 4}개</div>
                         )}
                       </div>
                     </div>
@@ -1088,6 +1231,50 @@ export function CompanyCalendar({ currentUser }: Props) {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 업무 상태 팝업 */}
+      {taskPopup && (
+        <div className="fixed inset-0 z-[180]" onClick={() => setTaskPopup(null)}>
+          <div ref={taskPopupRef}
+            className="absolute bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl shadow-2xl p-3 w-52"
+            style={{ top: Math.min(taskPopup.y, window.innerHeight - 200), left: Math.min(taskPopup.x, window.innerWidth - 220) }}
+            onClick={e => e.stopPropagation()}>
+            <p className="text-xs font-bold text-stone-900 dark:text-white mb-2 truncate">{taskPopup.task.title}</p>
+            <p className="text-[10px] text-stone-400 mb-2">{taskPopup.task.assigneeName}</p>
+            <div className="space-y-1">
+              {(['pending', 'in_progress', 'done'] as TaskStatus[]).map(s => (
+                <button key={s}
+                  onClick={() => handleUpdateTaskStatus(taskPopup.task, s)}
+                  className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${taskPopup.task.status === s ? 'bg-stone-100 dark:bg-stone-800 font-bold text-stone-900 dark:text-white' : 'text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${TASK_STATUS_COLORS[s]}`} />
+                  {TASK_STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 빠른 업무 추가 모달 */}
+      {addingTaskDate && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[180] p-4" onClick={() => setAddingTaskDate(null)}>
+          <div className="bg-white dark:bg-stone-900 rounded-xl shadow-2xl border border-stone-200 dark:border-stone-700 w-72 p-4" onClick={e => e.stopPropagation()}>
+            <p className="text-[11px] font-bold text-stone-400 mb-2">{addingTaskDate} 업무 추가</p>
+            <input autoFocus value={newTaskTitle}
+              onChange={e => setNewTaskTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') setAddingTaskDate(null); }}
+              placeholder="업무 제목 입력 후 Enter"
+              className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-400 mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => setAddingTaskDate(null)} className="flex-1 py-2 text-xs text-stone-500 border border-stone-200 dark:border-stone-600 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-800">취소</button>
+              <button onClick={handleAddTask} disabled={!newTaskTitle.trim()}
+                className="flex-1 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg disabled:opacity-40">
+                추가
+              </button>
             </div>
           </div>
         </div>

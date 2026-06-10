@@ -5,6 +5,60 @@
 
 ---
 
+## 2026-06-10 — Claude Code (컨텍스트 이어받기)
+
+### 완료 — 캘린더 ↔ 오픈일정 싱크 수정 + TickTick 업무 오버레이
+
+**캘린더-프랜차이즈 일정 싱크 (CompanyCalendar.tsx)**
+- `getDocs` → `onSnapshot` 교체: 오픈일정 변경 시 캘린더 실시간 반영
+- `process_settings/{brandId}` 로드 후 `computeWorkItemDates` 적용 — 드래그앤드롭 오버라이드 정확 반영
+- 레거시 필드 폴백 유지 (processSettings 없는 경우)
+- 기존 공정 필터 phaseKey 추출 로직 수정 (id prefix 기반)
+
+**TickTick 업무 오버레이 (CompanyCalendar.tsx)**
+- `tasks` 컬렉션 로드 (현재 월 dueDate 필터)
+- 내 업무 / 팀 업무 토글 (같은 부서 기준)
+- 달력 셀 업무 바 표시 (상태별 색상: 회색/파랑/초록)
+- 드래그앤드롭으로 dueDate 변경
+- 업무 클릭 → 상태 변경 팝업
+- 날짜 + 버튼 → 빠른 업무 추가 모달
+
+**ScheduleCalendar.tsx**: 로컬 중복 `computeWorkItemDates` 제거, utils.ts에서 import로 통일
+
+---
+
+## 2026-06-10 — Claude Code
+
+### 완료 — 보안 강화: user_status 미러 컬렉션 + Firestore rules 배포
+
+- `salesDb.user_status/{uid}` 미러 컬렉션 도입 — 로그인/승인/정지/삭제 시 자동 동기화
+- `isApprovedUser()` 함수를 salesDb-native로 교체 (크로스 DB 조회 제거)
+- `meetings`, `tasks`, `daily_reports` → `isApprovedUser()` 적용 (해고 직원 즉시 차단)
+- catch-all 제거 → 미열거 컬렉션 기본 DENY. Vercel 배포 + Firebase rules 배포 완료.
+
+---
+
+## 2026-06-11 — Claude Code
+
+### 완료 — 회의록 시스템 구조 개선 3단계
+
+**1. Firestore rules 강화**
+- 회의록 delete → isAdmin 전용 (이메일 기반), 직원/공지 write → isAdmin 전용
+- 전체 컬렉션 명시적 열거 (meetings, employees, notices, projects, tasks, daily_reports 등)
+- catch-all 유지 (WORKLOG 2026-06-10(2) 사건 방지)
+
+**2. 회의록 단일화 (안건형식 정식)**
+- QuickMeetingForm(3+1 items 형식) 완전 제거
+- MeetingForm에 회의 종류 선택 추가 (주간업무/정기경영/브랜드별/임시)
+- MeetingForm에 AI 정리 버튼 추가 (Gemini 2.5 Flash — 안건/결정/실행항목 기반)
+- 구형식(items) 작성 회의록은 상세보기 호환 유지 (데이터 보존)
+
+**3. 업무-회의록 연동 (3순위)**
+- MeetingDetail에 "연결된 업무" 패널 추가
+- `sourceMeetingId` 기반으로 tasks 역추적, 상태 뱃지(대기/진행중/완료) 표시
+
+---
+
 ## 2026-06-10 (4) — Claude Code
 
 ### 완료 — B안 통합: QuickMeetingForm ↔ 구 형식 이원화 완성
