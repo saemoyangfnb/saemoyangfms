@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-06-10 (4) — Claude Code
+
+### 완료 — B안 통합: QuickMeetingForm ↔ 구 형식 이원화 완성
+- **MeetingItem 타입** `assignee / deadline / done` 필드 추가
+- **이전 회의 이월 패널**: 신 형식(items 미결) + 구 형식(agendas/decisions/actionItems) 모두 이월 버튼 지원
+- **항목별 담당자/기한** 인라인 확장 (마우스 오버 시 +담당 버튼 노출)
+- **완료 체크박스**: 폼 내 진행/결정 항목 즉시 done 토글. 상세 뷰도 동일 동작, Firestore 즉시 반영
+- **폼 라우팅 이원화**: 구 형식(agendas) → 기존 MeetingForm(구 형식 배지 표시), 신 형식 → QuickForm
+- **요약 바 분기**: 신 형식은 "진행·결정 완료율" 프로그레스, 구 형식은 기존 평균 진행율 유지
+- **saveMentions**: items 내용에서도 @매장 멘션 추출
+- **totalIncomplete**: 신 형식 미완료 items도 집계
+- **formatMeetingShare**: 신 형식 items 카카오 공유 포함
+
+---
+
 ## 2026-06-10 (3) — Claude Code
 
 ### 완료
