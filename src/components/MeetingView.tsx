@@ -169,6 +169,51 @@ function EmployeeSelect({ employees, value, onChange, placeholder = '담당자' 
   );
 }
 
+function EmployeeSearchInput({ employees, value, onChange, placeholder = '담당자 검색...' }: {
+  employees: Employee[]; value: string; onChange: (v: string) => void; placeholder?: string;
+}) {
+  const [q, setQ] = useState(value);
+  const [open, setOpen] = useState(false);
+  const filtered = q.replace('@', '').trim()
+    ? employees.filter(e => e.name.includes(q.replace('@', '')) || (e.position || '').includes(q.replace('@', '')))
+    : employees.slice(0, 8);
+  const pick = (name: string) => { onChange(name); setQ(name); setOpen(false); };
+  return (
+    <div className="relative flex-1 min-w-0">
+      <input type="text" value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        className="w-full text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-700 dark:text-stone-300 placeholder:text-stone-300"
+      />
+      {open && (
+        <div className="absolute left-0 top-full mt-0.5 z-50 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg overflow-hidden min-w-[140px] max-h-48 overflow-y-auto">
+          {filtered.length > 0 ? filtered.map(e => (
+            <button key={e.id} onMouseDown={() => pick(e.name)}
+              className="w-full text-left px-3 py-1.5 text-xs font-bold text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 flex items-center gap-2">
+              <span>{e.name}</span>
+              {e.position && <span className="text-stone-400 font-normal text-[10px]">{e.position}</span>}
+            </button>
+          )) : null}
+          {q.trim() && !employees.find(e => e.name === q.trim()) && (
+            <button onMouseDown={() => pick(q.trim())}
+              className="w-full text-left px-3 py-1.5 text-xs text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800 border-t border-stone-100 dark:border-stone-800">
+              "{q.trim()}" 직접 입력
+            </button>
+          )}
+          {q.trim() && value && (
+            <button onMouseDown={() => pick('')}
+              className="w-full text-left px-3 py-1.5 text-[10px] text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border-t border-stone-100 dark:border-stone-800">
+              담당자 제거
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Sortable Agenda Block ──────────────────────────────────────────────── */
 function SortableAgendaBlock({ idx, data, employees, onChange, onRemove }: {
   idx: number; data: Agenda & { id: string }; employees: Employee[];
@@ -800,6 +845,8 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
   const inputRef = useRef<HTMLInputElement>(null);
   const [carriedIds, setCarriedIds] = useState<Set<string>>(new Set());
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [editingContentId, setEditingContentId] = useState<string | null>(null);
+  const [editingContentValue, setEditingContentValue] = useState('');
   const [showCarry, setShowCarry] = useState(true);
 
   const prevNewItems = (prevMeeting?.items || []).filter(i => i.category !== '공지' && !i.done);
@@ -864,12 +911,15 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
         items.filter(i => i.category === cat).map(i => `• ${i.content}${i.memo ? ` (메모: ${i.memo})` : ''}`).join('\n') || '없음';
       const prompt = `다음은 "${title}" 회의 내용입니다.\n\n[공지]\n${fmt('공지')}\n\n[진행]\n${fmt('진행')}\n\n[결정]\n${fmt('결정')}\n\n위 내용을 3~5문장의 간결한 한국어 회의 요약으로 작성해주세요. 결정사항 중심으로, 핵심만.`;
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-lite',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
       const text = response.text ?? '';
-      if (!text) throw new Error('empty');
+      if (!text) throw new Error('empty response');
       setAiSummary(text);
       toast.success('AI 요약 완료');
-    } catch { toast.error('Gemini 요약 실패'); }
+    } catch (err: any) { toast.error(`Gemini 요약 실패: ${err?.message ?? '알 수 없는 오류'}`); }
     finally { setAiLoading(false); }
   };
 
@@ -1029,7 +1079,19 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
                           {item.done && <Check size={8} className="text-white" />}
                         </button>
                       )}
-                      <span className={`text-sm flex-1 leading-snug ${item.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{item.content}</span>
+                      {editingContentId === item.id ? (
+                        <input autoFocus value={editingContentValue}
+                          onChange={e => setEditingContentValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { setItems(p => p.map(x => x.id === item.id ? { ...x, content: editingContentValue.trim() || x.content } : x)); setEditingContentId(null); }
+                            else if (e.key === 'Escape') setEditingContentId(null);
+                          }}
+                          onBlur={() => { setItems(p => p.map(x => x.id === item.id ? { ...x, content: editingContentValue.trim() || x.content } : x)); setEditingContentId(null); }}
+                          className="text-sm flex-1 bg-transparent border-b border-stone-400 dark:border-stone-500 outline-none text-stone-800 dark:text-stone-200 min-w-0" />
+                      ) : (
+                        <span onClick={() => { setEditingContentId(item.id); setEditingContentValue(item.content); }}
+                          className={`text-sm flex-1 leading-snug cursor-text ${item.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{item.content}</span>
+                      )}
                       <button onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
                         className="text-[10px] text-stone-300 hover:text-stone-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         {(item.assignee || item.deadline) ? '담당✓' : '+담당'}
@@ -1043,13 +1105,13 @@ function QuickMeetingForm({ initial, prevMeeting, employees, onSave, onCancel }:
                     </div>
                     {expandedItemId === item.id && (
                       <div className="mt-1 flex gap-2">
-                        <select value={item.assignee || ''} onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, assignee: e.target.value || undefined } : x))}
-                          className="flex-1 text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300">
-                          <option value="">담당자</option>
-                          {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
-                        </select>
+                        <EmployeeSearchInput
+                          employees={employees}
+                          value={item.assignee || ''}
+                          onChange={v => setItems(p => p.map(x => x.id === item.id ? { ...x, assignee: v || undefined } : x))}
+                        />
                         <input type="date" value={item.deadline || ''} onChange={e => setItems(p => p.map(x => x.id === item.id ? { ...x, deadline: e.target.value || undefined } : x))}
-                          className="text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300" />
+                          className="text-xs px-2 py-1 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-600 rounded outline-none text-stone-600 dark:text-stone-300 shrink-0" />
                       </div>
                     )}
                     {(item.assignee || item.deadline) && expandedItemId !== item.id && (
