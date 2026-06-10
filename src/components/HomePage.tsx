@@ -8,7 +8,7 @@ import {
   CalendarDays, Sparkles, TriangleAlert, FileText,
   ClipboardList, NotebookPen, Megaphone, Calendar,
   Users, ChevronRight, Pin, Settings, FolderKanban,
-  AlertCircle,
+  AlertCircle, CheckSquare,
 } from 'lucide-react';
 
 function calcDday(openDate: string): number | null {
@@ -166,6 +166,7 @@ export function HomePage({
 
   /* 인트라넷 빠른 이동 */
   const quickNavItems = [
+    { label: '내 업무공간',   icon: <CheckSquare size={18} />,   onClick: () => onNavigate(null, 'my'),        badge: undefined as string | undefined, badgeCls: '' },
     { label: '일일 업무보고', icon: <ClipboardList size={18} />, onClick: () => onNavigate(null, 'daily'),     badge: (!todayMorning && todayMorning !== null) ? '미제출' : undefined, badgeCls: 'bg-amber-500' },
     { label: '공지사항',     icon: <Megaphone size={18} />,      onClick: () => onNavigate(null, 'notice') },
     { label: '회의록',       icon: <NotebookPen size={18} />,    onClick: () => onNavigate(null, 'meetings') },

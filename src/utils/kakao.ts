@@ -1,23 +1,28 @@
-/** 클립보드 복사 후 토스트 표시 */
+/** 클립보드 복사. 성공/실패를 구분된 콜백으로 전달 */
 async function copyText(text: string, onSuccess: () => void, onFail: () => void) {
-  try {
-    await navigator.clipboard.writeText(text);
-    onSuccess();
-  } catch {
-    // clipboard API 실패 시 — textarea 트릭
+  // 1차: Clipboard API
+  if (navigator.clipboard && window.isSecureContext) {
     try {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.style.cssText = 'position:fixed;top:-999px;left:-999px';
-      document.body.appendChild(el);
-      el.focus();
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+      await navigator.clipboard.writeText(text);
       onSuccess();
+      return;
     } catch {
-      onFail();
+      // fallthrough
     }
+  }
+  // 2차: execCommand 폴백 (deprecated but still works in most browsers)
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    if (ok) { onSuccess(); } else { onFail(); }
+  } catch {
+    onFail();
   }
 }
 
@@ -25,18 +30,19 @@ async function copyText(text: string, onSuccess: () => void, onFail: () => void)
 export async function shareKakao({
   title,
   body,
-  onCopied,     // 복사 성공 시 호출할 토스트 함수
+  onSuccess,
+  onError,
 }: {
   title: string;
   body: string;
-  buttonLabel?: string;
-  onCopied?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   const text = `[새모양 인트라넷]\n${title}\n${'─'.repeat(20)}\n${body}`;
   await copyText(
     text,
-    () => onCopied?.('📋 복사됐습니다 — 카톡에 붙여넣기 하세요'),
-    () => onCopied?.('복사 실패. 직접 선택해서 복사해주세요.'),
+    () => onSuccess?.('📋 복사됐습니다 — 카톡에 붙여넣기 하세요'),
+    () => onError?.('복사 실패. 직접 내용을 선택해서 복사해주세요.'),
   );
 }
 
@@ -44,12 +50,14 @@ export function shareApprovalRequest(opts: {
   submitterName: string;
   reportTitle: string;
   approverName: string;
-  onCopied?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   shareKakao({
     title: `결재 요청 — ${opts.submitterName}`,
     body: `"${opts.reportTitle}" 결재를 요청드립니다.\n검토 후 승인/반려 부탁드립니다.\n→ ${opts.approverName}님께 전달`,
-    onCopied: opts.onCopied,
+    onSuccess: opts.onSuccess,
+    onError: opts.onError,
   });
 }
 
@@ -58,14 +66,16 @@ export function shareDailyReport(opts: {
   date: string;
   type: 'morning' | 'evening';
   items: string[];
-  onCopied?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   const label = opts.type === 'morning' ? '출근' : '퇴근';
   const itemText = opts.items.map((t, i) => `${i + 1}. ${t}`).join('\n');
   shareKakao({
     title: `${label} 보고 — ${opts.name} (${opts.date})`,
     body: itemText,
-    onCopied: opts.onCopied,
+    onSuccess: opts.onSuccess,
+    onError: opts.onError,
   });
 }
 
@@ -74,7 +84,8 @@ export function shareWeeklyReport(opts: {
   weekStart: string;
   weekEnd: string;
   items: { title: string; status: string }[];
-  onCopied?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   const STATUS_LABEL: Record<string, string> = { planned: '예정', in_progress: '진행중', done: '완료' };
   const itemText = opts.items
@@ -83,7 +94,8 @@ export function shareWeeklyReport(opts: {
   shareKakao({
     title: `주간 보고 — ${opts.name} (${opts.weekStart}~${opts.weekEnd})`,
     body: itemText,
-    onCopied: opts.onCopied,
+    onSuccess: opts.onSuccess,
+    onError: opts.onError,
   });
 }
 
@@ -92,11 +104,13 @@ export function shareTaskRequest(opts: {
   assigneeName: string;
   taskTitle: string;
   dueDate?: string;
-  onCopied?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   shareKakao({
     title: `업무 요청 — ${opts.requesterName} → ${opts.assigneeName}`,
     body: `"${opts.taskTitle}"${opts.dueDate ? `\n기한: ${opts.dueDate}` : ''}`,
-    onCopied: opts.onCopied,
+    onSuccess: opts.onSuccess,
+    onError: opts.onError,
   });
 }

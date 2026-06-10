@@ -37,6 +37,8 @@ const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m
 const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
 const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ default: m.FactoryView })));
 const StoreListView = lazy(() => import('./components/store/StoreListView').then(m => ({ default: m.StoreListView })));
+const MyWorkspaceView = lazy(() => import('./components/MyWorkspaceView').then(m => ({ default: m.MyWorkspaceView })));
+const QuickInputPalette = lazy(() => import('./components/QuickInputPalette').then(m => ({ default: m.QuickInputPalette })));
 
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmModal';
@@ -74,7 +76,7 @@ const SECTION_GROUP: Record<string, string> = {
 };
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'stores' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -477,6 +479,7 @@ export default function App() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [showQuickInput, setShowQuickInput] = useState(false);
   const toggleGroup = (id: string) => setExpandedGroups(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -551,6 +554,12 @@ export default function App() {
         e.preventDefault();
         setShowGlobalSearch(prev => !prev);
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        setShowQuickInput(prev => !prev);
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -575,7 +584,7 @@ export default function App() {
               }
               if (userData.theme) setTheme(userData.theme);
             } else {
-              alert('계정이 정지되었습니다. 관리자에게 문의하세요.');
+              toast.error('계정이 정지되었습니다. 관리자에게 문의하세요.');
               await signOut(auth);
               setCurrentUser(null);
             }
@@ -1233,6 +1242,20 @@ export default function App() {
       {/* 온보딩 투어 */}
       {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
 
+      {/* 빠른 입력 팔레트 (Ctrl+N) */}
+      <Suspense fallback={null}>
+        {showQuickInput && (
+          <QuickInputPalette
+            onClose={() => setShowQuickInput(false)}
+            onNavigate={(brandId, section) => {
+              setShowQuickInput(false);
+              navigateTo(brandId as any, section as any);
+            }}
+            currentUser={currentUser!}
+          />
+        )}
+      </Suspense>
+
       {/* 모바일 햄버거 버튼 */}
       {isMobile && (
         <header className="bg-[#FDFBF7]/95 dark:bg-stone-900/95 backdrop-blur-md fixed top-0 w-full z-40 border-b-[3px] border-double border-stone-800 dark:border-stone-400 h-14 flex items-center justify-between px-4 shadow-sm print:hidden">
@@ -1286,6 +1309,22 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-2">
+
+          {/* ── 내 업무공간 ── */}
+          <div className="mx-2 mb-1 mt-1">
+            <button
+              onClick={() => navigateAndCloseMobile(null, 'my')}
+              className={`w-full flex items-center gap-2 px-2 py-2 rounded-none text-xs transition-colors ${
+                sidebar.section === 'my' && sidebar.brandId === null
+                  ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
+                  : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
+              }`}
+            >
+              <CheckSquare size={14} />
+              {(!sidebarCollapsed || isMobile) && <span>내 업무공간</span>}
+            </button>
+          </div>
+          <div className="my-1 mx-4 border-t border-stone-200 dark:border-stone-700" />
 
           {/* ── 새모양에프엔비 ── */}
           {(!sidebarCollapsed || isMobile) && (
@@ -1656,6 +1695,15 @@ export default function App() {
               onNavigate={navigateTo}
               onFirestoreError={handleFirestoreError}
               getSectionPermission={getSectionPermission}
+            />
+          )}
+
+          {/* 내 업무공간 */}
+          {sidebar.section === 'my' && (
+            <MyWorkspaceView
+              currentUser={currentUser}
+              onNavigate={navigateTo}
+              onOpenQuickInput={() => setShowQuickInput(true)}
             />
           )}
 

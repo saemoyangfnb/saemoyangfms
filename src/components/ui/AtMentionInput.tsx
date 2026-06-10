@@ -158,3 +158,91 @@ function AtMentionInput({ value, onChange, className = '', wrapperClassName, ...
   );
 });
 AtMentionInput.displayName = 'AtMentionInput';
+
+/* ─── Textarea variant ──────────────────────────────────────────────────── */
+interface TextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange'> {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  wrapperClassName?: string;
+}
+
+export const AtMentionTextarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+function AtMentionTextarea({ value, onChange, className = '', wrapperClassName, ...rest }, forwardedRef) {
+  const [stores, setStores] = useState<Store[]>([]);
+  const [popover, setPopover] = useState<{ q: string; atPos: number } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const setRef = useCallback((el: HTMLTextAreaElement | null) => {
+    (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    if (typeof forwardedRef === 'function') forwardedRef(el);
+    else if (forwardedRef) (forwardedRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+  }, [forwardedRef]);
+
+  useEffect(() => { loadStores().then(setStores); }, []);
+
+  const candidates = popover
+    ? stores.filter(s => s.name.includes(popover.q)).slice(0, 6)
+    : [];
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value;
+    onChange(v);
+    const cursor = e.target.selectionStart ?? v.length;
+    const segment = v.slice(0, cursor);
+    const atIdx = segment.lastIndexOf('@');
+    if (atIdx !== -1 && !segment.slice(atIdx).includes(' ') && !segment.slice(atIdx).includes('\n')) {
+      setPopover({ q: segment.slice(atIdx + 1), atPos: atIdx });
+    } else {
+      setPopover(null);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') setPopover(null);
+    (rest.onKeyDown as any)?.(e);
+  };
+
+  const insertMention = useCallback((storeName: string) => {
+    if (!popover) return;
+    const before = value.slice(0, popover.atPos);
+    const after = value.slice(popover.atPos + 1 + popover.q.length);
+    onChange(`${before}@${storeName} ${after}`);
+    setPopover(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [value, onChange, popover]);
+
+  return (
+    <div ref={containerRef} className={`relative ${wrapperClassName ?? 'w-full'}`}>
+      <textarea
+        ref={setRef}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setTimeout(() => setPopover(null), 150)}
+        className={className}
+        {...rest}
+      />
+      {popover && candidates.length > 0 && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm shadow-lg min-w-[180px] max-w-xs overflow-hidden">
+          <div className="px-2 py-1 bg-stone-50 dark:bg-stone-800 border-b border-stone-100 dark:border-stone-700">
+            <span className="text-[9px] font-black text-stone-400 tracking-widest">매장 멘션</span>
+          </div>
+          {candidates.map(s => (
+            <button
+              key={s.id}
+              onMouseDown={() => insertMention(s.name)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-stone-800 dark:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+            >
+              <Building2 size={11} className="text-stone-400 shrink-0" />
+              {s.name}
+              {s.region && <span className="text-stone-400 font-normal text-[10px]">{s.region}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+AtMentionTextarea.displayName = 'AtMentionTextarea';

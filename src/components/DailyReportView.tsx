@@ -1038,7 +1038,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                 onShare={() => shareDailyReport({
                   name: currentUser.name, date, type: 'morning',
                   items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
-                  onCopied: toast.success,
+                  onSuccess: toast.success, onError: toast.error,
                 })} />
               {/* 퇴근 보고 */}
               {(!myEvening || isEditingEvening) ? (
@@ -1070,7 +1070,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                       if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
                       return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
                     }),
-                    onCopied: toast.success,
+                    onSuccess: toast.success, onError: toast.error,
                   })}
                 />
               )}
@@ -1186,9 +1186,9 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             <div className="flex gap-2">
               <button onClick={() => {
                 if (kakaoTarget.type === 'weekly') {
-                  shareWeeklyReport({ name: currentUser.name, weekStart: kakaoTarget.weekStart!, weekEnd: kakaoTarget.weekEnd!, items: kakaoTarget.items.map(t => ({ title: t, status: 'in_progress' })), onCopied: toast.success });
+                  shareWeeklyReport({ name: currentUser.name, weekStart: kakaoTarget.weekStart!, weekEnd: kakaoTarget.weekEnd!, items: kakaoTarget.items.map(t => ({ title: t, status: 'in_progress' })), onSuccess: toast.success, onError: toast.error });
                 } else {
-                  shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type as 'morning' | 'evening', items: kakaoTarget.items, onCopied: toast.success });
+                  shareDailyReport({ name: currentUser.name, date, type: kakaoTarget.type as 'morning' | 'evening', items: kakaoTarget.items, onSuccess: toast.success, onError: toast.error });
                 }
                 setKakaoTarget(null);
               }}

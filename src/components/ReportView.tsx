@@ -9,6 +9,7 @@ import { User, Report, ReportSection, ReportType, ApprovalStatus, Employee } fro
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { shareApprovalRequest } from '../utils/kakao';
+import { AtMentionTextarea, saveMentions } from './ui/AtMentionInput';
 import {
   Plus, X, ChevronLeft, ChevronRight, Camera, Trash2,
   CheckCircle, XCircle, Clock, Send, Edit2, RefreshCw,
@@ -502,10 +503,10 @@ function ReportEditor({
                   </button>
                 )}
               </div>
-              <textarea
+              <AtMentionTextarea
                 value={sec.body}
-                onChange={e => updateSection(i, { body: e.target.value })}
-                placeholder="내용을 입력하세요..."
+                onChange={v => updateSection(i, { body: v })}
+                placeholder="내용을 입력하세요... (@매장명 으로 매장 태그)"
                 rows={4}
                 className="w-full bg-transparent outline-none text-sm text-stone-800 dark:text-stone-200 placeholder:text-stone-300 dark:placeholder:text-stone-600 resize-none leading-relaxed"
               />
@@ -624,6 +625,15 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
         updatedAt: now,
       };
       await setDoc(doc(salesDb, 'reports', id), report);
+
+      // 매장 멘션 저장
+      saveMentions(
+        state.sections.map(s => s.body),
+        'report',
+        id,
+        state.title.trim(),
+        state.docDate || now.slice(0, 10),
+      ).catch(() => {});
 
       // 프로젝트 내 새 보고서 → 칸반/도식화에도 자동 카드 생성
       if (projectId && !state.id) {
@@ -866,7 +876,7 @@ export function ReportView({ currentUser, projectId, projectTitle, focusReportId
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  shareApprovalRequest({ submitterName: currentUser.name, reportTitle: kakaoShareTarget.reportTitle, approverName: kakaoShareTarget.approverName, onCopied: toast.success });
+                  shareApprovalRequest({ submitterName: currentUser.name, reportTitle: kakaoShareTarget.reportTitle, approverName: kakaoShareTarget.approverName, onSuccess: toast.success, onError: toast.error });
                   setKakaoShareTarget(null);
                 }}
                 className="flex-1 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-stone-900 text-sm font-black rounded-xl flex items-center justify-center gap-2">

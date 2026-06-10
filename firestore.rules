@@ -191,5 +191,32 @@ service cloud.firestore {
     match /meetings/{meetingId} {
       allow read, write: if request.auth != null;
     }
+
+    // salesDb 운영 컬렉션 — 인증된 사용자 전체 접근
+    match /employees/{docId}        { allow read, write: if request.auth != null; }
+    match /calendar_events/{docId}  { allow read, write: if request.auth != null; }
+    match /leave_requests/{docId}   { allow read, write: if request.auth != null; }
+    match /daily_reports/{docId}    { allow read, write: if request.auth != null;
+      match /comments/{commentId}   { allow read, write: if request.auth != null; }
+    }
+    match /tasks/{docId}            { allow read, write: if request.auth != null; }
+    match /notices/{docId}          { allow read, write: if request.auth != null; }
+    match /projects/{docId}         { allow read, write: if request.auth != null;
+      match /{sub}/{subId}          { allow read, write: if request.auth != null; }
+    }
+    match /weekly_reports/{docId}   { allow read, write: if request.auth != null; }
+    match /departments/{docId}      { allow read, write: if request.auth != null; }
+    match /franchise_schedules/{docId} { allow read, write: if request.auth != null; }
+    match /store_mentions/{docId}   { allow read, write: if request.auth != null; }
+    match /stores/{docId}           { allow read, write: if request.auth != null; }
+    match /sop_documents/{docId}    { allow read, write: if request.auth != null; }
+    match /process_settings/{docId} { allow read, write: if request.auth != null; }
+    match /system_settings/{docId}  { allow read, write: if request.auth != null; }
+
+    // 개인 메모 — 본인만 읽기/쓰기
+    match /user_memos/{memoId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow create:               if request.auth != null && request.resource.data.uid == request.auth.uid;
+    }
   }
 }

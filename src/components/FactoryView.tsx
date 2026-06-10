@@ -485,7 +485,7 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
     shareKakao({
       title: `제조실 재고 현황 — ${dateStr}`,
       body: lines.join('\n'),
-      onCopied: msg => toast.success(msg),
+      onSuccess: msg => toast.success(msg), onError: msg => toast.error(msg),
     });
   };
 

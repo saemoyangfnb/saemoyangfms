@@ -12,6 +12,8 @@ export enum OperationType {
 export type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
 export type SidebarSection =
   | 'home'
+  // 개인 업무공간
+  | 'my'
   // 새모양에프엔비
   | 'mvc' | 'brand_history' | 'company_profile'
   // 운영
@@ -56,7 +58,7 @@ export type SectionPermission = 'edit' | 'view' | 'none';
 
 // 섹션 키 목록 (사이드바와 동일)
 export const PERMISSION_SECTIONS = [
-  'home',
+  'home', 'my',
   'mvc', 'brand_history', 'company_profile',
   'okr', 'projects',
   'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees', 'sop',
@@ -67,6 +69,7 @@ export type PermissionSection = typeof PERMISSION_SECTIONS[number];
 
 export const SECTION_LABELS: Record<PermissionSection, string> = {
   home: '홈',
+  my: '내 업무공간',
   mvc: 'MVC',
   brand_history: '브랜드 연혁',
   company_profile: '회사 소개서',

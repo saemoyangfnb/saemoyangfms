@@ -360,6 +360,8 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
       .map(a => ({ ...a, id: a.id || genId() }))
   );
   const [carriedIdxs, setCarriedIdxs] = useState<Set<number>>(new Set());
+  const [carriedDecisionIds, setCarriedDecisionIds] = useState<Set<string>>(new Set());
+  const [carriedActionIds, setCarriedActionIds] = useState<Set<string>>(new Set());
   const [newDecText, setNewDecText] = useState('');
   const [newDecImp, setNewDecImp] = useState<DecisionImportance>('normal');
   const [newActText, setNewActText] = useState('');
@@ -400,6 +402,16 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   const carryAll = () => {
     if (!prevMeeting?.agendas) return;
     prevMeeting.agendas.forEach((a, i) => { if (calcProg(a) < 100 && !carriedIdxs.has(i)) carryAgenda(i); });
+  };
+
+  const carryDecision = (d: Decision) => {
+    setDecisions(prev => [...prev, { ...d, id: genId(), text: '[이월] ' + d.text }]);
+    setCarriedDecisionIds(prev => new Set([...prev, d.id]));
+  };
+
+  const carryActionItem = (a: ActionItem) => {
+    setActionItems(prev => [...prev, { ...a, id: genId(), text: '[이월] ' + a.text, done: false }]);
+    setCarriedActionIds(prev => new Set([...prev, a.id]));
   };
 
   const applyTemplate = async (tmpl: MeetingTemplate) => {
@@ -465,44 +477,101 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {!prevMeeting ? (
             <div className="flex flex-col items-center justify-center h-40 text-stone-400"><p className="text-sm">직전 회의록이 없습니다</p></div>
-          ) : (prevMeeting.agendas || []).length === 0 ? (
-            <div className="text-sm text-stone-400 py-4">안건 없음</div>
-          ) : (prevMeeting.agendas || []).map((a, i) => {
-            const p = calcProg(a);
-            return (
-              <div key={i} className={`mb-3 p-3 rounded-lg border ${carriedIdxs.has(i) ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="text-xs font-bold text-stone-800 dark:text-stone-200 flex-1">{a.title}</span>
-                  <span className="text-[11px] font-bold shrink-0" style={{ color: progColor(p) }}>{p}%</span>
-                </div>
-                {(a.checklist || []).length > 0 && (
-                  <div className="mb-2 space-y-0.5">
-                    {(a.checklist || []).map((c, ci) => (
-                      <div key={ci} className={`flex items-center gap-1.5 text-[11px] ${c.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
-                        <div className={`w-3 h-3 rounded-sm border shrink-0 flex items-center justify-center ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
-                          {c.done && <Check size={8} className="text-white" />}
+          ) : (
+            <>
+              {/* 안건 */}
+              {(prevMeeting.agendas || []).length > 0 && (
+                <>
+                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-2">안건</p>
+                  {(prevMeeting.agendas || []).map((a, i) => {
+                    const p = calcProg(a);
+                    return (
+                      <div key={i} className={`mb-3 p-3 rounded-lg border ${carriedIdxs.has(i) ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span className="text-xs font-bold text-stone-800 dark:text-stone-200 flex-1">{a.title}</span>
+                          <span className="text-[11px] font-bold shrink-0" style={{ color: progColor(p) }}>{p}%</span>
                         </div>
-                        {c.text}
+                        {(a.checklist || []).length > 0 && (
+                          <div className="mb-2 space-y-0.5">
+                            {(a.checklist || []).map((c, ci) => (
+                              <div key={ci} className={`flex items-center gap-1.5 text-[11px] ${c.done ? 'line-through text-stone-400' : 'text-stone-600 dark:text-stone-300'}`}>
+                                <div className={`w-3 h-3 rounded-sm border shrink-0 flex items-center justify-center ${c.done ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300'}`}>
+                                  {c.done && <Check size={8} className="text-white" />}
+                                </div>
+                                {c.text}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <UrgencyBadge urgency={a.urgency} />
+                            {a.deadline && <span className="text-[10px] text-stone-400">{a.deadline}</span>}
+                          </div>
+                          {carriedIdxs.has(i) ? (
+                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><Check size={11} /> 이월됨</span>
+                          ) : p < 100 ? (
+                            <button onClick={() => carryAgenda(i)} className="text-[11px] font-bold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 border border-stone-300 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                          ) : (
+                            <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1"><Check size={11} /> 완료</span>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UrgencyBadge urgency={a.urgency} />
-                    {a.deadline && <span className="text-[10px] text-stone-400">{a.deadline}</span>}
-                  </div>
-                  {carriedIdxs.has(i) ? (
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><Check size={11} /> 이월됨</span>
-                  ) : p < 100 ? (
-                    <button onClick={() => carryAgenda(i)} className="text-[11px] font-bold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 border border-stone-300 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
-                  ) : (
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1"><Check size={11} /> 완료</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    );
+                  })}
+                </>
+              )}
+
+              {/* 결정사항 이월 */}
+              {(prevMeeting.decisions || []).length > 0 && (
+                <>
+                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-2 mt-4">결정사항</p>
+                  {(prevMeeting.decisions || []).map(d => (
+                    <div key={d.id} className={`mb-2 p-3 rounded-lg border ${carriedDecisionIds.has(d.id) ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
+                      <div className="flex items-start gap-2 mb-2">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${impColor(d.importance)}`}>{impLabel(d.importance)}</span>
+                        <span className="text-xs text-stone-800 dark:text-stone-200 flex-1">{d.text}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        {carriedDecisionIds.has(d.id) ? (
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><Check size={11} /> 이월됨</span>
+                        ) : (
+                          <button onClick={() => carryDecision(d)} className="text-[11px] font-bold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 border border-stone-300 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* 미완료 실행항목 이월 */}
+              {(prevMeeting.actionItems || []).filter(a => !a.done).length > 0 && (
+                <>
+                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-2 mt-4">미완료 실행항목</p>
+                  {(prevMeeting.actionItems || []).filter(a => !a.done).map(a => (
+                    <div key={a.id} className={`mb-2 p-3 rounded-lg border ${carriedActionIds.has(a.id) ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
+                      <p className="text-xs text-stone-800 dark:text-stone-200 mb-2">{a.text}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {a.assignee && <span className="text-[10px] text-stone-400">{a.assignee}</span>}
+                          {a.deadline && <span className={`text-[10px] font-bold ${isOverdue(a.deadline) ? 'text-red-500' : 'text-stone-400'}`}>{a.deadline}</span>}
+                        </div>
+                        {carriedActionIds.has(a.id) ? (
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><Check size={11} /> 이월됨</span>
+                        ) : (
+                          <button onClick={() => carryActionItem(a)} className="text-[11px] font-bold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 border border-stone-300 dark:border-stone-600 px-2 py-0.5 rounded transition-colors">이월</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {(prevMeeting.agendas || []).length === 0 && (prevMeeting.decisions || []).length === 0 && (prevMeeting.actionItems || []).length === 0 && (
+                <div className="text-sm text-stone-400 py-4 text-center">이전 회의록 내용 없음</div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -731,7 +800,7 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
         </div>
         <div className="hidden sm:flex gap-2 shrink-0">
           <button
-            onClick={() => shareKakao({ title: `회의록 — ${meeting.title}`, body: formatMeetingShare(meeting), onCopied: toast.success })}
+            onClick={() => shareKakao({ title: `회의록 — ${meeting.title}`, body: formatMeetingShare(meeting), onSuccess: toast.success, onError: toast.error })}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-400 text-white rounded-lg font-semibold hover:opacity-80">
             <Share2 size={13} /> 공유
           </button>
@@ -751,7 +820,7 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
 
       {/* 모바일 하단 액션바 */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-700 px-4 py-3 flex gap-2 print:hidden">
-        <button onClick={() => shareKakao({ title: `회의록 — ${meeting.title}`, body: formatMeetingShare(meeting), onCopied: toast.success })}
+        <button onClick={() => shareKakao({ title: `회의록 — ${meeting.title}`, body: formatMeetingShare(meeting), onSuccess: toast.success, onError: toast.error })}
           className="px-3 py-2.5 bg-amber-400 text-white rounded-xl font-bold"><Share2 size={14} /></button>
         <button onClick={onEdit} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 border border-stone-200 dark:border-stone-600 rounded-xl text-sm font-bold text-stone-700 dark:text-stone-300">
           <Edit2 size={14} /> 수정
