@@ -1310,7 +1310,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
             { key: 'mindmap'  as const, label: '마인드맵', icon: Network },
             { key: 'calendar' as const, label: '캘린더',   icon: Calendar },
           ]).map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
+            <button key={key} onClick={() => { setActiveTab(key); if (key === 'kanban') setFilterStatus('all'); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-colors ${activeTab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
               <Icon size={12} /> {label}
             </button>
