@@ -35,7 +35,7 @@ function FormEditorModal({ form, activeForms, onSave, onClose, currentUser }: {
   const [fields, setFields] = useState<StoreFormField[]>(form?.fields ?? []);
   const [saving, setSaving] = useState(false);
   const [loadSrc, setLoadSrc] = useState('');
-  const { toast } = useToast();
+  const toast = useToast();
 
   const addField = () => setFields(p => [...p, { id: genId('fld'), label: '', type: 'text' }]);
   const removeField = (id: string) => setFields(p => p.filter(f => f.id !== id));
@@ -206,7 +206,7 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
   const [data, setData] = useState<Record<string, string | boolean>>(entry?.data ?? {});
   const [isDone, setIsDone] = useState(entry?.isDone ?? false);
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const toast = useToast();
 
   const setValue = (fieldId: string, value: string | boolean) =>
     setData(prev => ({ ...prev, [fieldId]: value }));
@@ -778,7 +778,7 @@ interface Props {
 }
 
 export function StoreMindmapView({ currentUser }: Props) {
-  const { toast } = useToast();
+  const toast = useToast();
   const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
