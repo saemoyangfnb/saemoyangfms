@@ -442,7 +442,7 @@ export const DatabaseView: React.FC<Props> = ({
       </div>
 
       {/* Alert Sensitivity Settings */}
-      {isAdmin && (activeTab === 'active' || activeTab === 'all') && activeTab !== 'changes' && (
+      {isAdmin && (activeTab === 'active' || activeTab === 'all') && (
         <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-500" />
@@ -480,7 +480,7 @@ export const DatabaseView: React.FC<Props> = ({
         </div>
       )}
 
-      {(activeTab === 'active' || activeTab === 'all') && activeTab !== 'changes' && (
+      {(activeTab === 'active' || activeTab === 'all') && (
         <div 
           id="ingredient-form"
           className={`p-4 border-b shrink-0 transition-all duration-300 ${

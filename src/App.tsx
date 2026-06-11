@@ -1884,7 +1884,7 @@ export default function App() {
 
               {/* 매출 현황 */}
               {sidebar.section === 'sales' && sidebar.brandId && getSectionPermission('sales') !== 'none' && (
-                <SalesDashboard activeBrand={sidebar.brandId} isReadOnly={getSectionPermission('sales') === 'view'} />
+                <SalesDashboard activeBrand={sidebar.brandId} menus={menus} ingredients={ingredients} isReadOnly={getSectionPermission('sales') === 'view'} />
               )}
 
               {/* 원가 계산기 */}

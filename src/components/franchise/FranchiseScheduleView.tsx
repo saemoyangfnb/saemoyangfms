@@ -924,12 +924,10 @@ export function FranchiseScheduleView({ brandId, currentUser, isReadOnly = false
 [대화 내역]
 ${transcript}`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      });
+      const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const response = await model.generateContent(prompt);
 
-      let resultText = response.text || '';
+      let resultText = response.response.text() || '';
       resultText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim(); // 마크다운 강제 제거 (파싱 에러 방지)
       const jsonMatch = resultText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

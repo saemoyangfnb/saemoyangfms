@@ -295,7 +295,7 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
           { id: 'data',      label: '데이터 관리', icon: <FolderOpen size={14} /> },
         ]}
         active={adminTab}
-        onChange={setAdminTab}
+        onChange={(id) => setAdminTab(id)}
         className="mb-4"
       />
 

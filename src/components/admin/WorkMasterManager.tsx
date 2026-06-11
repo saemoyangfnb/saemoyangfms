@@ -62,7 +62,7 @@ function DeptMultiSelect({ departments, selectedIds, onChange }: {
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const dropdownId = useUniqueId(); // 💡 고유 ID 생성
+  const dropdownId = useUniqueId('wm-dropdown'); // 💡 고유 ID 생성
   const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
   const ref = useRef<HTMLDivElement>(null);

@@ -1453,7 +1453,7 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const [templates, setTemplates] = useState<ProjectSopTemplate[]>([]);
   const [sopLoading, setSopLoading] = useState(false);
   const [sopSearch, setSopSearch] = useState('');
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();

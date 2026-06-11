@@ -209,7 +209,7 @@ export function UserPermissionManager() {
                             <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-24 shrink-0 flex items-center gap-1">
                               {SECTION_LABELS[section]}
                               {isDefaultRestricted(section) && !isStored && (
-                                <Lock size={10} className="text-red-400 shrink-0" title="기본 접근 제한 섹션" />
+                                <Lock size={10} className="text-red-400 shrink-0" />
                               )}
                             </span>
                             <div className="flex gap-1.5">

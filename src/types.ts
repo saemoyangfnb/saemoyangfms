@@ -246,6 +246,8 @@ export interface ChecklistItemData {
   note8?: string;
   files?: FileAttachment[];
   fileUrl?: string;
+  fixedDate?: string;
+  fixedEndDate?: string;
 }
 export type ScheduleStatus = '계약완료' | '공사중' | '사전교육' | '인테리어완료' | '본교육' | '가오픈' | '오픈완료' | '보류';
 
@@ -532,6 +534,7 @@ export type LeaveStatus = 'pending' | 'approved' | 'rejected';
 export interface LeaveRequest {
   id: string;
   employeeId: string;
+  employeeName?: string;
   type: LeaveType;
   startDate: string;   // YYYY-MM-DD
   endDate: string;     // YYYY-MM-DD
@@ -929,4 +932,39 @@ export interface FactoryDailyRecord {
   note?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==========================================
+// 태스크 템플릿 (salesDb: task_templates)
+// ==========================================
+export type TaskInputType = 'check' | 'text' | 'number' | 'date';
+
+export interface TaskTemplate {
+  id: string;
+  brandId: BrandId;
+  departmentId?: string;
+  title: string;
+  description?: string;
+  dDayOffset: number;
+  inputType: TaskInputType;
+  isActive: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// 메뉴별 매출 업로드 레코드 (salesDb: menu_sales_records)
+export interface MenuSalesRecord {
+  id: string;
+  brandId: BrandId;
+  yearMonth: string;      // 'YYYY-MM'
+  storeName: string;
+  storeShortName: string;
+  category1?: string;
+  menuName: string;
+  quantity: number;
+  totalSales: number;
+  discount: number;
+  netSales: number;
+  createdAt: string;
 }

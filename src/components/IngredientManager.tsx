@@ -114,15 +114,16 @@ export const IngredientManager: React.FC<Props> = ({ ingredients: initialIngredi
       ));
       setEditingId(null);
     } else {
-      setIngredients([...ingredients, { 
-        id: Date.now().toString(), 
-        name, 
+      setIngredients([...ingredients, {
+        id: Date.now().toString(),
+        name,
         spec,
-        boxCost, 
+        boxCost,
         salesPrice,
-        boxQuantity, 
-        unitCost, 
-        unit, 
+        boxQuantity,
+        unitCost,
+        unitSalesPrice: salesPrice > 0 && boxQuantity > 0 ? Math.round(salesPrice / boxQuantity) : 0,
+        unit,
         isArchived: false,
         createdAt: new Date().toISOString()
       }]);

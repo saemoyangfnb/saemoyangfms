@@ -6,8 +6,8 @@ import { useToast } from '../Toast';
 import { Copy, Clock, CheckCircle, Download, Image as ImageIcon } from 'lucide-react';
 
 // ✅ Vercel 에러 방지: 기존 타입에 status 속성 추가 인정해주기
-interface ExtendedSchedule extends MarketingSchedule {
-  status?: string;
+interface ExtendedSchedule extends Omit<MarketingSchedule, 'status'> {
+  status?: '대기중' | '발행완료' | '반려' | string;
   collageUrl?: string | null;
 }
 
