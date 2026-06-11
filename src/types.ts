@@ -625,19 +625,6 @@ export interface Task {
   updatedAt: string;
 }
 
-// ==========================================
-// 업무지도 프로젝트 (salesDb: task_projects)
-// ==========================================
-export interface WorkProject {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  createdBy: string;
-  updatedAt?: string;
-  updatedBy?: string;
-  isArchived?: boolean;
-}
 
 // ==========================================
 // 일일 업무보고 (salesDb: daily_reports)

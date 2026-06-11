@@ -5,14 +5,14 @@ import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where,
 } from 'firebase/firestore';
 import {
-  Task, Employee, User, TaskStatus, TaskSourceType, WorkProject, DailyReport,
+  Task, Employee, User, TaskStatus, TaskSourceType, Project, DailyReport,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
   Plus, X, Edit2, ChevronDown, ChevronRight, Search,
   LayoutList, BarChart2, BookOpen, Calendar, Briefcase,
-  CheckCircle2, AlertCircle, Users, Inbox, Trash2, Pencil,
+  CheckCircle2, AlertCircle, Users,
 } from 'lucide-react';
 
 // ── 로컬 타입 ──────────────────────────────────────────────
@@ -92,53 +92,6 @@ function MiniPicker({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-// ── 프로젝트 폼 모달 ───────────────────────────────────────
-function ProjectFormModal({
-  project, onSave, onClose,
-}: {
-  project?: WorkProject;
-  onSave: (data: { name: string; description?: string }) => void;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(project?.name ?? '');
-  const [description, setDescription] = useState(project?.description ?? '');
-  const inputCls = 'w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-sm bg-white dark:bg-stone-800 text-stone-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-stone-400';
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-stone-900 rounded-sm shadow-2xl w-full max-w-sm border border-stone-200 dark:border-stone-700">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b-[3px] border-double border-stone-800 dark:border-stone-400">
-          <h2 className="text-sm font-black text-stone-900 dark:text-white">{project ? '프로젝트 수정' : '새 프로젝트'}</h2>
-          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm"><X size={16} /></button>
-        </div>
-        <div className="p-5 space-y-3.5">
-          <div>
-            <label className="block text-[11px] font-bold text-stone-500 mb-1">프로젝트명 *</label>
-            <input value={name} onChange={e => setName(e.target.value)}
-              placeholder="예: 신메뉴 개발, 매장 위생 점검"
-              autoFocus onKeyDown={e => e.key === 'Enter' && name.trim() && onSave({ name: name.trim(), description: description.trim() || undefined })}
-              className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-stone-500 mb-1">설명 (선택)</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-              placeholder="프로젝트 목적이나 설명을 입력하세요"
-              className={`${inputCls} resize-none`} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-200 dark:border-stone-700">
-          <button onClick={onClose} className="px-4 py-2 text-xs text-stone-600 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm">취소</button>
-          <button
-            onClick={() => name.trim() && onSave({ name: name.trim(), description: description.trim() || undefined })}
-            disabled={!name.trim()}
-            className="px-4 py-2 text-xs font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-sm hover:bg-stone-700 disabled:opacity-40 transition-colors">
-            {project ? '저장' : '만들기'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── 업무 등록/수정 모달 ────────────────────────────────────
 function TaskFormModal({
   task, employees, meetings, projects, defaultProjectId, onSave, onClose,
@@ -146,7 +99,7 @@ function TaskFormModal({
   task?: Task;
   employees: Employee[];
   meetings: SimpleMeeting[];
-  projects: WorkProject[];
+  projects: Project[];
   defaultProjectId?: string;
   onSave: (data: Partial<Task>) => void;
   onClose: () => void;
@@ -204,7 +157,7 @@ function TaskFormModal({
             <label className="block text-[11px] font-bold text-stone-500 mb-1">프로젝트</label>
             <select value={projectId} onChange={e => setProjectId(e.target.value)} className={inputCls}>
               <option value="">-- 미분류 --</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
           </div>
 
@@ -695,7 +648,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   const toast = useToast();
   const { confirm } = useConfirm();
 
-  const [projects, setProjects] = useState<WorkProject[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [meetings, setMeetings] = useState<SimpleMeeting[]>([]);
@@ -705,7 +658,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   const [loadingReports, setLoadingReports] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [projectListTab, setProjectListTab] = useState<'active' | 'archived'>('active');
+  const [projectListTab, setProjectListTab] = useState<'active' | 'done'>('active');
   const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'timeline'>('list');
   const [calMonth, setCalMonth] = useState(() => new Date());
   const [search, setSearch] = useState('');
@@ -714,15 +667,13 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
-  const [editingProject, setEditingProject] = useState<WorkProject | null>(null);
-  const [showProjectForm, setShowProjectForm] = useState(false);
 
   // ── 데이터 로드 ───────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [projectSnap, taskSnap, empSnap, meetingSnap] = await Promise.all([
-        getDocs(collection(salesDb, 'task_projects')),
+        getDocs(query(collection(salesDb, 'projects'), orderBy('updatedAt', 'desc'))),
         getDocs(collection(salesDb, 'tasks')),
         getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
         getDocs(query(collection(db, 'meetings'), orderBy('date', 'desc'))),
@@ -768,68 +719,6 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
       setMonthReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
     }).catch(console.error).finally(() => setLoadingReports(false));
   }, [activeTab, calMonth]);
-
-  // ── 프로젝트 CRUD ─────────────────────────────────────────
-  const handleSaveProject = async (data: { name: string; description?: string }) => {
-    try {
-      if (editingProject) {
-        await updateDoc(doc(salesDb, 'task_projects', editingProject.id), {
-          ...data, updatedAt: nowTs(), updatedBy: currentUser.name,
-        });
-        setProjects(prev => prev.map(p => p.id === editingProject.id ? { ...p, ...data } : p));
-        toast.success('프로젝트 수정됨');
-      } else {
-        const id = genId('proj');
-        const now = nowTs();
-        const newProject: WorkProject = {
-          id, ...data, createdAt: now, createdBy: currentUser.name, isArchived: false,
-        };
-        await setDoc(doc(salesDb, 'task_projects', id), newProject);
-        setProjects(prev => [...prev, newProject]);
-        setSelectedProjectId(id);
-        toast.success('프로젝트 만들어짐');
-      }
-      setShowProjectForm(false);
-      setEditingProject(null);
-    } catch { toast.error('저장 실패'); }
-  };
-
-  const handleArchiveProject = async (project: WorkProject) => {
-    const isArchiving = !project.isArchived;
-    const ok = await confirm({
-      title: isArchiving ? '프로젝트 보관' : '프로젝트 복원',
-      message: `"${project.name}"을 ${isArchiving ? '보관함으로 이동' : '활성으로 복원'}할까요?`,
-      confirmLabel: isArchiving ? '보관' : '복원',
-    });
-    if (!ok) return;
-    try {
-      await updateDoc(doc(salesDb, 'task_projects', project.id), { isArchived: isArchiving, updatedAt: nowTs() });
-      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, isArchived: isArchiving } : p));
-      if (selectedProjectId === project.id && isArchiving) setSelectedProjectId(null);
-      toast.success(isArchiving ? '보관됨' : '복원됨');
-    } catch { toast.error('실패'); }
-  };
-
-  const handleDeleteProject = async (project: WorkProject) => {
-    const ok = await confirm({
-      title: '프로젝트 삭제',
-      message: `"${project.name}"을 삭제할까요? 포함된 업무는 미분류로 이동됩니다.`,
-      confirmLabel: '삭제',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try {
-      await deleteDoc(doc(salesDb, 'task_projects', project.id));
-      const projectTasks = tasks.filter(t => t.projectId === project.id);
-      await Promise.all(projectTasks.map(t =>
-        updateDoc(doc(salesDb, 'tasks', t.id), { projectId: null, updatedAt: nowTs() })
-      ));
-      setProjects(prev => prev.filter(p => p.id !== project.id));
-      setTasks(prev => prev.map(t => t.projectId === project.id ? { ...t, projectId: undefined } : t));
-      if (selectedProjectId === project.id) setSelectedProjectId(null);
-      toast.success('삭제됨');
-    } catch { toast.error('삭제 실패'); }
-  };
 
   // ── 업무 CRUD ─────────────────────────────────────────────
   const handleSaveTask = async (data: Partial<Task>) => {
@@ -878,8 +767,11 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   };
 
   // ── 파생 데이터 ───────────────────────────────────────────
+  // 활성: active + on_hold / 완료·보관: completed + archived
   const visibleProjects = projects.filter(p =>
-    projectListTab === 'active' ? !p.isArchived : !!p.isArchived
+    projectListTab === 'active'
+      ? p.status === 'active' || p.status === 'on_hold'
+      : p.status === 'completed' || p.status === 'archived'
   );
 
   const filteredTasks = tasks.filter(t => {
@@ -913,7 +805,6 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   filteredTasks.forEach(t => { counts[getTrackStatus(t)]++; });
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
-  const isAdmin = currentUser.role === 'admin';
 
   if (loading) return (
     <div className="flex items-center justify-center py-32">
@@ -928,20 +819,15 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
       <div className="w-52 shrink-0 flex flex-col border-r border-stone-200 dark:border-stone-700 overflow-hidden bg-stone-50 dark:bg-stone-900">
         {/* 헤더 */}
         <div className="px-3 pt-3 pb-2 border-b border-stone-200 dark:border-stone-800">
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2">
             <span className="text-[10px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest">프로젝트</span>
-            <button
-              onClick={() => { setEditingProject(null); setShowProjectForm(true); }}
-              className="w-6 h-6 flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-sm transition-colors"
-              title="새 프로젝트">
-              <Plus size={13} />
-            </button>
+            <p className="text-[9px] text-stone-400 dark:text-stone-500 mt-0.5">프로젝트 메뉴에서 관리</p>
           </div>
           <div className="flex gap-0.5">
-            {(['active', 'archived'] as const).map(tab => (
+            {(['active', 'done'] as const).map(tab => (
               <button key={tab} onClick={() => setProjectListTab(tab)}
                 className={`flex-1 py-1 text-[10px] font-bold rounded-sm transition-colors ${projectListTab === tab ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-700'}`}>
-                {tab === 'active' ? '활성' : '보관함'}
+                {tab === 'active' ? '진행중' : '완료'}
               </button>
             ))}
           </div>
@@ -965,48 +851,29 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
           {/* 프로젝트 아이템 */}
           {visibleProjects.map(p => {
             const activeCnt = projectActiveCounts.get(p.id) ?? 0;
+            const statusDot = p.status === 'on_hold'
+              ? 'bg-amber-400'
+              : p.status === 'completed' ? 'bg-stone-300 dark:bg-stone-600'
+              : 'bg-emerald-500';
             return (
-              <div key={p.id} className="group relative">
-                <button
-                  onClick={() => setSelectedProjectId(p.id)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors pr-16 ${selectedProjectId === p.id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500 text-blue-700 dark:text-blue-400' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border-l-2 border-transparent'}`}>
-                  <Briefcase size={12} className="shrink-0" />
-                  <span className="flex-1 text-xs font-bold truncate">{p.name}</span>
-                  {activeCnt > 0 && (
-                    <span className="text-[10px] text-stone-400 tabular-nums group-hover:opacity-0 transition-opacity">{activeCnt}</span>
-                  )}
-                </button>
-                {/* 호버 액션 */}
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-stone-50 dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 px-0.5 shadow-sm">
-                  <button onClick={e => { e.stopPropagation(); setEditingProject(p); setShowProjectForm(true); }}
-                    className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-sm" title="수정">
-                    <Pencil size={9} />
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); handleArchiveProject(p); }}
-                    className="p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 rounded-sm" title={p.isArchived ? '복원' : '보관'}>
-                    <Inbox size={9} />
-                  </button>
-                  {isAdmin && (
-                    <button onClick={e => { e.stopPropagation(); handleDeleteProject(p); }}
-                      className="p-1 text-stone-300 hover:text-red-500 rounded-sm" title="삭제">
-                      <Trash2 size={9} />
-                    </button>
-                  )}
-                </div>
-              </div>
+              <button
+                key={p.id}
+                onClick={() => setSelectedProjectId(p.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${selectedProjectId === p.id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500 text-blue-700 dark:text-blue-400' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border-l-2 border-transparent'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`} />
+                <span className="flex-1 text-xs font-bold truncate">{p.title}</span>
+                {activeCnt > 0 && (
+                  <span className="text-[10px] text-stone-400 tabular-nums">{activeCnt}</span>
+                )}
+              </button>
             );
           })}
 
           {visibleProjects.length === 0 && (
             <div className="px-3 py-5 text-center">
               <p className="text-[10px] text-stone-400">
-                {projectListTab === 'active' ? '프로젝트가 없습니다' : '보관된 프로젝트 없음'}
+                {projectListTab === 'active' ? '진행중인 프로젝트 없음' : '완료된 프로젝트 없음'}
               </p>
-              {projectListTab === 'active' && (
-                <button onClick={() => setShowProjectForm(true)} className="text-[10px] text-blue-500 hover:underline mt-1 block mx-auto">
-                  새로 만들기
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -1018,7 +885,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
         <div className="px-5 py-3 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between gap-3 flex-wrap shrink-0">
           <div>
             <h1 className="text-base font-black text-stone-900 dark:text-white">
-              {selectedProject ? selectedProject.name : '전체 업무'}
+              {selectedProject ? selectedProject.title : '전체 업무'}
             </h1>
             {selectedProject?.description && (
               <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 max-w-xs truncate">
@@ -1180,22 +1047,13 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
         </div>
       </div>
 
-      {/* 프로젝트 폼 모달 */}
-      {showProjectForm && (
-        <ProjectFormModal
-          project={editingProject ?? undefined}
-          onSave={handleSaveProject}
-          onClose={() => { setShowProjectForm(false); setEditingProject(null); }}
-        />
-      )}
-
       {/* 업무 폼 모달 */}
       {showTaskForm && (
         <TaskFormModal
           task={editingTask ?? undefined}
           employees={employees}
           meetings={meetings}
-          projects={projects.filter(p => !p.isArchived)}
+          projects={projects.filter(p => p.status === 'active' || p.status === 'on_hold')}
           defaultProjectId={selectedProjectId ?? undefined}
           onSave={handleSaveTask}
           onClose={() => { setShowTaskForm(false); setEditingTask(null); }}
