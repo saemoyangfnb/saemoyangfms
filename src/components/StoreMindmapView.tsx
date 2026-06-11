@@ -10,11 +10,12 @@ import { useConfirm } from './ConfirmModal';
 import {
   Plus, X, Search, ChevronDown, ChevronRight, Edit2, Trash2,
   Check, GitBranch, LayoutList, ClipboardList, Copy,
-  Printer, Archive, RotateCcw, History, Clock,
+  Printer, Archive, RotateCcw, History, Clock, CalendarDays,
 } from 'lucide-react';
 
 const genId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const nowTs = () => new Date().toISOString();
+
 function scrub<T extends object>(obj: T): T {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined && v !== null)
@@ -54,18 +55,22 @@ function FormEditorModal({ form, activeForms, onSave, onClose, currentUser }: {
     if (fields.some(f => !f.label.trim())) { toast.error('항목명을 모두 입력하세요.'); return; }
     setSaving(true);
     try {
+      const now = nowTs();
       await onSave(scrub({
         id: form?.id ?? genId('form'),
         title: title.trim(),
         description: description.trim() || undefined,
         fields,
-        createdAt: form?.createdAt ?? nowTs(),
+        createdAt: form?.createdAt ?? now,
         createdBy: form?.createdBy ?? currentUser.name,
+        updatedAt: now,
+        updatedBy: currentUser.name,
         isArchived: form?.isArchived ?? false,
       }));
-      onClose(); // 저장 성공 시 즉시 닫힘
-    } catch {
-      toast.error('저장 중 오류가 발생했습니다.');
+      onClose();
+    } catch (err) {
+      console.error('Form save error:', err);
+      toast.error('저장 실패: 권한을 확인하거나 다시 시도하세요.');
     } finally {
       setSaving(false);
     }
@@ -78,6 +83,9 @@ function FormEditorModal({ form, activeForms, onSave, onClose, currentUser }: {
           <span className="font-black text-stone-900 dark:text-stone-100 text-sm flex-1">
             {form ? '폼 수정' : '새 폼 만들기'}
           </span>
+          {form?.updatedBy && (
+            <span className="text-[10px] text-stone-400">최종: {form.updatedBy} · {form.updatedAt?.slice(0, 10)}</span>
+          )}
           <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300">
             <X size={16} />
           </button>
@@ -207,21 +215,23 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
     setSaving(true);
     const now = nowTs();
     try {
-      await onSave(scrub({
+      const newEntry: StoreFormEntry = {
         id: entry?.id ?? genId('ent'),
         formId: form.id,
         storeId: store.id,
         storeName: store.name,
-        storeRegion: store.region,
+        storeRegion: store.region ?? '',
         data,
         isDone,
-        completedAt: isDone ? (entry?.completedAt ?? now) : undefined,
         updatedAt: now,
         updatedBy: currentUser.name,
-      }));
+      };
+      if (isDone) newEntry.completedAt = entry?.completedAt ?? now;
+      await onSave(scrub(newEntry));
       onClose();
-    } catch {
-      toast.error('저장 중 오류가 발생했습니다.');
+    } catch (err) {
+      console.error('Entry save error:', err);
+      toast.error('저장 실패: 다시 시도하세요.');
     } finally {
       setSaving(false);
     }
@@ -368,7 +378,6 @@ function StoreHistoryModal({ store, allForms, onClose }: {
                 const form = formMap.get(entry.formId);
                 return (
                   <div key={entry.id} className="px-4 py-3">
-                    {/* 폼명 + 상태 */}
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${entry.isDone ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                       <span className="text-xs font-bold text-stone-800 dark:text-stone-200 flex-1 min-w-0 truncate">
@@ -382,8 +391,6 @@ function StoreHistoryModal({ store, allForms, onClose }: {
                         <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">입력중</span>
                       )}
                     </div>
-
-                    {/* 입력 데이터 */}
                     {form && Object.keys(entry.data).length > 0 && (
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 ml-4 mb-2">
                         {form.fields.map(field => {
@@ -393,15 +400,13 @@ function StoreHistoryModal({ store, allForms, onClose }: {
                             <div key={field.id} className="flex items-baseline gap-1.5">
                               <span className="text-[10px] text-stone-400 shrink-0">{field.label}</span>
                               <span className="text-[11px] text-stone-700 dark:text-stone-300 font-medium truncate">
-                                {field.type === 'checkbox' ? (val ? '✓' : '') : String(val)}
+                                {field.type === 'checkbox' ? '✓' : String(val)}
                               </span>
                             </div>
                           );
                         })}
                       </div>
                     )}
-
-                    {/* 메타 */}
                     <div className="flex items-center gap-2 ml-4">
                       <Clock size={10} className="text-stone-400 shrink-0" />
                       <span className="text-[10px] text-stone-400">
@@ -438,7 +443,6 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[100] bg-white flex flex-col">
-      {/* 화면용 툴바 — 인쇄 시 숨김 */}
       <div className="print:hidden flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-stone-50 shrink-0">
         <button onClick={onClose} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900">
           <X size={14} /> 닫기
@@ -452,9 +456,7 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
         </button>
       </div>
 
-      {/* 인쇄 콘텐츠 */}
       <div className="flex-1 overflow-auto p-6 text-stone-900" style={{ fontFamily: 'serif' }}>
-        {/* 헤더 */}
         <div className="mb-4 pb-3 border-b-2 border-stone-800">
           <h1 className="text-lg font-black">{form.title}</h1>
           {form.description && <p className="text-sm text-stone-600 mt-0.5">{form.description}</p>}
@@ -465,7 +467,6 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
           </div>
         </div>
 
-        {/* 권역별 테이블 */}
         {regionGroups.map(([region, storeList]) => {
           const regionDone = storeList.filter(s => entryMap.get(s.id)?.isDone).length;
           return (
@@ -494,22 +495,12 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
                         <td className="border border-stone-200 px-2 py-1 font-medium">{store.name}</td>
                         {form.fields.map(f => (
                           <td key={f.id} className="border border-stone-200 px-2 py-1">
-                            {entry
-                              ? f.type === 'checkbox'
-                                ? (entry.data[f.id] ? '✓' : '')
-                                : String(entry.data[f.id] ?? '')
-                              : ''}
+                            {entry ? (f.type === 'checkbox' ? (entry.data[f.id] ? '✓' : '') : String(entry.data[f.id] ?? '')) : ''}
                           </td>
                         ))}
-                        <td className="border border-stone-200 px-2 py-1 text-center">
-                          {entry?.isDone ? '✓' : ''}
-                        </td>
-                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">
-                          {entry?.completedAt?.slice(0, 10) ?? ''}
-                        </td>
-                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">
-                          {entry?.updatedBy ?? ''}
-                        </td>
+                        <td className="border border-stone-200 px-2 py-1 text-center">{entry?.isDone ? '✓' : ''}</td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">{entry?.completedAt?.slice(0, 10) ?? ''}</td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">{entry?.updatedBy ?? ''}</td>
                       </tr>
                     );
                   })}
@@ -557,9 +548,7 @@ function MindMapRegionNode({
           >
             <span>{region}</span>
             <span className="text-[10px] font-normal opacity-70">{done}/{stores.length}</span>
-            {done === stores.length && stores.length > 0 && (
-              <Check size={10} className="text-emerald-500" />
-            )}
+            {done === stores.length && stores.length > 0 && <Check size={10} className="text-emerald-500" />}
           </button>
           <button
             onClick={() => setExpanded(v => !v)}
@@ -577,7 +566,7 @@ function MindMapRegionNode({
               return (
                 <div key={store.id} className="flex items-center">
                   <div className="w-8 shrink-0 relative self-stretch">
-                    <div className={`absolute left-0 top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-700 ${isLast ? 'h-1/2 bottom-auto' : ''}`} />
+                    <div className={`absolute left-0 top-0 w-px bg-stone-200 dark:bg-stone-700 ${isLast ? 'h-1/2' : 'bottom-0'}`} />
                     <div className="absolute left-0 top-1/2 w-4 h-px bg-stone-200 dark:bg-stone-700 -translate-y-px" />
                   </div>
                   <button
@@ -602,6 +591,180 @@ function MindMapRegionNode({
   );
 }
 
+// ── 캘린더 탭 ─────────────────────────────────────────────
+type CalendarDayEntry = { store: Store; entry: StoreFormEntry; fieldLabel: string };
+
+function CalendarTab({ form, entries, stores, onClickStore }: {
+  form: StoreForm;
+  entries: StoreFormEntry[];
+  stores: Store[];
+  onClickStore: (s: Store, entry: StoreFormEntry | null) => void;
+}) {
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  const dateFields = useMemo(
+    () => form.fields.filter(f => f.type === 'date'),
+    [form.fields]
+  );
+
+  const storeMap = useMemo(() => {
+    const m = new Map<string, Store>();
+    stores.forEach(s => m.set(s.id, s));
+    return m;
+  }, [stores]);
+
+  const entryMap = useMemo(() => {
+    const m = new Map<string, StoreFormEntry>();
+    entries.forEach(e => m.set(e.storeId, e));
+    return m;
+  }, [entries]);
+
+  // date → entries for that date
+  const dateMap = useMemo(() => {
+    const m = new Map<string, CalendarDayEntry[]>();
+    if (dateFields.length === 0) return m;
+    entries.forEach(entry => {
+      const store = storeMap.get(entry.storeId);
+      if (!store) return;
+      dateFields.forEach(field => {
+        const val = entry.data[field.id];
+        if (typeof val !== 'string' || !val) return;
+        if (!m.has(val)) m.set(val, []);
+        m.get(val)!.push({ store, entry, fieldLabel: field.label });
+      });
+    });
+    return m;
+  }, [entries, dateFields, storeMap]);
+
+  const year = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const toKey = (d: number) =>
+    `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  const todayKey = (() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  })();
+
+  if (dateFields.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-stone-400">
+        <CalendarDays size={32} className="mb-2 opacity-30" />
+        <p className="text-sm font-bold">날짜 형식 항목이 없습니다.</p>
+        <p className="text-xs mt-1">폼에 <span className="font-bold text-stone-600 dark:text-stone-300">날짜</span> 형식 항목을 추가하면 캘린더에서 확인할 수 있습니다.</p>
+      </div>
+    );
+  }
+
+  const totalOnMonth = [...dateMap.entries()]
+    .filter(([key]) => key.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`))
+    .reduce((s, [, list]) => s + list.length, 0);
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* 캘린더 헤더 */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
+        <button
+          onClick={() => setCalMonth(new Date(year, month - 1, 1))}
+          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 rounded-sm"
+        >
+          <ChevronRight size={15} className="rotate-180" />
+        </button>
+        <span className="text-sm font-black text-stone-800 dark:text-stone-200 flex-1 text-center">
+          {year}년 {month + 1}월
+        </span>
+        <button
+          onClick={() => setCalMonth(new Date(year, month + 1, 1))}
+          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 rounded-sm"
+        >
+          <ChevronRight size={15} />
+        </button>
+        <span className="text-[11px] text-stone-400 ml-2">{totalOnMonth}건</span>
+      </div>
+
+      {/* 요일 헤더 */}
+      <div className="grid grid-cols-7 border-b border-stone-100 dark:border-stone-800 shrink-0 bg-stone-50 dark:bg-stone-800/50">
+        {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+          <div
+            key={d}
+            className={`py-1 text-center text-[11px] font-bold ${
+              i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-stone-500 dark:text-stone-400'
+            }`}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* 날짜 그리드 */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="grid grid-cols-7 h-full" style={{ gridAutoRows: 'minmax(80px, 1fr)' }}>
+          {cells.map((day, idx) => {
+            if (day === null) {
+              return <div key={`empty-${idx}`} className="border-r border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/20" />;
+            }
+            const key = toKey(day);
+            const dayEntries = dateMap.get(key) ?? [];
+            const isToday = key === todayKey;
+            const dow = (firstDow + day - 1) % 7;
+
+            return (
+              <div
+                key={day}
+                className={`border-r border-b border-stone-100 dark:border-stone-800 p-1 flex flex-col min-h-[80px] ${
+                  isToday ? 'bg-amber-50 dark:bg-amber-900/10' : ''
+                }`}
+              >
+                {/* 날짜 숫자 */}
+                <div className={`text-[11px] font-bold self-end mb-0.5 w-5 h-5 flex items-center justify-center rounded-full ${
+                  isToday
+                    ? 'bg-amber-500 text-white'
+                    : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-blue-500' : 'text-stone-500 dark:text-stone-400'
+                }`}>
+                  {day}
+                </div>
+
+                {/* 매장 목록 */}
+                <div className="flex flex-col gap-0.5 flex-1">
+                  {dayEntries.slice(0, 3).map((item, i) => (
+                    <button
+                      key={`${item.store.id}-${item.fieldLabel}-${i}`}
+                      onClick={() => onClickStore(item.store, item.entry)}
+                      className={`text-left text-[10px] px-1 py-0.5 rounded-sm truncate leading-snug ${
+                        item.entry.isDone
+                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                      }`}
+                      title={`${item.fieldLabel}: ${item.store.name}`}
+                    >
+                      {dateFields.length > 1 && <span className="opacity-60">{item.fieldLabel} </span>}
+                      {item.store.name}
+                    </button>
+                  ))}
+                  {dayEntries.length > 3 && (
+                    <span className="text-[10px] text-stone-400 px-1">외 {dayEntries.length - 3}개</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 메인 컴포넌트 ──────────────────────────────────────────
 interface Props {
   currentUser: User;
@@ -612,7 +775,6 @@ export function StoreMindmapView({ currentUser }: Props) {
   const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
-  // 전체 폼 (보관 포함)
   const [allForms, setAllForms] = useState<StoreForm[]>([]);
   const [selectedForm, setSelectedForm] = useState<StoreForm | null>(null);
   const [entries, setEntries] = useState<StoreFormEntry[]>([]);
@@ -621,7 +783,7 @@ export function StoreMindmapView({ currentUser }: Props) {
   const [loadingEntries, setLoadingEntries] = useState(false);
 
   const [formListTab, setFormListTab] = useState<'active' | 'archived'>('active');
-  const [activeTab, setActiveTab] = useState<'mindmap' | 'list'>('list');
+  const [activeTab, setActiveTab] = useState<'mindmap' | 'list' | 'calendar'>('list');
   const [search, setSearch] = useState('');
   const [highlightRegion, setHighlightRegion] = useState<string | null>(null);
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set());
@@ -771,7 +933,6 @@ export function StoreMindmapView({ currentUser }: Props) {
     <div className="flex h-full bg-[#FDFBF7] dark:bg-stone-950">
       {/* ── 왼쪽: 폼 목록 ───────────────────────── */}
       <aside className="w-56 shrink-0 border-r-[3px] border-double border-stone-300 dark:border-stone-700 flex flex-col bg-white dark:bg-stone-900">
-        {/* 탭 헤더 */}
         <div className="flex items-center border-b border-stone-200 dark:border-stone-800 shrink-0">
           <button
             onClick={() => setFormListTab('active')}
@@ -793,7 +954,7 @@ export function StoreMindmapView({ currentUser }: Props) {
           >
             보관함 {archivedForms.length > 0 && `(${archivedForms.length})`}
           </button>
-          {isAdmin && formListTab === 'active' && (
+          {formListTab === 'active' && (
             <button
               onClick={() => { setEditingForm(null); setFormEditorOpen(true); }}
               className="px-2 py-2 text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 shrink-0"
@@ -804,20 +965,17 @@ export function StoreMindmapView({ currentUser }: Props) {
           )}
         </div>
 
-        {/* 폼 목록 */}
         <div className="flex-1 overflow-y-auto">
           {formListTab === 'active' && activeForms.length === 0 && (
             <div className="px-3 py-6 text-center">
               <ClipboardList size={24} className="text-stone-300 dark:text-stone-600 mx-auto mb-2" />
               <p className="text-[11px] text-stone-400">폼이 없습니다.</p>
-              {isAdmin && (
-                <button
-                  onClick={() => { setEditingForm(null); setFormEditorOpen(true); }}
-                  className="mt-2 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-                >
-                  + 첫 폼 만들기
-                </button>
-              )}
+              <button
+                onClick={() => { setEditingForm(null); setFormEditorOpen(true); }}
+                className="mt-2 text-[11px] font-bold text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
+              >
+                + 첫 폼 만들기
+              </button>
             </div>
           )}
 
@@ -842,6 +1000,11 @@ export function StoreMindmapView({ currentUser }: Props) {
                   <p className="text-[10px] text-stone-400 mt-0.5">
                     {f.fields.length}개 항목 · {f.createdAt.slice(0, 10)}
                   </p>
+                  {f.updatedBy && (
+                    <p className="text-[10px] text-stone-300 dark:text-stone-600 mt-0.5">
+                      {f.updatedBy} 수정
+                    </p>
+                  )}
                   {isSelected && (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {totalStats.done}/{totalStats.total} 완료
@@ -849,43 +1012,43 @@ export function StoreMindmapView({ currentUser }: Props) {
                   )}
                 </button>
 
-                {isAdmin && (
-                  <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-0.5">
-                    {formListTab === 'active' ? (
-                      <>
-                        <button
-                          onClick={() => { setEditingForm(f); setFormEditorOpen(true); }}
-                          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-                          title="수정"
-                        >
-                          <Edit2 size={11} />
-                        </button>
-                        <button
-                          onClick={() => handleArchiveForm(f, true)}
-                          className="p-1 text-stone-400 hover:text-amber-600"
-                          title="보관함으로"
-                        >
-                          <Archive size={11} />
-                        </button>
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-0.5">
+                  {formListTab === 'active' ? (
+                    <>
+                      <button
+                        onClick={() => { setEditingForm(f); setFormEditorOpen(true); }}
+                        className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                        title="수정"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+                      <button
+                        onClick={() => handleArchiveForm(f, true)}
+                        className="p-1 text-stone-400 hover:text-amber-600"
+                        title="보관함으로"
+                      >
+                        <Archive size={11} />
+                      </button>
+                      {isAdmin && (
                         <button
                           onClick={() => handleDeleteForm(f)}
                           className="p-1 text-stone-400 hover:text-red-500"
-                          title="삭제"
+                          title="삭제 (관리자)"
                         >
                           <Trash2 size={11} />
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleArchiveForm(f, false)}
-                        className="p-1 text-stone-400 hover:text-emerald-600"
-                        title="복원"
-                      >
-                        <RotateCcw size={11} />
-                      </button>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleArchiveForm(f, false)}
+                      className="p-1 text-stone-400 hover:text-emerald-600"
+                      title="복원"
+                    >
+                      <RotateCcw size={11} />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -912,7 +1075,6 @@ export function StoreMindmapView({ currentUser }: Props) {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {/* 진행률 */}
                 <div className="flex items-center gap-1.5">
                   <div className="w-16 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
                     <div
@@ -924,7 +1086,6 @@ export function StoreMindmapView({ currentUser }: Props) {
                     {totalStats.done}/{totalStats.total}
                   </span>
                 </div>
-                {/* 인쇄 버튼 */}
                 <button
                   onClick={() => setPrintOpen(true)}
                   className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
@@ -954,6 +1115,16 @@ export function StoreMindmapView({ currentUser }: Props) {
                   >
                     <LayoutList size={11} /> 목록
                   </button>
+                  <button
+                    onClick={() => setActiveTab('calendar')}
+                    className={`px-2 py-1 text-[11px] font-bold flex items-center gap-1 transition-colors ${
+                      activeTab === 'calendar'
+                        ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900'
+                        : 'text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'
+                    }`}
+                  >
+                    <CalendarDays size={11} /> 캘린더
+                  </button>
                 </div>
               </div>
             </div>
@@ -975,13 +1146,11 @@ export function StoreMindmapView({ currentUser }: Props) {
                         </div>
                         <div className="w-px flex-1 bg-stone-300 dark:bg-stone-600 mt-2" style={{ minHeight: 32 }} />
                       </div>
-
                       <div className="w-8 self-stretch flex flex-col justify-center shrink-0 relative" style={{ marginTop: 48 }}>
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-full h-px bg-stone-300 dark:bg-stone-600" />
                         </div>
                       </div>
-
                       <div className="flex flex-col">
                         <div className="relative">
                           <div className="absolute left-0 top-6 bottom-6 w-px bg-stone-300 dark:bg-stone-600" />
@@ -1007,7 +1176,6 @@ export function StoreMindmapView({ currentUser }: Props) {
                 {/* ── 목록 탭 ──────────────────── */}
                 {activeTab === 'list' && (
                   <div className="flex-1 flex flex-col overflow-hidden">
-                    {/* 검색 */}
                     <div className="px-4 py-2 border-b border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 shrink-0">
                       <div className="relative">
                         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -1029,7 +1197,6 @@ export function StoreMindmapView({ currentUser }: Props) {
                       )}
                     </div>
 
-                    {/* 지역별 그룹 */}
                     <div ref={listRef} className="flex-1 overflow-y-auto">
                       {filteredGroups.length === 0 && (
                         <div className="flex items-center justify-center h-32 text-stone-400 text-sm">검색 결과가 없습니다.</div>
@@ -1058,7 +1225,9 @@ export function StoreMindmapView({ currentUser }: Props) {
                                   : 'bg-stone-50 dark:bg-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800'
                               }`}
                             >
-                              {isOpen ? <ChevronDown size={13} className="text-stone-400 shrink-0" /> : <ChevronRight size={13} className="text-stone-400 shrink-0" />}
+                              {isOpen
+                                ? <ChevronDown size={13} className="text-stone-400 shrink-0" />
+                                : <ChevronRight size={13} className="text-stone-400 shrink-0" />}
                               <span className="text-xs font-black text-stone-700 dark:text-stone-300">{region}</span>
                               <span className="text-[10px] text-stone-400">{regionDone}/{regionStores.length} 완료</span>
                               <div className="flex-1" />
@@ -1080,11 +1249,9 @@ export function StoreMindmapView({ currentUser }: Props) {
                                   <div className={`w-2 h-2 rounded-full shrink-0 ${
                                     entry?.isDone ? 'bg-emerald-500' : entry ? 'bg-amber-400' : 'bg-stone-200 dark:bg-stone-700'
                                   }`} />
-
                                   <span className="text-xs font-bold text-stone-700 dark:text-stone-300 flex-1 min-w-0 truncate">
                                     {store.name}
                                   </span>
-
                                   {entry && !entry.isDone && (
                                     <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">입력중</span>
                                   )}
@@ -1096,17 +1263,13 @@ export function StoreMindmapView({ currentUser }: Props) {
                                   {entry?.updatedBy && (
                                     <span className="text-[10px] text-stone-400 shrink-0 hidden group-hover:inline">{entry.updatedBy}</span>
                                   )}
-
-                                  {/* 이력 버튼 */}
                                   <button
                                     onClick={() => setHistoryStore(store)}
-                                    className="text-[10px] shrink-0 p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="shrink-0 p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="폼 이력 보기"
                                   >
                                     <History size={13} />
                                   </button>
-
-                                  {/* 입력/수정 버튼 */}
                                   <button
                                     onClick={() => setEditingEntry({ store, entry: entry ?? null })}
                                     className="text-[10px] font-bold shrink-0 px-2 py-0.5 border border-stone-200 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:bg-stone-900 dark:hover:bg-stone-100 hover:text-white dark:hover:text-stone-900 hover:border-stone-900 transition-colors rounded-sm"
@@ -1121,6 +1284,16 @@ export function StoreMindmapView({ currentUser }: Props) {
                       })}
                     </div>
                   </div>
+                )}
+
+                {/* ── 캘린더 탭 ────────────────── */}
+                {activeTab === 'calendar' && (
+                  <CalendarTab
+                    form={selectedForm}
+                    entries={entries}
+                    stores={stores}
+                    onClickStore={(store, entry) => setEditingEntry({ store, entry })}
+                  />
                 )}
               </>
             )}

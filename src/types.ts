@@ -482,6 +482,8 @@ export interface StoreForm {
   fields: StoreFormField[];
   createdAt: string;
   createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
   isArchived?: boolean;
 }
 

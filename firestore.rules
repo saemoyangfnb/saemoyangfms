@@ -156,8 +156,8 @@ service cloud.firestore {
     match /process_settings/{docId}    { allow read: if isAuthenticated(); allow write: if isAdmin(); }
     match /system_settings/{docId}     { allow read: if isAuthenticated(); allow write: if isAdmin(); }
 
-    // 매장 폼 관리
-    match /store_forms/{docId}             { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    // 매장 폼 관리 (폼 생성/수정은 인증 사용자 전체, 이력은 updatedBy 필드로 추적)
+    match /store_forms/{docId}             { allow read, write: if isAuthenticated(); }
     match /store_form_entries/{docId}      { allow read, write: if isAuthenticated(); }
 
     // 매장/프랜차이즈
