@@ -216,7 +216,7 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
     const now = nowTs();
     try {
       const newEntry: StoreFormEntry = {
-        id: entry?.id ?? genId('ent'),
+        id: entry?.id ?? `${form.id}_${store.id}`,
         formId: form.id,
         storeId: store.id,
         storeName: store.name,
@@ -626,7 +626,14 @@ function CalendarTab({ form, entries, stores, onClickStore }: {
   const dateMap = useMemo(() => {
     const m = new Map<string, CalendarDayEntry[]>();
     if (dateFields.length === 0) return m;
+    // storeId+fieldId 조합으로 최신 entry 하나만 사용 (중복 방지)
+    const latest = new Map<string, StoreFormEntry>();
     entries.forEach(entry => {
+      const key = entry.storeId;
+      const prev = latest.get(key);
+      if (!prev || entry.updatedAt > prev.updatedAt) latest.set(key, entry);
+    });
+    latest.forEach(entry => {
       const store = storeMap.get(entry.storeId);
       if (!store) return;
       dateFields.forEach(field => {
