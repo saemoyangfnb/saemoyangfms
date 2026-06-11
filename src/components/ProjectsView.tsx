@@ -1437,7 +1437,7 @@ function MindMapTreeNode({
   );
 }
 
-function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }: {
+export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }: {
   projectId: string;
   projectTitle: string;
   docs: Report[];

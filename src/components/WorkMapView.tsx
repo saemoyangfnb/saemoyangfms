@@ -10,10 +10,14 @@ import {
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { ProjectDetail } from './ProjectsView';
+import {
+  DndContext, DragEndEvent, DragStartEvent, DragOverlay,
+  PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
+} from '@dnd-kit/core';
+import { ProjectMindMap } from './ProjectsView';
 import {
   Plus, X, Edit2, ChevronDown, ChevronRight, Search,
-  LayoutList, BarChart2, BookOpen, Calendar, Briefcase,
+  LayoutList, Kanban, Network, BookOpen, Calendar,
   CheckCircle2, AlertCircle, Users,
 } from 'lucide-react';
 
@@ -746,6 +750,113 @@ function TimelineView({
   );
 }
 
+// ── 업무 기반 칸반 ────────────────────────────────────────
+const KANBAN_COLS: { id: TaskStatus; label: string; dotCls: string; borderCls: string }[] = [
+  { id: 'pending',    label: '대기',   dotCls: 'bg-stone-400',  borderCls: 'border-stone-200 dark:border-stone-700' },
+  { id: 'in_progress',label: '진행중', dotCls: 'bg-blue-500',   borderCls: 'border-blue-200 dark:border-blue-800' },
+  { id: 'done',       label: '완료',   dotCls: 'bg-emerald-500',borderCls: 'border-emerald-200 dark:border-emerald-800' },
+];
+
+function KanbanTaskCard({ task, employees, onEdit }: {
+  task: Task; employees: Employee[]; onEdit: (t: Task) => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
+  const assignee = employees.find(e => e.id === task.assigneeId);
+  const ts = getTrackStatus(task);
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners}
+      className={`bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm p-2.5 cursor-grab active:cursor-grabbing select-none transition-opacity ${isDragging ? 'opacity-30' : 'hover:border-stone-400 dark:hover:border-stone-500'}`}>
+      <div className="flex items-start gap-1 mb-1.5">
+        <span className="flex-1 text-xs font-bold text-stone-800 dark:text-stone-200 leading-tight">{task.title}</span>
+        <button onPointerDown={e => e.stopPropagation()} onClick={() => onEdit(task)}
+          className="shrink-0 p-0.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-colors">
+          <Edit2 size={10} />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {assignee && (
+          <div className="w-4 h-4 rounded-full bg-stone-700 dark:bg-stone-300 flex items-center justify-center text-[8px] font-black text-white dark:text-stone-900">
+            {assignee.name[0]}
+          </div>
+        )}
+        {task.dueDate && (
+          <span className={`text-[9px] font-bold ${ts === 'late' ? 'text-red-500' : ts === 'urgent' ? 'text-amber-500' : 'text-stone-400'}`}>
+            {getDDay(task.dueDate)}
+          </span>
+        )}
+        {(task.progress ?? 0) > 0 && (
+          <span className="text-[9px] text-stone-400">{task.progress}%</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({ col, tasks, employees, onEdit, isDragging }: {
+  col: typeof KANBAN_COLS[0]; tasks: Task[]; employees: Employee[];
+  onEdit: (t: Task) => void; isDragging: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.id });
+  return (
+    <div ref={setNodeRef}
+      className={`w-72 shrink-0 flex flex-col rounded-sm border transition-colors ${isOver ? 'border-blue-400 bg-blue-50/30 dark:bg-blue-900/10' : col.borderCls} bg-white dark:bg-stone-900`}>
+      <div className={`flex items-center gap-2 px-3 py-2.5 border-b ${col.borderCls}`}>
+        <div className={`w-2 h-2 rounded-full shrink-0 ${col.dotCls}`} />
+        <span className="text-xs font-black text-stone-800 dark:text-stone-200">{col.label}</span>
+        <span className="text-[10px] text-stone-400 dark:text-stone-500 ml-auto tabular-nums">{tasks.length}</span>
+      </div>
+      <div className="flex-1 p-2 space-y-2 overflow-y-auto min-h-[180px]">
+        {tasks.map(t => <KanbanTaskCard key={t.id} task={t} employees={employees} onEdit={onEdit} />)}
+        {tasks.length === 0 && isDragging && (
+          <div className="h-14 border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-sm flex items-center justify-center text-[10px] text-stone-400">
+            여기에 드롭
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TaskKanbanView({ tasks, employees, onEdit, onStatusChange }: {
+  tasks: Task[]; employees: Employee[];
+  onEdit: (t: Task) => void;
+  onStatusChange: (taskId: string, status: TaskStatus) => Promise<void>;
+}) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const draggingTask = tasks.find(t => t.id === draggingId);
+
+  const handleDragStart = ({ active }: DragStartEvent) => setDraggingId(active.id as string);
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setDraggingId(null);
+    if (!over) return;
+    const task = tasks.find(t => t.id === active.id);
+    if (!task || task.status === over.id) return;
+    onStatusChange(task.id, over.id as TaskStatus);
+  };
+
+  const kanbanTasks = tasks.filter(t => t.status !== 'rejected');
+
+  return (
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex gap-4 h-full overflow-x-auto pb-2">
+        {KANBAN_COLS.map(col => (
+          <KanbanColumn key={col.id} col={col}
+            tasks={kanbanTasks.filter(t => t.status === col.id)}
+            employees={employees} onEdit={onEdit} isDragging={draggingId !== null} />
+        ))}
+      </div>
+      <DragOverlay dropAnimation={null}>
+        {draggingTask && (
+          <div className="bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded-sm p-2.5 shadow-xl text-xs font-bold text-stone-800 dark:text-stone-200 w-64 cursor-grabbing">
+            {draggingTask.title}
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
 // ── 프로젝트 등록/수정 모달 ────────────────────────────────
 function ProjectFormModal({
   project, employees, currentUser, onSave, onClose,
@@ -866,8 +977,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectListTab, setProjectListTab] = useState<'active' | 'done'>('active');
-  const [viewMode, setViewMode] = useState<'tasks' | 'board'>('tasks');
-  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'timeline'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'kanban' | 'mindmap' | 'calendar'>('list');
   const [projectDocs, setProjectDocs] = useState<Report[]>([]);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -923,7 +1033,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
 
   // 캘린더 탭 활성 시 해당 주 업무보고 로드 (프로젝트 멤버 주간 현황)
   useEffect(() => {
-    if (activeTab !== 'calendar' || viewMode !== 'tasks') return;
+    if (activeTab !== 'calendar') return;
     const endDate = new Date(weekStart + 'T00:00:00'); endDate.setDate(endDate.getDate() + 6);
     const weekEnd = toYMD(endDate);
     setLoadingReports(true);
@@ -934,11 +1044,11 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
     )).then(snap => {
       setWeekReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
     }).catch(console.error).finally(() => setLoadingReports(false));
-  }, [activeTab, viewMode, weekStart]);
+  }, [activeTab, weekStart]);
 
-  // board 모드 활성 시 docs + folders 로드
+  // 마인드맵 탭 활성 시 docs + folders 로드
   useEffect(() => {
-    if (viewMode !== 'board' || !selectedProjectId) return;
+    if (activeTab !== 'mindmap' || !selectedProjectId) return;
     setLoadingDetail(true);
     Promise.all([
       getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', selectedProjectId))),
@@ -948,6 +1058,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
       setProjectFolders(folderSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProjectFolder)));
     }).catch(console.error).finally(() => setLoadingDetail(false));
   }, [activeTab, selectedProjectId]);
+
 
   // ── 업무 CRUD ─────────────────────────────────────────────
   const handleSaveTask = async (data: Partial<Task>) => {
@@ -1012,6 +1123,13 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, progress } : t));
     try {
       await updateDoc(doc(salesDb, 'tasks', taskId), { progress, updatedAt: nowTs() });
+    } catch { toast.error('저장 실패'); }
+  };
+
+  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+    try {
+      await updateDoc(doc(salesDb, 'tasks', taskId), { status, updatedAt: nowTs() });
     } catch { toast.error('저장 실패'); }
   };
 
@@ -1101,7 +1219,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
           {/* 전체 업무 (활성 탭에서만) */}
           {projectListTab === 'active' && (
             <button
-              onClick={() => { setSelectedProjectId(null); if (activeTab === 'detail') setActiveTab('list'); }}
+              onClick={() => { setSelectedProjectId(null); setActiveTab('list'); }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${selectedProjectId === null ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500 text-blue-700 dark:text-blue-400' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border-l-2 border-transparent'}`}>
               <Users size={13} className="shrink-0" />
               <span className="flex-1 text-xs font-bold truncate">전체 업무</span>
@@ -1156,203 +1274,179 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
       {/* ── 우측 메인 패널 ─────────────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-        {/* ── board 모드: ProjectDetail이 패널 전체 점유 ── */}
-        {viewMode === 'board' && selectedProjectId ? (
-          (() => {
-            const proj = projects.find(p => p.id === selectedProjectId);
-            if (!proj) return null;
-            if (loadingDetail) return (
-              <div className="flex items-center justify-center py-32">
-                <div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" />
+        {/* 패널 헤더 */}
+        <div className="px-5 py-3 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div>
+            <h1 className="text-base font-black text-stone-900 dark:text-white">
+              {selectedProject ? selectedProject.title : '전체 업무'}
+            </h1>
+            {selectedProject?.description && (
+              <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 max-w-xs truncate">
+                {selectedProject.description}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 text-[10px]">
+              {counts.late > 0 && <span className="text-red-500 font-bold">지연 {counts.late}</span>}
+              {counts.urgent > 0 && <span className="text-amber-600 dark:text-amber-400 font-bold">임박 {counts.urgent}</span>}
+              <span className="text-stone-400">{counts.done}/{filteredTasks.length} 완료</span>
+            </div>
+            {activeTab !== 'mindmap' && activeTab !== 'calendar' && (
+              <button
+                onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors">
+                <Plus size={13} /> 업무 추가
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 탭 버튼 */}
+        <div className="flex border-b border-stone-200 dark:border-stone-700 px-4 shrink-0">
+          {([
+            { key: 'list'     as const, label: '목록',     icon: LayoutList },
+            { key: 'kanban'   as const, label: '칸반',     icon: Kanban },
+            { key: 'mindmap'  as const, label: '마인드맵', icon: Network },
+            { key: 'calendar' as const, label: '캘린더',   icon: Calendar },
+          ]).map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-colors ${activeTab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 탭 콘텐츠 */}
+        <div className={`flex-1 min-h-0 ${activeTab === 'kanban' ? 'overflow-x-auto overflow-y-hidden p-5' : 'overflow-y-auto p-5'}`}>
+
+          {/* ── 목록 탭 ── */}
+          {activeTab === 'list' && (
+            <>
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1 flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
+                  <Search size={13} className="text-stone-400 shrink-0" />
+                  <input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="업무명·담당자 검색..."
+                    className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none" />
+                  {search && <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700"><X size={12} /></button>}
+                </div>
+                <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
+                  className="text-xs border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-2 bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 focus:outline-none">
+                  <option value="">전체 담당자</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
               </div>
-            );
-            return (
-              <div className="flex-1 overflow-y-auto p-5">
-                <ProjectDetail
-                  project={proj}
+              <div className="flex gap-1 border-b border-stone-200 dark:border-stone-700 mb-4 overflow-x-auto">
+                {([
+                  { key: 'all' as const,     label: `전체 ${filteredTasks.length}` },
+                  { key: 'late' as const,    label: `지연 ${counts.late}` },
+                  { key: 'urgent' as const,  label: `임박 ${counts.urgent}` },
+                  { key: 'normal' as const,  label: `진행중 ${counts.normal}` },
+                  { key: 'done' as const,    label: `완료 ${counts.done}` },
+                ] as const).map(({ key, label }) => (
+                  <button key={key} onClick={() => setFilterStatus(key)}
+                    className={`px-3 py-2 text-xs font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${filterStatus === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'} ${key === 'late' && counts.late > 0 && filterStatus !== 'late' ? 'text-red-400' : ''} ${key === 'urgent' && counts.urgent > 0 && filterStatus !== 'urgent' ? 'text-amber-500' : ''}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {grouped.size === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <CheckCircle2 size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
+                  <p className="text-sm font-bold text-stone-500 dark:text-stone-400">
+                    {search || filterAssignee || filterStatus !== 'all' ? '검색 결과가 없습니다' : '업무가 없습니다'}
+                  </p>
+                  {!search && filterStatus === 'all' && (
+                    <button onClick={() => setShowTaskForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">첫 업무 추가하기</button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {[...grouped.entries()].map(([assigneeId, { name, tasks: aTasks }]) => {
+                    const doneCount = aTasks.filter(t => t.status === 'done').length;
+                    const lateCount = aTasks.filter(t => getTrackStatus(t) === 'late').length;
+                    const emp = employees.find(e => e.id === assigneeId);
+                    return (
+                      <div key={assigneeId} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
+                        <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50">
+                          <div className="w-7 h-7 rounded-full bg-stone-800 dark:bg-stone-200 flex items-center justify-center text-xs font-black text-white dark:text-stone-900 shrink-0">{name[0]}</div>
+                          <div className="flex-1">
+                            <span className="text-sm font-black text-stone-800 dark:text-stone-200">{name}</span>
+                            {emp?.position && <span className="text-[10px] text-stone-400 ml-1.5">{emp.position}</span>}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px]">
+                            {lateCount > 0 && <span className="font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={10} /> 지연 {lateCount}</span>}
+                            <span className="text-stone-400">{doneCount}/{aTasks.length} 완료</span>
+                            <div className="w-16 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${aTasks.length > 0 ? Math.round(doneCount / aTasks.length * 100) : 0}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                        {aTasks.map(task => (
+                          <TaskRow key={task.id} task={task} meetingMap={meetingMap}
+                            onEdit={() => { setEditingTask(task); setShowTaskForm(true); }}
+                            onDelete={() => handleDeleteTask(task)}
+                            onProgressChange={v => handleProgressChange(task.id, v)}
+                            onToggleDone={() => handleToggleDone(task)} />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── 칸반 탭 ── */}
+          {activeTab === 'kanban' && (
+            <TaskKanbanView
+              tasks={filteredTasks}
+              employees={employees}
+              onEdit={task => { setEditingTask(task); setShowTaskForm(true); }}
+              onStatusChange={handleStatusChange}
+            />
+          )}
+
+          {/* ── 마인드맵 탭 ── */}
+          {activeTab === 'mindmap' && (
+            selectedProjectId ? (
+              loadingDetail ? (
+                <div className="flex items-center justify-center py-32">
+                  <div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" />
+                </div>
+              ) : (
+                <ProjectMindMap
+                  projectId={selectedProjectId}
+                  projectTitle={selectedProject?.title ?? ''}
                   docs={projectDocs}
                   employees={employees}
-                  folders={projectFolders}
-                  currentUser={currentUser}
-                  onBack={() => setViewMode('tasks')}
-                  onUpdateProject={updated => setProjects(prev => prev.map(p => p.id === updated.id ? updated : p))}
-                  onDeleteProject={id => { setProjects(prev => prev.filter(p => p.id !== id)); setSelectedProjectId(null); setViewMode('tasks'); }}
-                  onDocsChange={() => {
-                    getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', selectedProjectId)))
-                      .then(snap => setProjectDocs(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
-                      .catch(console.error);
-                  }}
-                  onProgressChange={v => {
-                    const p = projects.find(x => x.id === selectedProjectId);
-                    if (!p) return;
-                    setProjects(prev => prev.map(x => x.id === selectedProjectId ? { ...x, progress: v } : x));
-                    updateDoc(doc(salesDb, 'projects', selectedProjectId), { progress: v, updatedAt: nowTs() }).catch(console.error);
-                  }}
+                  onOpenDoc={() => {}}
                 />
+              )
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <Network size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
+                <p className="text-sm font-bold text-stone-500 dark:text-stone-400">프로젝트를 선택하세요</p>
+                <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">좌측에서 프로젝트를 클릭하면 마인드맵이 표시됩니다</p>
               </div>
-            );
-          })()
-        ) : (
-          /* ── tasks 모드 ── */
-          <>
-            {/* 패널 헤더 */}
-            <div className="px-5 py-3 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between gap-3 flex-wrap shrink-0">
-              <div>
-                <h1 className="text-base font-black text-stone-900 dark:text-white">
-                  {selectedProject ? selectedProject.title : '전체 업무'}
-                </h1>
-                {selectedProject?.description && (
-                  <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 max-w-xs truncate">
-                    {selectedProject.description}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {/* 모드 토글 — 프로젝트 선택 시만 */}
-                {selectedProjectId && (
-                  <div className="flex rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden text-xs font-bold">
-                    <button onClick={() => setViewMode('tasks')}
-                      className={`px-3 py-1.5 transition-colors ${viewMode === 'tasks' ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                      업무
-                    </button>
-                    <button onClick={() => setViewMode('board')}
-                      className={`px-3 py-1.5 border-l border-stone-200 dark:border-stone-700 transition-colors ${viewMode === 'board' ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800'}`}>
-                      칸반·맵
-                    </button>
-                  </div>
-                )}
-                <div className="hidden sm:flex items-center gap-2 text-[10px]">
-                  {counts.late > 0 && <span className="text-red-500 font-bold">지연 {counts.late}</span>}
-                  {counts.urgent > 0 && <span className="text-amber-600 dark:text-amber-400 font-bold">임박 {counts.urgent}</span>}
-                  <span className="text-stone-400">{counts.done}/{filteredTasks.length} 완료</span>
-                </div>
-                <button
-                  onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-bold rounded-sm hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors">
-                  <Plus size={13} /> 업무 추가
-                </button>
-              </div>
-            </div>
+            )
+          )}
 
-            {/* 서브 탭 버튼 */}
-            <div className="flex border-b border-stone-200 dark:border-stone-700 px-4 shrink-0">
-              {([
-                { key: 'list' as const,     label: '목록',     icon: LayoutList },
-                { key: 'calendar' as const, label: '주간 현황', icon: Calendar },
-                { key: 'timeline' as const, label: '타임라인', icon: BarChart2 },
-              ]).map(({ key, label, icon: Icon }) => (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-colors ${activeTab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-                  <Icon size={12} /> {label}
-                </button>
-              ))}
-            </div>
+          {/* ── 캘린더 탭 ── */}
+          {activeTab === 'calendar' && (
+            <ProjectWeekTab
+              selectedProject={selectedProject ?? null}
+              employees={employees}
+              tasks={filteredTasks}
+              weekStart={weekStart}
+              setWeekStart={setWeekStart}
+              weekReports={weekReports}
+              loading={loadingReports}
+            />
+          )}
 
-            {/* 탭 콘텐츠 */}
-            <div className="flex-1 overflow-y-auto p-5">
-
-              {/* ── 목록 탭 ── */}
-              {activeTab === 'list' && (
-                <>
-                  <div className="flex gap-2 mb-3">
-                    <div className="flex-1 flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
-                      <Search size={13} className="text-stone-400 shrink-0" />
-                      <input value={search} onChange={e => setSearch(e.target.value)}
-                        placeholder="업무명·담당자 검색..."
-                        className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none" />
-                      {search && <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700"><X size={12} /></button>}
-                    </div>
-                    <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
-                      className="text-xs border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-2 bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 focus:outline-none">
-                      <option value="">전체 담당자</option>
-                      {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex gap-1 border-b border-stone-200 dark:border-stone-700 mb-4 overflow-x-auto">
-                    {([
-                      { key: 'all' as const,     label: `전체 ${filteredTasks.length}` },
-                      { key: 'late' as const,    label: `지연 ${counts.late}` },
-                      { key: 'urgent' as const,  label: `임박 ${counts.urgent}` },
-                      { key: 'normal' as const,  label: `진행중 ${counts.normal}` },
-                      { key: 'done' as const,    label: `완료 ${counts.done}` },
-                    ] as const).map(({ key, label }) => (
-                      <button key={key} onClick={() => setFilterStatus(key)}
-                        className={`px-3 py-2 text-xs font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${filterStatus === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'} ${key === 'late' && counts.late > 0 && filterStatus !== 'late' ? 'text-red-400' : ''} ${key === 'urgent' && counts.urgent > 0 && filterStatus !== 'urgent' ? 'text-amber-500' : ''}`}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {grouped.size === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-24 text-center">
-                      <CheckCircle2 size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
-                      <p className="text-sm font-bold text-stone-500 dark:text-stone-400">
-                        {search || filterAssignee || filterStatus !== 'all' ? '검색 결과가 없습니다' : '업무가 없습니다'}
-                      </p>
-                      {!search && filterStatus === 'all' && (
-                        <button onClick={() => setShowTaskForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">첫 업무 추가하기</button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {[...grouped.entries()].map(([assigneeId, { name, tasks: aTasks }]) => {
-                        const doneCount = aTasks.filter(t => t.status === 'done').length;
-                        const lateCount = aTasks.filter(t => getTrackStatus(t) === 'late').length;
-                        const emp = employees.find(e => e.id === assigneeId);
-                        return (
-                          <div key={assigneeId} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
-                            <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50">
-                              <div className="w-7 h-7 rounded-full bg-stone-800 dark:bg-stone-200 flex items-center justify-center text-xs font-black text-white dark:text-stone-900 shrink-0">{name[0]}</div>
-                              <div className="flex-1">
-                                <span className="text-sm font-black text-stone-800 dark:text-stone-200">{name}</span>
-                                {emp?.position && <span className="text-[10px] text-stone-400 ml-1.5">{emp.position}</span>}
-                              </div>
-                              <div className="flex items-center gap-2 text-[10px]">
-                                {lateCount > 0 && <span className="font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={10} /> 지연 {lateCount}</span>}
-                                <span className="text-stone-400">{doneCount}/{aTasks.length} 완료</span>
-                                <div className="w-16 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${aTasks.length > 0 ? Math.round(doneCount / aTasks.length * 100) : 0}%` }} />
-                                </div>
-                              </div>
-                            </div>
-                            {aTasks.map(task => (
-                              <TaskRow key={task.id} task={task} meetingMap={meetingMap}
-                                onEdit={() => { setEditingTask(task); setShowTaskForm(true); }}
-                                onDelete={() => handleDeleteTask(task)}
-                                onProgressChange={v => handleProgressChange(task.id, v)}
-                                onToggleDone={() => handleToggleDone(task)} />
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ── 주간 현황 탭 ── */}
-              {activeTab === 'calendar' && (
-                <ProjectWeekTab
-                  selectedProject={selectedProject ?? null}
-                  employees={employees}
-                  tasks={filteredTasks}
-                  weekStart={weekStart}
-                  setWeekStart={setWeekStart}
-                  weekReports={weekReports}
-                  loading={loadingReports}
-                />
-              )}
-
-              {/* ── 타임라인 탭 ── */}
-              {activeTab === 'timeline' && (
-                <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-4">
-                  <TimelineView tasks={filteredTasks} meetingMap={meetingMap} employees={employees}
-                    onEdit={task => { setEditingTask(task); setShowTaskForm(true); }} />
-                </div>
-              )}
-
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       {/* 업무 폼 모달 */}

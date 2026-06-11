@@ -1169,7 +1169,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         </div>
       ) : tab === 'my' ? (
         /* ── 내 보고 탭 ── */
-        <div className="max-w-xl space-y-4">
+        <div className="max-w-3xl space-y-4">
           {/* 오픈 일정 섹션 */}
           {scheduleEvents.length > 0 && (
             <div className="bg-white dark:bg-stone-900 border border-orange-200 dark:border-orange-800/50 rounded-2xl overflow-hidden">
@@ -1234,133 +1234,142 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             }}
             onDragCancel={() => { setDraggingTask(null); setDraggingMeetingItem(null); }}
           >
-            {/* 회의 실행항목 패널 */}
-            {isToday && (
-              <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
-                <button
-                  onClick={() => {
-                    const next = !showMeetingPanel;
-                    setShowMeetingPanel(next);
-                    if (next && meetingActions.length === 0) loadMeetingActions();
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
-                >
-                  <FileText size={13} className="text-stone-500 dark:text-stone-400" />
-                  <span className="text-xs font-black text-stone-800 dark:text-stone-200">회의 실행항목</span>
-                  {meetingActions.length > 0 && (
-                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">{meetingActions.length}</span>
-                  )}
-                  <span className="ml-auto text-[10px] text-stone-400">보고서로 드래그하거나 추가 버튼을 누르세요</span>
-                  <ChevronDown size={13} className={`text-stone-400 transition-transform ${showMeetingPanel ? 'rotate-180' : ''}`} />
-                </button>
-                {showMeetingPanel && (
-                  <div className="border-t border-stone-100 dark:border-stone-800">
-                    {loadingMeetings ? (
-                      <div className="px-4 py-6 text-center text-xs text-stone-400">불러오는 중...</div>
-                    ) : meetingActions.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-xs text-stone-400">미완료 실행항목이 없습니다</div>
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
+
+              {/* ── 왼쪽: 메인 폼 영역 ── */}
+              <div className="flex-1 min-w-0 space-y-4 w-full">
+
+                {/* 업무 인박스 */}
+                {myTasks.length > 0 && (
+                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+                      <Briefcase size={13} className="text-stone-600 dark:text-stone-400" />
+                      <span className="text-xs font-black text-stone-800 dark:text-stone-200">받은 업무 요청</span>
+                      <span className="ml-auto text-[10px] text-stone-400 font-medium">드래그하거나 추가</span>
+                      <span className="text-[11px] font-bold text-stone-400">{myTasks.length}건</span>
+                    </div>
+                    <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                      {myTasks.map(task => (
+                        <DraggableTaskCard
+                          key={task.id}
+                          task={task}
+                          onAdd={addTaskToMorning}
+                          onReject={t => rejectTask(t, '')}
+                          isToday={isToday}
+                          rejectLabel={task.requesterName && task.requesterName !== task.assigneeName ? '반려' : '취소'}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!myEmployee && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">직원 명부에 계정이 연결되어 있지 않습니다. 관리자에게 문의하세요.</p>
+                    <p className="text-[11px] text-amber-500 mt-0.5">연결 없이도 보고는 가능하지만 팀 현황에 표시되지 않습니다.</p>
+                  </div>
+                )}
+
+                {/* 오전 보고 */}
+                {(!myMorning || isEditingMorning) ? (
+                  isToday ? (
+                    <DroppableMorningZone active={draggingTask !== null || draggingMeetingItem !== null}>
+                      <MorningForm
+                        key={isEditingMorning ? 'edit' : 'new'}
+                        onSubmit={submitMorning}
+                        myId={myId}
+                        editItems={isEditingMorning ? myMorning?.items : undefined}
+                        pendingTaskTitles={pendingTaskTitles}
+                      />
+                    </DroppableMorningZone>
+                  ) : (
+                    <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
+                  )
+                ) : (
+                  <>
+                    <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
+                      onShare={() => shareDailyReport({
+                        name: currentUser.name, date, type: 'morning',
+                        items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
+                        onSuccess: toast.success, onError: toast.error,
+                      })} />
+                    {/* 퇴근 보고 */}
+                    {(!myEvening || isEditingEvening) ? (
+                      isToday ? (
+                        <EveningForm
+                          key={isEditingEvening ? 'edit' : 'new'}
+                          morning={myMorning}
+                          editItems={isEditingEvening ? myEvening?.items : undefined}
+                          onSubmit={submitEvening}
+                        />
+                      ) : (
+                        <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
+                      )
                     ) : (
-                      <div className="divide-y divide-stone-100 dark:divide-stone-800">
-                        {meetingActions.map(item => (
-                          <DraggableMeetingItem key={item.id} item={item} onAdd={addMeetingItemToMorning} />
-                        ))}
+                      <ReportCard
+                        report={myEvening}
+                        morningReport={myMorning}
+                        onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined}
+                        isAdmin={isAdmin}
+                        onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined}
+                        onCreateReport={onNavigateToReports}
+                        onShare={() => shareDailyReport({
+                          name: currentUser.name, date, type: 'evening',
+                          items: myEvening.items.map((it, idx) => {
+                            const mp = myMorning?.items[idx]?.progress ?? 0;
+                            const ep = it.progress ?? 0;
+                            const delta = ep - mp;
+                            const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
+                            if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
+                            return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+                          }),
+                          onSuccess: toast.success, onError: toast.error,
+                        })}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* ── 오른쪽: 회의 실행항목 패널 (오늘만) ── */}
+              {isToday && (
+                <div className="w-full lg:w-72 shrink-0 lg:sticky lg:top-4">
+                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+                    <button
+                      onClick={() => {
+                        const next = !showMeetingPanel;
+                        setShowMeetingPanel(next);
+                        if (next && meetingActions.length === 0) loadMeetingActions();
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+                    >
+                      <FileText size={13} className="text-stone-500 dark:text-stone-400" />
+                      <span className="text-xs font-black text-stone-800 dark:text-stone-200">회의 실행항목</span>
+                      {meetingActions.length > 0 && (
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">{meetingActions.length}</span>
+                      )}
+                      <ChevronDown size={13} className={`text-stone-400 transition-transform ml-auto ${showMeetingPanel ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showMeetingPanel && (
+                      <div className="border-t border-stone-100 dark:border-stone-800">
+                        <p className="px-4 py-2 text-[10px] text-stone-400">드래그하거나 + 버튼으로 보고서에 추가</p>
+                        {loadingMeetings ? (
+                          <div className="px-4 py-6 text-center text-xs text-stone-400">불러오는 중...</div>
+                        ) : meetingActions.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-xs text-stone-400">미완료 실행항목이 없습니다</div>
+                        ) : (
+                          <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                            {meetingActions.map(item => (
+                              <DraggableMeetingItem key={item.id} item={item} onAdd={addMeetingItemToMorning} />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* 업무 인박스 */}
-            {myTasks.length > 0 && (
-              <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
-                  <Briefcase size={13} className="text-stone-600 dark:text-stone-400" />
-                  <span className="text-xs font-black text-stone-800 dark:text-stone-200">받은 업무 요청</span>
-                  <span className="ml-auto text-[10px] text-stone-400 font-medium">보고서로 드래그하거나 추가 버튼을 누르세요</span>
-                  <span className="text-[11px] font-bold text-stone-400">{myTasks.length}건</span>
                 </div>
-                <div className="divide-y divide-stone-100 dark:divide-stone-800">
-                  {myTasks.map(task => (
-                    <DraggableTaskCard
-                      key={task.id}
-                      task={task}
-                      onAdd={addTaskToMorning}
-                      onReject={t => rejectTask(t, '')}
-                      isToday={isToday}
-                      rejectLabel={task.requesterName && task.requesterName !== task.assigneeName ? '반려' : '취소'}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!myEmployee && (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">직원 명부에 계정이 연결되어 있지 않습니다. 관리자에게 문의하세요.</p>
-                <p className="text-[11px] text-amber-500 mt-0.5">연결 없이도 보고는 가능하지만 팀 현황에 표시되지 않습니다.</p>
-              </div>
-            )}
-
-            {/* 오전 보고 */}
-            {(!myMorning || isEditingMorning) ? (
-              isToday ? (
-                <DroppableMorningZone active={draggingTask !== null || draggingMeetingItem !== null}>
-                  <MorningForm
-                    key={isEditingMorning ? 'edit' : 'new'}
-                    onSubmit={submitMorning}
-                    myId={myId}
-                    editItems={isEditingMorning ? myMorning?.items : undefined}
-                    pendingTaskTitles={pendingTaskTitles}
-                  />
-                </DroppableMorningZone>
-              ) : (
-                <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
-              )
-            ) : (
-              <>
-                <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
-                  onShare={() => shareDailyReport({
-                    name: currentUser.name, date, type: 'morning',
-                    items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
-                    onSuccess: toast.success, onError: toast.error,
-                  })} />
-                {/* 퇴근 보고 */}
-                {(!myEvening || isEditingEvening) ? (
-                  isToday ? (
-                    <EveningForm
-                      key={isEditingEvening ? 'edit' : 'new'}
-                      morning={myMorning}
-                      editItems={isEditingEvening ? myEvening?.items : undefined}
-                      onSubmit={submitEvening}
-                    />
-                  ) : (
-                    <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
-                  )
-                ) : (
-                  <ReportCard
-                    report={myEvening}
-                    morningReport={myMorning}
-                    onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined}
-                    isAdmin={isAdmin}
-                    onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined}
-                    onCreateReport={onNavigateToReports}
-                    onShare={() => shareDailyReport({
-                      name: currentUser.name, date, type: 'evening',
-                      items: myEvening.items.map((it, idx) => {
-                        const mp = myMorning?.items[idx]?.progress ?? 0;
-                        const ep = it.progress ?? 0;
-                        const delta = ep - mp;
-                        const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
-                        if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
-                        return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
-                      }),
-                      onSuccess: toast.success, onError: toast.error,
-                    })}
-                  />
-                )}
-              </>
-            )}
+              )}
+            </div>
 
             {/* 드래그 오버레이 — 드래그 중인 카드 미리보기 */}
             <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
