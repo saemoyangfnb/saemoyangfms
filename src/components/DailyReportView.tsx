@@ -478,6 +478,90 @@ function ReportCard({ report, morningReport, showName = false, onEdit, onConfirm
 /* ── 메인 컴포넌트 ──────────────────────────────────────── */
 interface Props { currentUser: User; onNavigateToReports?: () => void }
 
+/* ── 날짜 상세 팝업 (주간 현황 탭용) ──────────────────────── */
+function DayDetailPopup({ date, emp, morning, evening, onClose }: {
+  date: string;
+  emp: Employee;
+  morning: DailyReport | null;
+  evening: DailyReport | null;
+  onClose: () => void;
+}) {
+  const DAY_KR = ['일', '월', '화', '수', '목', '금', '토'];
+  const d = new Date(date + 'T00:00:00');
+  const label = `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAY_KR[d.getDay()]})`;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-md border border-stone-200 dark:border-stone-700 overflow-hidden">
+        {/* 헤더 */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-stone-100 dark:border-stone-800">
+          <div className="w-9 h-9 rounded-full bg-stone-800 dark:bg-stone-200 flex items-center justify-center text-sm font-black text-white dark:text-stone-900 shrink-0">
+            {emp.name[0]}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-stone-900 dark:text-white">{emp.name}</p>
+            <p className="text-[10px] text-stone-400">{label}{emp.position ? ` · ${emp.position}` : ''}</p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {morning && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">☀ 출근</span>}
+            {evening && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">🌙 퇴근</span>}
+          </div>
+          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 rounded-sm ml-1"><X size={16} /></button>
+        </div>
+
+        {/* 내용 */}
+        {(morning || evening) ? (
+          <div className="overflow-y-auto max-h-[65vh] divide-y divide-stone-100 dark:divide-stone-800">
+            {/* 출근 보고 항목 */}
+            {morning && (
+              <div className="px-5 py-3">
+                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 mb-2.5">☀ 출근 보고</p>
+                <div className="space-y-2">
+                  {morning.items.map((it, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-[10px] text-stone-300 w-4 text-right font-bold mt-0.5 shrink-0">{i + 1}</span>
+                      <span className={`mt-0.5 shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].icon}</span>
+                      <p className={`text-xs leading-snug flex-1 ${it.status === 'done' ? 'line-through text-stone-400' : it.status === 'incomplete' ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-stone-700 dark:text-stone-300'}`}>
+                        {it.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* 퇴근 보고 항목 */}
+            {evening && (
+              <div className="px-5 py-3">
+                <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mb-2.5">🌙 퇴근 보고 (완료 현황)</p>
+                <div className="space-y-2">
+                  {evening.items.map((it, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-[10px] text-stone-300 w-4 text-right font-bold mt-0.5 shrink-0">{i + 1}</span>
+                      <span className={`mt-0.5 shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs leading-snug ${it.status === 'done' ? 'line-through text-stone-400' : it.status === 'incomplete' ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-stone-700 dark:text-stone-300'}`}>
+                          {it.text}
+                        </p>
+                        {it.status === 'incomplete' && it.note && (
+                          <p className="text-[10px] text-stone-400 mt-0.5">미완료 사유: {it.note}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-14 text-center">
+            <p className="text-sm text-stone-400">이 날 제출된 보고가 없습니다</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const toast = useToast();
   const isAdmin = currentUser.role === 'admin';
@@ -497,7 +581,19 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     { title: '', status: 'planned' }, { title: '', status: 'planned' },
   ]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'my' | 'weekly' | 'feed' | 'team'>('my');
+  const [tab, setTab] = useState<'my' | 'weekly' | 'feed' | 'team' | 'week'>('my');
+  const [weekViewStart, setWeekViewStart] = useState(() => {
+    const d = new Date(); const day = d.getDay();
+    const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    mon.setHours(0, 0, 0, 0);
+    return toYMD(mon);
+  });
+  const [weekReports, setWeekReports] = useState<DailyReport[]>([]);
+  const [loadingWeek, setLoadingWeek] = useState(false);
+  const [dayPopup, setDayPopup] = useState<{
+    date: string; emp: Employee;
+    morning: DailyReport | null; evening: DailyReport | null;
+  } | null>(null);
   const [isEditingMorning, setIsEditingMorning] = useState(false);
   const [isEditingEvening, setIsEditingEvening] = useState(false);
   const [pendingTaskTitles, setPendingTaskTitles] = useState<string[]>([]);
@@ -595,6 +691,21 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   }, [date, currentUser.uid]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    if (tab !== 'week') return;
+    setLoadingWeek(true);
+    const endDate = new Date(weekViewStart + 'T00:00:00');
+    endDate.setDate(endDate.getDate() + 6);
+    const weekEnd = toYMD(endDate);
+    getDocs(query(
+      collection(salesDb, 'daily_reports'),
+      where('date', '>=', weekViewStart),
+      where('date', '<=', weekEnd),
+    )).then(snap => {
+      setWeekReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
+    }).catch(console.error).finally(() => setLoadingWeek(false));
+  }, [tab, weekViewStart]);
 
   /* 출근 보고 제출 / 수정 */
   const submitMorning = async (submitted: MorningItem[]) => {
@@ -773,8 +884,9 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           { key: 'my',     label: '내 보고' },
           { key: 'team',   label: '팀 보고' },
           { key: 'weekly', label: '주간 보고' },
+          { key: 'week',   label: '주간 현황' },
           ...(isAdmin ? [{ key: 'feed', label: '팀 피드' }] : []),
-        ] as { key: 'my' | 'weekly' | 'feed' | 'team'; label: string }[]).map(({ key, label }) => (
+        ] as { key: 'my' | 'weekly' | 'feed' | 'team' | 'week'; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-stone-100' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
             {label}
@@ -1077,6 +1189,157 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             </>
           )}
         </div>
+      ) : tab === 'week' ? (
+        /* ── 주간 현황 탭 ── */
+        <div>
+          {/* 주간 네비게이션 */}
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => { const d = new Date(weekViewStart + 'T00:00:00'); d.setDate(d.getDate() - 7); setWeekViewStart(toYMD(d)); }}
+              className="p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg">◀</button>
+            <div className="text-center">
+              <p className="text-sm font-black text-stone-900 dark:text-white">
+                {(() => {
+                  const s = new Date(weekViewStart + 'T00:00:00');
+                  const e = new Date(weekViewStart + 'T00:00:00'); e.setDate(e.getDate() + 6);
+                  return `${s.getMonth() + 1}월 ${s.getDate()}일 (월) ~ ${e.getMonth() + 1}월 ${e.getDate()}일 (일)`;
+                })()}
+              </p>
+              <button
+                onClick={() => { const d = new Date(); const day = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); setWeekViewStart(toYMD(mon)); }}
+                className="text-[10px] text-blue-500 hover:underline mt-0.5">이번 주</button>
+            </div>
+            <button
+              onClick={() => { const d = new Date(weekViewStart + 'T00:00:00'); d.setDate(d.getDate() + 7); setWeekViewStart(toYMD(d)); }}
+              className="p-1.5 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg">▶</button>
+          </div>
+
+          {loadingWeek ? (
+            <div className="text-center py-20 text-stone-400 text-sm">불러오는 중...</div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-700">
+              {(() => {
+                const DAY_KR = ['일', '월', '화', '수', '목', '금', '토'];
+                const weekDays = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(weekViewStart + 'T00:00:00');
+                  d.setDate(d.getDate() + i);
+                  return toYMD(d);
+                });
+                const todayStr = today();
+                return (
+                  <table className="w-full border-collapse" style={{ minWidth: '860px' }}>
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-10 bg-stone-50 dark:bg-stone-800 px-3 py-2.5 text-left text-[10px] font-black text-stone-500 uppercase tracking-wider border-b border-r border-stone-200 dark:border-stone-700 w-24">
+                          직원
+                        </th>
+                        {weekDays.map((day, i) => {
+                          const d = new Date(day + 'T00:00:00');
+                          const isToday = day === todayStr;
+                          const isWeekend = i >= 5;
+                          return (
+                            <th key={day} className={`px-2 py-2 text-center border-b border-r last:border-r-0 border-stone-200 dark:border-stone-700 ${isToday ? 'bg-blue-50 dark:bg-blue-900/20' : isWeekend ? 'bg-stone-50/80 dark:bg-stone-800/40' : 'bg-stone-50 dark:bg-stone-800/20'}`}>
+                              <p className={`text-[11px] font-black ${isToday ? 'text-blue-600 dark:text-blue-400' : isWeekend ? 'text-stone-400' : 'text-stone-600 dark:text-stone-400'}`}>
+                                {DAY_KR[d.getDay()]}
+                              </p>
+                              <p className={`text-[10px] ${isToday ? 'text-blue-500 font-bold' : 'text-stone-400'}`}>
+                                {d.getMonth() + 1}/{d.getDate()}
+                              </p>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+                      {employees.length === 0 ? (
+                        <tr><td colSpan={8} className="text-center py-12 text-sm text-stone-400">직원이 없습니다</td></tr>
+                      ) : employees.map((emp, ri) => (
+                        <tr key={emp.id} className={ri % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-50/40 dark:bg-stone-800/20'}>
+                          {/* 직원명 고정 */}
+                          <td className={`sticky left-0 z-10 px-3 py-2.5 border-r border-stone-200 dark:border-stone-700 ${ri % 2 === 0 ? 'bg-white dark:bg-stone-900' : 'bg-stone-50 dark:bg-stone-800/40'}`}>
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-6 h-6 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-[9px] font-black text-stone-600 dark:text-stone-300 shrink-0">
+                                {emp.name[0]}
+                              </div>
+                              <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 truncate max-w-[60px]">{emp.name}</span>
+                            </div>
+                          </td>
+                          {/* 요일별 셀 */}
+                          {weekDays.map((day, ci) => {
+                            const morning = weekReports.find(r => r.employeeId === emp.id && r.date === day && r.type === 'morning') ?? null;
+                            const evening = weekReports.find(r => r.employeeId === emp.id && r.date === day && r.type === 'evening') ?? null;
+                            const displayReport = evening ?? morning;
+                            const isToday = day === todayStr;
+                            const isWeekend = ci >= 5;
+                            const hasReport = !!(morning || evening);
+                            return (
+                              <td
+                                key={day}
+                                onClick={() => hasReport && setDayPopup({ date: day, emp, morning, evening })}
+                                className={`px-2 py-2 align-top border-r last:border-r-0 border-stone-100 dark:border-stone-800 min-w-[110px] ${hasReport ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors' : ''} ${isToday && !isWeekend ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''} ${isWeekend ? 'bg-stone-50/50 dark:bg-stone-800/10' : ''}`}
+                              >
+                                {displayReport ? (
+                                  <div className="space-y-0.5 min-h-[56px]">
+                                    <div className="flex gap-1 mb-1">
+                                      {morning && <span className="text-[8px] font-bold text-amber-500">☀</span>}
+                                      {evening && <span className="text-[8px] font-bold text-indigo-500">🌙</span>}
+                                    </div>
+                                    {displayReport.items.slice(0, 4).map((it, idx) => {
+                                      const dot = it.status === 'done' ? '✓' : it.status === 'incomplete' ? '✗' : '●';
+                                      const dotCls = it.status === 'done' ? 'text-emerald-500' : it.status === 'incomplete' ? 'text-red-500' : 'text-amber-500';
+                                      return (
+                                        <div key={idx} className="flex items-start gap-1">
+                                          <span className={`text-[9px] font-bold shrink-0 mt-px ${dotCls}`}>{dot}</span>
+                                          <span className={`text-[10px] leading-tight break-words ${it.status === 'done' ? 'line-through text-stone-400' : it.status === 'incomplete' ? 'text-red-500 dark:text-red-400' : 'text-stone-700 dark:text-stone-300'}`}>
+                                            {it.text}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                    {displayReport.items.length > 4 && (
+                                      <p className="text-[9px] text-stone-400 pl-3">+{displayReport.items.length - 4}개 더</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="min-h-[56px] flex items-center justify-center">
+                                    <span className="text-[11px] text-stone-200 dark:text-stone-700 select-none">—</span>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* 범례 */}
+          <div className="flex gap-4 mt-3 flex-wrap">
+            {[['text-emerald-500', '✓', '완료'], ['text-amber-500', '●', '진행중'], ['text-red-500', '✗', '미완료']].map(([cls, dot, label]) => (
+              <div key={label} className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+                <span className={`font-bold ${cls}`}>{dot}</span> {label}
+              </div>
+            ))}
+            <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400"><span className="font-bold text-amber-500">☀</span> 출근보고</div>
+            <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400"><span className="font-bold text-indigo-500">🌙</span> 퇴근보고</div>
+          </div>
+
+          {/* 날짜 상세 팝업 */}
+          {dayPopup && (
+            <DayDetailPopup
+              date={dayPopup.date}
+              emp={dayPopup.emp}
+              morning={dayPopup.morning}
+              evening={dayPopup.evening}
+              onClose={() => setDayPopup(null)}
+            />
+          )}
+        </div>
+
       ) : (
         /* ── 팀 보고 탭 (전직원) ── */
         <div className="space-y-3">
