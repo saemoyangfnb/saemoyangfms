@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-06-11 (5) — Claude Code
+
+### 완료 — 업무 지도 (WorkMapView) 완전 재구성
+
+- `types.ts`: `Task`에 `projectId?: string` 추가 + `WorkProject` 인터페이스 신규 추가
+- `WorkMapView.tsx` 완전 재구성: 좌측 프로젝트 사이드바 + 우측 3탭 구조
+  - **좌측 사이드바**: 프로젝트 목록 (활성/보관함 탭, +신규, 호버 수정/보관/삭제)
+  - **목록 탭**: 담당자별 그룹, 검색/상태/담당자 필터
+  - **캘린더 탭**: 월간 그리드 — 업무보고(아침☀/저녁🌙) + 업무 마감일 칩
+  - **타임라인 탭**: 기존 Gantt 차트 (유지)
+- `firestore.rules`: `task_projects` 컬렉션 규칙 추가 (`isApprovedUser`)
+- **⚠️ Firestore rules 배포 필요**: `npx firebase deploy --only firestore:rules`
+
+---
+
 ## 2026-06-11 (4) — Claude Code
 
 ### 완료 — 매장 폼 관리 (StoreMindmapView) 신규 구현

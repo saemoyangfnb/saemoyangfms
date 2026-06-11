@@ -620,8 +620,23 @@ export interface Task {
   status: TaskStatus;
   rejectionNote?: string;       // 반려 사유
   addedToDailyDate?: string;    // 일일 보고에 추가된 날짜
+  projectId?: string;            // WorkProject ID (task_projects)
   createdAt: string;
   updatedAt: string;
+}
+
+// ==========================================
+// 업무지도 프로젝트 (salesDb: task_projects)
+// ==========================================
+export interface WorkProject {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  isArchived?: boolean;
 }
 
 // ==========================================

@@ -112,6 +112,11 @@ service cloud.firestore {
       allow read, write: if isApprovedUser() || isAdmin();
     }
 
+    // 업무지도 프로젝트: 승인된 재직 직원만
+    match /task_projects/{docId} {
+      allow read, write: if isApprovedUser() || isAdmin();
+    }
+
     // ── salesDb 일반 운영 컬렉션 (isAuthenticated 적용) ────────────
 
     // 회의 템플릿: 읽기 = 인증, 쓰기 = 관리자
