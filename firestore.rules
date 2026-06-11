@@ -147,6 +147,7 @@ service cloud.firestore {
     }
     match /project_folders/{docId}     { allow read, write: if isAuthenticated(); }
     match /project_items/{docId}       { allow read, write: if isAuthenticated(); }
+    match /project_mindmaps/{docId}    { allow read, write: if isAuthenticated(); }
     match /reports/{docId}             { allow read, write: if isAuthenticated(); }
 
     // 보고서/SOP: 읽기 = 인증, 쓰기 = 관리자
@@ -173,6 +174,7 @@ service cloud.firestore {
     // 제조실
     match /factory_items/{docId}       { allow read, write: if isAuthenticated(); }
     match /factory_daily/{docId}       { allow read, write: if isAuthenticated(); }
+    match /factory_settings/{docId}    { allow read, write: if isAuthenticated(); }
 
     // 마케팅
     match /menu_sales/{docId}          { allow read, write: if isAuthenticated(); }
