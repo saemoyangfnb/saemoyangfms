@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-06-12 (4) — Claude Code
+
+### 업무보고 — 회의 실행항목 패널: 최근 5개 회의록 중 선택
+
+- `MeetingRecord` 인터페이스 추가 (id, title, date, actions)
+- `meetingsList`, `selectedMeetingId` 상태 추가
+- `loadMeetingActions`: 최근 10개 flat 목록 → 최근 5개 회의록 단위 로드, 첫 번째 자동 선택
+- `selectMeeting()` 핸들러: 회의록 선택 시 해당 미완료 실행항목으로 `meetingActions` 교체
+- 패널 내 회의록 탭 칩 UI 추가 (가로 스크롤, 선택 강조)
+- 빌드 성공
+
+---
+
 ## 2026-06-12 (3) — Claude Code
 
 ### Firestore undefined 버그 수정 + TypeScript 타입 에러 전수 해소

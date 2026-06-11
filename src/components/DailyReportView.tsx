@@ -65,6 +65,7 @@ const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactN
 /* ── 미니 진행률 피커 ───────────────────────────────────── */
 type MorningItem = { text: string; progress: number; memo?: string };
 interface MeetingActionSource { id: string; text: string; meetingTitle: string; meetingDate: string; assignee?: string; }
+interface MeetingRecord { id: string; title: string; date: string; actions: MeetingActionSource[]; }
 
 function MiniProgressPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hov, setHov] = useState<number | null>(null);
@@ -675,6 +676,8 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const [draggingTask, setDraggingTask] = useState<Task | null>(null);
   const [draggingMeetingItem, setDraggingMeetingItem] = useState<MeetingActionSource | null>(null);
   const [meetingActions, setMeetingActions] = useState<MeetingActionSource[]>([]);
+  const [meetingsList, setMeetingsList] = useState<MeetingRecord[]>([]);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [showMeetingPanel, setShowMeetingPanel] = useState(false);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -925,24 +928,34 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     setMyTasks(prev => prev.filter(t => t.id !== task.id)); // 인박스에서 즉시 제거
   };
 
-  /* 회의 실행항목 로드 */
+  /* 회의 실행항목 로드 — 최근 5개 회의록 */
   const loadMeetingActions = useCallback(async () => {
     if (loadingMeetings) return;
     setLoadingMeetings(true);
     try {
       const snap = await getDocs(query(collection(salesDb, 'meetings'), orderBy('date', 'desc')));
-      const items: MeetingActionSource[] = [];
-      snap.docs.slice(0, 10).forEach(d => {
+      const records: MeetingRecord[] = snap.docs.slice(0, 5).map(d => {
         const m = d.data() as { title?: string; date?: string; actionItems?: Array<{ id: string; text: string; assignee?: string; done?: boolean }> };
-        (m.actionItems ?? []).filter(a => !a.done).forEach(a => {
-          items.push({ id: `${d.id}_${a.id}`, text: a.text, meetingTitle: m.title ?? '회의', meetingDate: m.date ?? '', assignee: a.assignee });
-        });
+        const actions: MeetingActionSource[] = (m.actionItems ?? []).filter(a => !a.done).map(a => ({
+          id: `${d.id}_${a.id}`, text: a.text, meetingTitle: m.title ?? '회의', meetingDate: m.date ?? '', assignee: a.assignee,
+        }));
+        return { id: d.id, title: m.title ?? '회의', date: m.date ?? '', actions };
       });
-      setMeetingActions(items);
+      setMeetingsList(records);
+      if (records.length > 0) {
+        setSelectedMeetingId(records[0].id);
+        setMeetingActions(records[0].actions);
+      }
     } finally {
       setLoadingMeetings(false);
     }
   }, [loadingMeetings]);
+
+  const selectMeeting = (id: string) => {
+    setSelectedMeetingId(id);
+    const record = meetingsList.find(m => m.id === id);
+    setMeetingActions(record?.actions ?? []);
+  };
 
   /* 회의 실행항목 → 오전 보고 폼에 추가 */
   const addMeetingItemToMorning = (item: MeetingActionSource) => {
@@ -1367,17 +1380,40 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                     </button>
                     {showMeetingPanel && (
                       <div className="border-t border-stone-100 dark:border-stone-800">
-                        <p className="px-4 py-2 text-[10px] text-stone-400">드래그하거나 + 버튼으로 보고서에 추가</p>
                         {loadingMeetings ? (
                           <div className="px-4 py-6 text-center text-xs text-stone-400">불러오는 중...</div>
-                        ) : meetingActions.length === 0 ? (
-                          <div className="px-4 py-6 text-center text-xs text-stone-400">미완료 실행항목이 없습니다</div>
+                        ) : meetingsList.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-xs text-stone-400">등록된 회의록이 없습니다</div>
                         ) : (
-                          <div className="divide-y divide-stone-100 dark:divide-stone-800">
-                            {meetingActions.map(item => (
-                              <DraggableMeetingItem key={item.id} item={item} onAdd={addMeetingItemToMorning} />
-                            ))}
-                          </div>
+                          <>
+                            {/* 회의록 선택 탭 */}
+                            <div className="flex gap-1.5 overflow-x-auto px-3 py-2.5 border-b border-stone-100 dark:border-stone-800 scrollbar-none">
+                              {meetingsList.map(m => (
+                                <button
+                                  key={m.id}
+                                  onClick={() => selectMeeting(m.id)}
+                                  className={`shrink-0 px-2.5 py-1.5 rounded-lg text-left transition-colors ${
+                                    selectedMeetingId === m.id
+                                      ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900'
+                                      : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                                  }`}
+                                >
+                                  <span className="block text-[10px] font-bold max-w-[90px] truncate">{m.title}</span>
+                                  <span className="block text-[9px] opacity-60 mt-0.5">{m.date}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <p className="px-4 py-1.5 text-[10px] text-stone-400">드래그하거나 + 버튼으로 보고서에 추가</p>
+                            {meetingActions.length === 0 ? (
+                              <div className="px-4 py-5 text-center text-xs text-stone-400">이 회의록에 미완료 실행항목이 없습니다</div>
+                            ) : (
+                              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                                {meetingActions.map(item => (
+                                  <DraggableMeetingItem key={item.id} item={item} onAdd={addMeetingItemToMorning} />
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
