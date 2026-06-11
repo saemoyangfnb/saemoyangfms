@@ -824,7 +824,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const submitMorning = async (submitted: MorningItem[]) => {
     try {
       const newItems: DailyReportItem[] = submitted.map(it => ({
-        text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress, memo: it.memo || undefined,
+        text: it.text,
+        status: 'pending' as DailyItemStatus,
+        progress: it.progress ?? 0,
+        ...(it.memo ? { memo: it.memo } : {}),
       }));
       if (isEditingMorning && myMorning) {
         await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
