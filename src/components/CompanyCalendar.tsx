@@ -382,13 +382,6 @@ export function CompanyCalendar({ currentUser }: Props) {
   const franchiseEvents = useMemo<CalendarEvent[]>(() => {
     const fEvents: CalendarEvent[] = [];
     rawSchedules.forEach(s => {
-      const add = (prefix: string, title: string, start?: string, end?: string) => {
-        if (!start) return;
-        fEvents.push({ id: `${prefix}_${s.id}`, type: 'franchise', title, startDate: start, endDate: end || start, allDay: true, visibility: 'all', createdAt: '', updatedAt: '' });
-      };
-      // 앵커 마일스톤 (직접 필드)
-      add('fop', `🏪 ${s.storeName}`, s.openDate);
-
       const workItems = processSettingsMap[s.brandId] || [];
       const taskItems = workItems.filter(wt => wt.category === 'task' && wt.calendarVisible !== false);
       if (workItems.length > 0 && taskItems.length > 0) {
