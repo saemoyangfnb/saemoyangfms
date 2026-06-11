@@ -6,9 +6,11 @@ import {
 } from 'firebase/firestore';
 import {
   Task, Employee, User, TaskStatus, TaskSourceType, Project, DailyReport,
+  Report, ProjectFolder,
 } from '../types';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
+import { ProjectDetail } from './ProjectsView';
 import {
   Plus, X, Edit2, ChevronDown, ChevronRight, Search,
   LayoutList, BarChart2, BookOpen, Calendar, Briefcase,
@@ -764,7 +766,10 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectListTab, setProjectListTab] = useState<'active' | 'done'>('active');
-  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'timeline'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'timeline' | 'detail'>('list');
+  const [projectDocs, setProjectDocs] = useState<Report[]>([]);
+  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [calMonth, setCalMonth] = useState(() => new Date());
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | TrackStatus>('all');
@@ -785,7 +790,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
         getDocs(query(collection(salesDb, 'employees'), orderBy('name'))),
         getDocs(query(collection(db, 'meetings'), orderBy('date', 'desc'))),
       ]);
-      setProjects(projectSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkProject)));
+      setProjects(projectSnap.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
       const loadedTasks = taskSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as Task))
         .filter(t => t.status !== 'rejected')
@@ -826,6 +831,19 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
       setMonthReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport)));
     }).catch(console.error).finally(() => setLoadingReports(false));
   }, [activeTab, calMonth]);
+
+  // 상세 탭 — docs + folders 로드
+  useEffect(() => {
+    if (activeTab !== 'detail' || !selectedProjectId) return;
+    setLoadingDetail(true);
+    Promise.all([
+      getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', selectedProjectId))),
+      getDocs(query(collection(salesDb, 'project_folders'), orderBy('order'))),
+    ]).then(([docSnap, folderSnap]) => {
+      setProjectDocs(docSnap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      setProjectFolders(folderSnap.docs.map(d => ({ id: d.id, ...d.data() } as ProjectFolder)));
+    }).catch(console.error).finally(() => setLoadingDetail(false));
+  }, [activeTab, selectedProjectId]);
 
   // ── 업무 CRUD ─────────────────────────────────────────────
   const handleSaveTask = async (data: Partial<Task>) => {
@@ -979,7 +997,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
           {/* 전체 업무 (활성 탭에서만) */}
           {projectListTab === 'active' && (
             <button
-              onClick={() => setSelectedProjectId(null)}
+              onClick={() => { setSelectedProjectId(null); if (activeTab === 'detail') setActiveTab('list'); }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${selectedProjectId === null ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500 text-blue-700 dark:text-blue-400' : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border-l-2 border-transparent'}`}>
               <Users size={13} className="shrink-0" />
               <span className="flex-1 text-xs font-bold truncate">전체 업무</span>
@@ -1062,10 +1080,11 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
         {/* 탭 버튼 */}
         <div className="flex border-b border-stone-200 dark:border-stone-700 px-4 shrink-0">
           {([
-            { key: 'list' as const,     label: '목록',     icon: LayoutList },
-            { key: 'calendar' as const, label: '캘린더',   icon: Calendar },
-            { key: 'timeline' as const, label: '타임라인', icon: BarChart2 },
-          ]).map(({ key, label, icon: Icon }) => (
+            { key: 'list' as const,     label: '목록',     icon: LayoutList,  alwaysShow: true },
+            { key: 'calendar' as const, label: '캘린더',   icon: Calendar,    alwaysShow: true },
+            { key: 'timeline' as const, label: '타임라인', icon: BarChart2,   alwaysShow: true },
+            { key: 'detail' as const,   label: '칸반·맵',  icon: BookOpen,    alwaysShow: false },
+          ]).filter(t => t.alwaysShow || selectedProjectId !== null).map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setActiveTab(key)}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-colors ${activeTab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
               <Icon size={12} /> {label}
@@ -1195,6 +1214,41 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
               />
             </div>
           )}
+
+          {/* ── 칸반·맵 탭 (프로젝트 선택 시) ── */}
+          {activeTab === 'detail' && selectedProjectId && (() => {
+            const proj = projects.find(p => p.id === selectedProjectId);
+            if (!proj) return null;
+            if (loadingDetail) return (
+              <div className="flex items-center justify-center py-32">
+                <div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" />
+              </div>
+            );
+            return (
+              <ProjectDetail
+                project={proj}
+                docs={projectDocs}
+                employees={employees}
+                folders={projectFolders}
+                currentUser={currentUser}
+                onBack={() => setActiveTab('list')}
+                onUpdateProject={updated => setProjects(prev => prev.map(p => p.id === updated.id ? updated : p))}
+                onDeleteProject={id => { setProjects(prev => prev.filter(p => p.id !== id)); setSelectedProjectId(null); setActiveTab('list'); }}
+                onDocsChange={() => {
+                  getDocs(query(collection(salesDb, 'reports'), where('projectId', '==', selectedProjectId)))
+                    .then(snap => setProjectDocs(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))))
+                    .catch(console.error);
+                }}
+                onProgressChange={v => {
+                  const p = projects.find(x => x.id === selectedProjectId);
+                  if (!p) return;
+                  const updated = { ...p, progress: v };
+                  setProjects(prev => prev.map(x => x.id === selectedProjectId ? updated : x));
+                  updateDoc(doc(salesDb, 'projects', selectedProjectId), { progress: v, updatedAt: nowTs() }).catch(console.error);
+                }}
+              />
+            );
+          })()}
 
         </div>
       </div>

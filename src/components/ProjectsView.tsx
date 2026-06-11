@@ -1901,7 +1901,7 @@ function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }:
 }
 
 // ── 프로젝트 상세 ─────────────────────────────────────────
-function ProjectDetail({
+export function ProjectDetail({
   project, docs, employees, folders, currentUser, onBack,
   onUpdateProject, onDeleteProject, onDocsChange, onProgressChange,
 }: {
