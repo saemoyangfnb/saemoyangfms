@@ -8,7 +8,8 @@ import { DailyReport, DailyReportItem, DailyItemStatus, Employee, User, Departme
 import { useToast } from './Toast';
 import { FeedView } from './FeedView';
 import { shareDailyReport, shareWeeklyReport } from '../utils/kakao';
-import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText } from 'lucide-react';
+import { Plus, X, CheckCircle, XCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Send, Briefcase, AtSign, ArrowRight, BarChart3, Store, CalendarDays, Rss, FileText, GripVertical } from 'lucide-react';
+import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { AtMentionInput, saveMentions } from './ui/AtMentionInput';
 
 /* ── 상수 ─────────────────────────────────────────────── */
@@ -562,9 +563,76 @@ function DayDetailPopup({ date, emp, morning, evening, onClose }: {
   );
 }
 
+/* ── 드래그 가능한 업무 카드 ──────────────────────────── */
+function DraggableTaskCard({ task, onAdd, onReject, isToday, rejectLabel }: {
+  task: Task;
+  onAdd: (t: Task) => void;
+  onReject: (t: Task) => void;
+  isToday: boolean;
+  rejectLabel: string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: 'task-' + task.id });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` }
+    : undefined;
+  return (
+    <div ref={setNodeRef} style={style} className={`px-4 py-3 transition-opacity ${isDragging ? 'opacity-30' : ''}`}>
+      <div className="flex items-center gap-3">
+        {/* 그립 핸들 */}
+        <div {...attributes} {...listeners}
+          className="cursor-grab active:cursor-grabbing text-stone-300 hover:text-stone-500 shrink-0 touch-none select-none">
+          <GripVertical size={14} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{task.title}</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {task.sourceAgendaTitle && (
+              <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                <Briefcase size={9} /> 회의 안건
+              </span>
+            )}
+            {task.requesterName && task.requesterName !== task.assigneeName && (
+              <span className="text-[10px] text-stone-400">from {task.requesterName}</span>
+            )}
+            {(task.collaboratorNames ?? []).length > 0 && (
+              <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
+                <AtSign size={9} /> {task.collaboratorNames!.join(', ')}
+              </span>
+            )}
+            {task.dueDate && <span className="text-[10px] text-red-400">~{task.dueDate}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => onAdd(task)} disabled={!isToday}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30">
+            <ArrowRight size={10} /> 추가
+          </button>
+          <button onClick={() => onReject(task)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40">
+            <X size={10} /> {rejectLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── MorningForm 드롭 존 래퍼 ────────────────────────── */
+function DroppableMorningZone({ children, active }: { children: React.ReactNode; active: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'morning-form' });
+  return (
+    <div ref={setNodeRef}
+      className={`rounded-2xl transition-all duration-150 ${active && isOver ? 'ring-2 ring-blue-400 ring-offset-2 dark:ring-offset-stone-950 scale-[1.005]' : ''}`}>
+      {children}
+    </div>
+  );
+}
+
 export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const toast = useToast();
   const isAdmin = currentUser.role === 'admin';
+  const [draggingTask, setDraggingTask] = useState<Task | null>(null);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const [date, setDate] = useState(today());
   const [myEmployee, setMyEmployee] = useState<Employee | null>(null);
@@ -1069,125 +1137,130 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             </div>
           )}
 
-          {/* 업무 인박스 */}
-          {myTasks.length > 0 && (
-            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
-                <Briefcase size={13} className="text-stone-600 dark:text-stone-400" />
-                <span className="text-xs font-black text-stone-800 dark:text-stone-200">받은 업무 요청</span>
-                <span className="ml-auto text-[11px] font-bold text-stone-400">{myTasks.length}건 대기 중</span>
+          {/* ── DnD 컨텍스트: 업무 인박스 → 출근 보고 폼 드래그 ── */}
+          <DndContext
+            sensors={dndSensors}
+            onDragStart={({ active }) => {
+              const id = (active.id as string).replace(/^task-/, '');
+              setDraggingTask(myTasks.find(t => t.id === id) ?? null);
+            }}
+            onDragEnd={({ active, over }) => {
+              if ((active.id as string).startsWith('task-') && over?.id === 'morning-form') {
+                const id = (active.id as string).replace(/^task-/, '');
+                const task = myTasks.find(t => t.id === id);
+                if (task) addTaskToMorning(task);
+              }
+              setDraggingTask(null);
+            }}
+            onDragCancel={() => setDraggingTask(null)}
+          >
+            {/* 업무 인박스 */}
+            {myTasks.length > 0 && (
+              <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 dark:border-stone-800">
+                  <Briefcase size={13} className="text-stone-600 dark:text-stone-400" />
+                  <span className="text-xs font-black text-stone-800 dark:text-stone-200">받은 업무 요청</span>
+                  <span className="ml-auto text-[10px] text-stone-400 font-medium">보고서로 드래그하거나 추가 버튼을 누르세요</span>
+                  <span className="text-[11px] font-bold text-stone-400">{myTasks.length}건</span>
+                </div>
+                <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                  {myTasks.map(task => (
+                    <DraggableTaskCard
+                      key={task.id}
+                      task={task}
+                      onAdd={addTaskToMorning}
+                      onReject={t => rejectTask(t, '')}
+                      isToday={isToday}
+                      rejectLabel={task.requesterName && task.requesterName !== task.assigneeName ? '반려' : '취소'}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="divide-y divide-stone-100 dark:divide-stone-800">
-                {myTasks.map(task => (
-                  <div key={task.id} className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{task.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {task.sourceAgendaTitle && (
-                            <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
-                              <Briefcase size={9} /> 회의 안건
-                            </span>
-                          )}
-                          {task.requesterName && task.requesterName !== task.assigneeName && (
-                            <span className="text-[10px] text-stone-400">from {task.requesterName}</span>
-                          )}
-                          {(task.collaboratorNames ?? []).length > 0 && (
-                            <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
-                              <AtSign size={9} /> {task.collaboratorNames!.join(', ')}
-                            </span>
-                          )}
-                          {task.dueDate && (
-                            <span className="text-[10px] text-red-400">~{task.dueDate}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => addTaskToMorning(task)}
-                          disabled={!isToday}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-lg hover:opacity-80 disabled:opacity-30"
-                        >
-                          <ArrowRight size={10} /> 추가
-                        </button>
-                        <button
-                          onClick={() => rejectTask(task, '')}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40"
-                        >
-                          <X size={10} /> {task.requesterName && task.requesterName !== task.assigneeName ? '반려' : '취소'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            )}
+
+            {!myEmployee && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">직원 명부에 계정이 연결되어 있지 않습니다. 관리자에게 문의하세요.</p>
+                <p className="text-[11px] text-amber-500 mt-0.5">연결 없이도 보고는 가능하지만 팀 현황에 표시되지 않습니다.</p>
               </div>
-            </div>
-          )}
+            )}
 
-          {!myEmployee && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-              <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">직원 명부에 계정이 연결되어 있지 않습니다. 관리자에게 문의하세요.</p>
-              <p className="text-[11px] text-amber-500 mt-0.5">연결 없이도 보고는 가능하지만 팀 현황에 표시되지 않습니다.</p>
-            </div>
-          )}
-
-          {/* 오전 보고 */}
-          {(!myMorning || isEditingMorning) ? (
-            isToday ? (
-              <MorningForm
-                key={isEditingMorning ? 'edit' : 'new'}
-                onSubmit={submitMorning}
-                myId={myId}
-                editItems={isEditingMorning ? myMorning?.items : undefined}
-                pendingTaskTitles={pendingTaskTitles}
-              />
-            ) : (
-              <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
-            )
-          ) : (
-            <>
-              <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
-                onShare={() => shareDailyReport({
-                  name: currentUser.name, date, type: 'morning',
-                  items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
-                  onSuccess: toast.success, onError: toast.error,
-                })} />
-              {/* 퇴근 보고 */}
-              {(!myEvening || isEditingEvening) ? (
-                isToday ? (
-                  <EveningForm
-                    key={isEditingEvening ? 'edit' : 'new'}
-                    morning={myMorning}
-                    editItems={isEditingEvening ? myEvening?.items : undefined}
-                    onSubmit={submitEvening}
+            {/* 오전 보고 */}
+            {(!myMorning || isEditingMorning) ? (
+              isToday ? (
+                <DroppableMorningZone active={draggingTask !== null}>
+                  <MorningForm
+                    key={isEditingMorning ? 'edit' : 'new'}
+                    onSubmit={submitMorning}
+                    myId={myId}
+                    editItems={isEditingMorning ? myMorning?.items : undefined}
+                    pendingTaskTitles={pendingTaskTitles}
                   />
-                ) : (
-                  <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
-                )
+                </DroppableMorningZone>
               ) : (
-                <ReportCard
-                  report={myEvening}
-                  morningReport={myMorning}
-                  onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined}
-                  isAdmin={isAdmin}
-                  onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined}
-                  onCreateReport={onNavigateToReports}
+                <div className="text-center py-10 text-stone-400 text-sm">이 날의 보고가 없습니다</div>
+              )
+            ) : (
+              <>
+                <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
                   onShare={() => shareDailyReport({
-                    name: currentUser.name, date, type: 'evening',
-                    items: myEvening.items.map((it, idx) => {
-                      const mp = myMorning?.items[idx]?.progress ?? 0;
-                      const ep = it.progress ?? 0;
-                      const delta = ep - mp;
-                      const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
-                      if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
-                      return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
-                    }),
+                    name: currentUser.name, date, type: 'morning',
+                    items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
                     onSuccess: toast.success, onError: toast.error,
-                  })}
-                />
+                  })} />
+                {/* 퇴근 보고 */}
+                {(!myEvening || isEditingEvening) ? (
+                  isToday ? (
+                    <EveningForm
+                      key={isEditingEvening ? 'edit' : 'new'}
+                      morning={myMorning}
+                      editItems={isEditingEvening ? myEvening?.items : undefined}
+                      onSubmit={submitEvening}
+                    />
+                  ) : (
+                    <div className="bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-300 dark:border-stone-600 rounded-xl px-4 py-4 text-center text-xs text-stone-400">퇴근 보고 없음</div>
+                  )
+                ) : (
+                  <ReportCard
+                    report={myEvening}
+                    morningReport={myMorning}
+                    onEdit={isToday && !myEvening.confirmedAt ? () => setIsEditingEvening(true) : undefined}
+                    isAdmin={isAdmin}
+                    onConfirm={isAdmin ? () => confirmReport(myEvening) : undefined}
+                    onCreateReport={onNavigateToReports}
+                    onShare={() => shareDailyReport({
+                      name: currentUser.name, date, type: 'evening',
+                      items: myEvening.items.map((it, idx) => {
+                        const mp = myMorning?.items[idx]?.progress ?? 0;
+                        const ep = it.progress ?? 0;
+                        const delta = ep - mp;
+                        const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
+                        if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
+                        return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+                      }),
+                      onSuccess: toast.success, onError: toast.error,
+                    })}
+                  />
+                )}
+              </>
+            )}
+
+            {/* 드래그 오버레이 — 드래그 중인 업무 카드 미리보기 */}
+            <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+              {draggingTask && (
+                <div className="bg-white dark:bg-stone-900 border-2 border-blue-400 rounded-xl shadow-2xl px-4 py-3 max-w-xs rotate-1 opacity-95">
+                  <div className="flex items-center gap-2">
+                    <GripVertical size={13} className="text-blue-400 shrink-0" />
+                    <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{draggingTask.title}</p>
+                  </div>
+                  {draggingTask.dueDate && (
+                    <p className="text-[10px] text-red-400 mt-1 pl-5">~{draggingTask.dueDate}</p>
+                  )}
+                  <p className="text-[10px] text-blue-500 font-bold mt-1 pl-5">→ 보고서에 추가</p>
+                </div>
               )}
-            </>
-          )}
+            </DragOverlay>
+          </DndContext>
         </div>
       ) : tab === 'week' ? (
         /* ── 주간 현황 탭 ── */
