@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { salesDb } from '../firebase';
 import {
-  collection, getDocs, addDoc, updateDoc, deleteDoc,
+  collection, getDocs, deleteDoc,
   doc, setDoc, query, where,
 } from 'firebase/firestore';
 import { Store, User, StoreForm, StoreFormField, StoreFormEntry } from '../types';
@@ -9,8 +9,8 @@ import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
   Plus, X, Search, ChevronDown, ChevronRight, Edit2, Trash2,
-  Check, GitBranch, LayoutList, ClipboardList, Clock, Copy,
-  MoreHorizontal,
+  Check, GitBranch, LayoutList, ClipboardList, Copy,
+  Printer, Archive, RotateCcw, History, Clock,
 } from 'lucide-react';
 
 const genId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -22,9 +22,9 @@ function scrub<T extends object>(obj: T): T {
 }
 
 // ── 폼 에디터 모달 ────────────────────────────────────────
-function FormEditorModal({ form, allForms, onSave, onClose, currentUser }: {
+function FormEditorModal({ form, activeForms, onSave, onClose, currentUser }: {
   form: StoreForm | null;
-  allForms: StoreForm[];
+  activeForms: StoreForm[];
   onSave: (f: StoreForm) => Promise<void>;
   onClose: () => void;
   currentUser: User;
@@ -37,14 +37,12 @@ function FormEditorModal({ form, allForms, onSave, onClose, currentUser }: {
   const { toast } = useToast();
 
   const addField = () => setFields(p => [...p, { id: genId('fld'), label: '', type: 'text' }]);
-
   const removeField = (id: string) => setFields(p => p.filter(f => f.id !== id));
-
   const updateField = (id: string, patch: Partial<StoreFormField>) =>
     setFields(p => p.map(f => f.id === id ? { ...f, ...patch } : f));
 
   const loadFromForm = (srcId: string) => {
-    const src = allForms.find(f => f.id === srcId);
+    const src = activeForms.find(f => f.id === srcId);
     if (!src) return;
     setFields(src.fields.map(f => ({ ...f, id: genId('fld') })));
     setLoadSrc('');
@@ -65,7 +63,9 @@ function FormEditorModal({ form, allForms, onSave, onClose, currentUser }: {
         createdBy: form?.createdBy ?? currentUser.name,
         isArchived: form?.isArchived ?? false,
       }));
-      onClose();
+      onClose(); // 저장 성공 시 즉시 닫힘
+    } catch {
+      toast.error('저장 중 오류가 발생했습니다.');
     } finally {
       setSaving(false);
     }
@@ -101,20 +101,19 @@ function FormEditorModal({ form, allForms, onSave, onClose, currentUser }: {
             />
           </div>
 
-          {/* 기존 폼에서 불러오기 */}
-          {allForms.filter(f => f.id !== form?.id).length > 0 && (
+          {activeForms.filter(f => f.id !== form?.id).length > 0 && (
             <div className="bg-stone-50 dark:bg-stone-800 rounded-sm p-2 border border-stone-200 dark:border-stone-700">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mb-1.5">
                 <Copy size={12} className="text-stone-400 shrink-0" />
                 <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400">기존 폼에서 항목 불러오기</span>
               </div>
-              <div className="flex gap-2 mt-1.5">
+              <div className="flex gap-2">
                 <select
                   value={loadSrc} onChange={e => setLoadSrc(e.target.value)}
                   className="flex-1 text-xs px-2 py-1 border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 rounded-sm focus:outline-none"
                 >
                   <option value="">폼 선택...</option>
-                  {allForms.filter(f => f.id !== form?.id).map(f => (
+                  {activeForms.filter(f => f.id !== form?.id).map(f => (
                     <option key={f.id} value={f.id}>{f.title}</option>
                   ))}
                 </select>
@@ -128,7 +127,6 @@ function FormEditorModal({ form, allForms, onSave, onClose, currentUser }: {
             </div>
           )}
 
-          {/* 항목 목록 */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-bold text-stone-500 dark:text-stone-400">입력 항목 *</label>
@@ -200,6 +198,7 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
   const [data, setData] = useState<Record<string, string | boolean>>(entry?.data ?? {});
   const [isDone, setIsDone] = useState(entry?.isDone ?? false);
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   const setValue = (fieldId: string, value: string | boolean) =>
     setData(prev => ({ ...prev, [fieldId]: value }));
@@ -221,6 +220,8 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
         updatedBy: currentUser.name,
       }));
       onClose();
+    } catch {
+      toast.error('저장 중 오류가 발생했습니다.');
     } finally {
       setSaving(false);
     }
@@ -312,6 +313,216 @@ function EntryModal({ store, form, entry, onSave, onClose, currentUser }: {
   );
 }
 
+// ── 매장 이력 모달 ─────────────────────────────────────────
+function StoreHistoryModal({ store, allForms, onClose }: {
+  store: Store;
+  allForms: StoreForm[];
+  onClose: () => void;
+}) {
+  const [entries, setEntries] = useState<StoreFormEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDocs(query(collection(salesDb, 'store_form_entries'), where('storeId', '==', store.id)))
+      .then(snap => {
+        setEntries(
+          snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry))
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        );
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [store.id]);
+
+  const formMap = useMemo(() => {
+    const m = new Map<string, StoreForm>();
+    allForms.forEach(f => m.set(f.id, f));
+    return m;
+  }, [allForms]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#FDFBF7] dark:bg-stone-900 w-full max-w-lg rounded-sm border-[3px] border-double border-stone-800 dark:border-stone-400 flex flex-col max-h-[85vh]">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-200 dark:border-stone-700 shrink-0">
+          <History size={15} className="text-stone-500 dark:text-stone-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-stone-900 dark:text-stone-100 truncate">{store.name} — 폼 이력</p>
+            <p className="text-[10px] text-stone-400">{store.region}</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-24 text-stone-400 text-sm">로딩 중...</div>
+          ) : entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-24 text-stone-400">
+              <History size={24} className="mb-2 opacity-30" />
+              <p className="text-sm">이력이 없습니다.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-stone-100 dark:divide-stone-800">
+              {entries.map(entry => {
+                const form = formMap.get(entry.formId);
+                return (
+                  <div key={entry.id} className="px-4 py-3">
+                    {/* 폼명 + 상태 */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${entry.isDone ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                      <span className="text-xs font-bold text-stone-800 dark:text-stone-200 flex-1 min-w-0 truncate">
+                        {form?.title ?? `폼 ID: ${entry.formId}`}
+                      </span>
+                      {entry.isDone ? (
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 flex items-center gap-1">
+                          <Check size={10} /> 완료
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">입력중</span>
+                      )}
+                    </div>
+
+                    {/* 입력 데이터 */}
+                    {form && Object.keys(entry.data).length > 0 && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 ml-4 mb-2">
+                        {form.fields.map(field => {
+                          const val = entry.data[field.id];
+                          if (val === undefined || val === '' || val === false) return null;
+                          return (
+                            <div key={field.id} className="flex items-baseline gap-1.5">
+                              <span className="text-[10px] text-stone-400 shrink-0">{field.label}</span>
+                              <span className="text-[11px] text-stone-700 dark:text-stone-300 font-medium truncate">
+                                {field.type === 'checkbox' ? (val ? '✓' : '') : String(val)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* 메타 */}
+                    <div className="flex items-center gap-2 ml-4">
+                      <Clock size={10} className="text-stone-400 shrink-0" />
+                      <span className="text-[10px] text-stone-400">
+                        {entry.updatedAt.slice(0, 16).replace('T', ' ')}
+                        {entry.updatedBy ? ` · ${entry.updatedBy}` : ''}
+                      </span>
+                      {entry.completedAt && (
+                        <span className="text-[10px] text-emerald-500">
+                          완료일 {entry.completedAt.slice(0, 10)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 인쇄 뷰 ───────────────────────────────────────────────
+function PrintView({ form, regionGroups, entryMap, onClose }: {
+  form: StoreForm;
+  regionGroups: [string, Store[]][];
+  entryMap: Map<string, StoreFormEntry>;
+  onClose: () => void;
+}) {
+  const total = regionGroups.reduce((s, [, list]) => s + list.length, 0);
+  const done = regionGroups.reduce((s, [, list]) => s + list.filter(st => entryMap.get(st.id)?.isDone).length, 0);
+  const today = new Date().toLocaleDateString('ko-KR');
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+      {/* 화면용 툴바 — 인쇄 시 숨김 */}
+      <div className="print:hidden flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-stone-50 shrink-0">
+        <button onClick={onClose} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900">
+          <X size={14} /> 닫기
+        </button>
+        <span className="text-xs text-stone-400 flex-1">{form.title} — 인쇄 미리보기</span>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-stone-900 text-white rounded-sm hover:bg-stone-700"
+        >
+          <Printer size={13} /> 인쇄
+        </button>
+      </div>
+
+      {/* 인쇄 콘텐츠 */}
+      <div className="flex-1 overflow-auto p-6 text-stone-900" style={{ fontFamily: 'serif' }}>
+        {/* 헤더 */}
+        <div className="mb-4 pb-3 border-b-2 border-stone-800">
+          <h1 className="text-lg font-black">{form.title}</h1>
+          {form.description && <p className="text-sm text-stone-600 mt-0.5">{form.description}</p>}
+          <div className="flex gap-6 mt-1 text-[11px] text-stone-500">
+            <span>인쇄일: {today}</span>
+            <span>완료: {done}/{total} ({total > 0 ? Math.round(done / total * 100) : 0}%)</span>
+            <span>항목: {form.fields.map(f => f.label).join(' · ')}</span>
+          </div>
+        </div>
+
+        {/* 권역별 테이블 */}
+        {regionGroups.map(([region, storeList]) => {
+          const regionDone = storeList.filter(s => entryMap.get(s.id)?.isDone).length;
+          return (
+            <div key={region} className="mb-6">
+              <div className="flex items-center gap-3 mb-1.5">
+                <h2 className="text-sm font-black">{region}</h2>
+                <span className="text-xs text-stone-500">{regionDone}/{storeList.length} 완료</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-stone-100">
+                    <th className="border border-stone-300 px-2 py-1 text-left font-bold w-36">매장명</th>
+                    {form.fields.map(f => (
+                      <th key={f.id} className="border border-stone-300 px-2 py-1 text-left font-bold">{f.label}</th>
+                    ))}
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-12">완료</th>
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-20">완료일</th>
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-16">담당자</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {storeList.map(store => {
+                    const entry = entryMap.get(store.id);
+                    return (
+                      <tr key={store.id} className={entry?.isDone ? 'bg-emerald-50' : ''}>
+                        <td className="border border-stone-200 px-2 py-1 font-medium">{store.name}</td>
+                        {form.fields.map(f => (
+                          <td key={f.id} className="border border-stone-200 px-2 py-1">
+                            {entry
+                              ? f.type === 'checkbox'
+                                ? (entry.data[f.id] ? '✓' : '')
+                                : String(entry.data[f.id] ?? '')
+                              : ''}
+                          </td>
+                        ))}
+                        <td className="border border-stone-200 px-2 py-1 text-center">
+                          {entry?.isDone ? '✓' : ''}
+                        </td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">
+                          {entry?.completedAt?.slice(0, 10) ?? ''}
+                        </td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">
+                          {entry?.updatedBy ?? ''}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── 마인드맵 트리 노드 ─────────────────────────────────────
 function MindMapRegionNode({
   region, stores, entryMap,
@@ -328,14 +539,12 @@ function MindMapRegionNode({
   const done = stores.filter(s => entryMap.get(s.id)?.isDone).length;
 
   return (
-    <div className="flex items-start gap-0">
-      {/* 세로선 */}
+    <div className="flex items-start">
       <div className="w-8 shrink-0 flex flex-col items-center">
         <div className="w-px flex-1 bg-stone-300 dark:bg-stone-600 mt-3" />
       </div>
 
       <div className="flex-1 min-w-0 mb-2">
-        {/* 권역 노드 */}
         <div className="flex items-center gap-1 mb-1">
           <div className="w-4 h-px bg-stone-300 dark:bg-stone-600 shrink-0" />
           <button
@@ -360,22 +569,20 @@ function MindMapRegionNode({
           </button>
         </div>
 
-        {/* 매장 노드들 */}
         {expanded && (
           <div className="ml-4 space-y-0.5">
             {stores.map((store, idx) => {
               const entry = entryMap.get(store.id);
               const isLast = idx === stores.length - 1;
               return (
-                <div key={store.id} className="flex items-center gap-0">
-                  {/* 연결선 */}
+                <div key={store.id} className="flex items-center">
                   <div className="w-8 shrink-0 relative self-stretch">
                     <div className={`absolute left-0 top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-700 ${isLast ? 'h-1/2 bottom-auto' : ''}`} />
                     <div className="absolute left-0 top-1/2 w-4 h-px bg-stone-200 dark:bg-stone-700 -translate-y-px" />
                   </div>
                   <button
                     onClick={() => onClickStore(store)}
-                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[11px] hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left max-w-[160px] group"
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[11px] hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-left max-w-[160px]"
                   >
                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                       entry?.isDone ? 'bg-emerald-500' : entry ? 'bg-amber-400' : 'bg-stone-300 dark:bg-stone-600'
@@ -405,13 +612,15 @@ export function StoreMindmapView({ currentUser }: Props) {
   const { confirm } = useConfirm();
   const isAdmin = currentUser.role === 'admin';
 
-  const [forms, setForms] = useState<StoreForm[]>([]);
+  // 전체 폼 (보관 포함)
+  const [allForms, setAllForms] = useState<StoreForm[]>([]);
   const [selectedForm, setSelectedForm] = useState<StoreForm | null>(null);
   const [entries, setEntries] = useState<StoreFormEntry[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
   const [loadingEntries, setLoadingEntries] = useState(false);
 
+  const [formListTab, setFormListTab] = useState<'active' | 'archived'>('active');
   const [activeTab, setActiveTab] = useState<'mindmap' | 'list'>('list');
   const [search, setSearch] = useState('');
   const [highlightRegion, setHighlightRegion] = useState<string | null>(null);
@@ -420,7 +629,8 @@ export function StoreMindmapView({ currentUser }: Props) {
   const [editingEntry, setEditingEntry] = useState<{ store: Store; entry: StoreFormEntry | null } | null>(null);
   const [formEditorOpen, setFormEditorOpen] = useState(false);
   const [editingForm, setEditingForm] = useState<StoreForm | null>(null);
-  const [formMenuOpen, setFormMenuOpen] = useState<string | null>(null);
+  const [historyStore, setHistoryStore] = useState<Store | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
 
   // ── 데이터 로드 ──────────────────────────────────────────
   useEffect(() => {
@@ -430,16 +640,16 @@ export function StoreMindmapView({ currentUser }: Props) {
     ]).then(([formSnap, storeSnap]) => {
       const fs = formSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as StoreForm))
-        .filter(f => !f.isArchived)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      setForms(fs);
+      setAllForms(fs);
       setStores(
         storeSnap.docs
           .map(d => ({ id: d.id, ...d.data() } as Store))
           .filter(s => s.status !== '폐점')
           .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
       );
-      if (fs.length > 0) setSelectedForm(fs[0]);
+      const first = fs.find(f => !f.isArchived);
+      if (first) setSelectedForm(first);
       setLoadingForms(false);
     }).catch(() => setLoadingForms(false));
   }, []);
@@ -448,14 +658,15 @@ export function StoreMindmapView({ currentUser }: Props) {
     if (!selectedForm) { setEntries([]); return; }
     setLoadingEntries(true);
     getDocs(query(collection(salesDb, 'store_form_entries'), where('formId', '==', selectedForm.id)))
-      .then(snap => {
-        setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry)));
-      })
+      .then(snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry))))
       .catch(() => {})
       .finally(() => setLoadingEntries(false));
   }, [selectedForm?.id]);
 
   // ── 파생 데이터 ──────────────────────────────────────────
+  const activeForms = useMemo(() => allForms.filter(f => !f.isArchived), [allForms]);
+  const archivedForms = useMemo(() => allForms.filter(f => f.isArchived), [allForms]);
+
   const entryMap = useMemo(() => {
     const m = new Map<string, StoreFormEntry>();
     entries.forEach(e => m.set(e.storeId, e));
@@ -480,28 +691,26 @@ export function StoreMindmapView({ currentUser }: Props) {
         region,
         storeList.filter(s =>
           s.name.toLowerCase().includes(q) ||
-          s.region.toLowerCase().includes(q) ||
-          s.ceoName?.toLowerCase().includes(q) ||
-          s.operatorName?.toLowerCase().includes(q) ||
-          s.storeCode?.toLowerCase().includes(q)
+          (s.region ?? '').toLowerCase().includes(q) ||
+          (s.ceoName ?? '').toLowerCase().includes(q) ||
+          (s.operatorName ?? '').toLowerCase().includes(q) ||
+          (s.storeCode ?? '').toLowerCase().includes(q)
         ),
       ] as [string, Store[]])
       .filter(([, list]) => list.length > 0);
   }, [regionGroups, search]);
 
-  const totalStats = useMemo(() => {
-    const total = stores.length;
-    const done = entries.filter(e => e.isDone).length;
-    return { total, done };
-  }, [stores, entries]);
+  const totalStats = useMemo(() => ({
+    total: stores.length,
+    done: entries.filter(e => e.isDone).length,
+  }), [stores, entries]);
 
   // ── 폼 CRUD ────────────────────────────────────────────
   const handleSaveForm = useCallback(async (f: StoreForm) => {
     await setDoc(doc(salesDb, 'store_forms', f.id), scrub(f));
-    setForms(prev => {
+    setAllForms(prev => {
       const exists = prev.find(x => x.id === f.id);
-      if (exists) return prev.map(x => x.id === f.id ? f : x);
-      return [f, ...prev];
+      return exists ? prev.map(x => x.id === f.id ? f : x) : [f, ...prev];
     });
     if (!selectedForm) setSelectedForm(f);
     toast.success('폼이 저장됐습니다.');
@@ -510,24 +719,32 @@ export function StoreMindmapView({ currentUser }: Props) {
   const handleDeleteForm = useCallback(async (f: StoreForm) => {
     const ok = await confirm({
       title: '폼 삭제',
-      message: `"${f.title}" 폼과 해당 매장 응답 데이터가 모두 삭제됩니다.`,
-      confirmLabel: '삭제',
-      variant: 'danger',
+      message: `"${f.title}" 폼과 모든 응답 데이터가 삭제됩니다.`,
+      confirmLabel: '삭제', variant: 'danger',
     });
     if (!ok) return;
     await deleteDoc(doc(salesDb, 'store_forms', f.id));
-    setForms(prev => prev.filter(x => x.id !== f.id));
-    if (selectedForm?.id === f.id) setSelectedForm(forms.find(x => x.id !== f.id) ?? null);
+    setAllForms(prev => prev.filter(x => x.id !== f.id));
+    if (selectedForm?.id === f.id) setSelectedForm(allForms.find(x => x.id !== f.id && !x.isArchived) ?? null);
     toast.success('폼이 삭제됐습니다.');
-  }, [confirm, forms, selectedForm, toast]);
+  }, [confirm, allForms, selectedForm, toast]);
 
-  // ── 항목 저장/업데이트 ─────────────────────────────────
+  const handleArchiveForm = useCallback(async (f: StoreForm, archive: boolean) => {
+    const updated = { ...f, isArchived: archive };
+    await setDoc(doc(salesDb, 'store_forms', f.id), scrub(updated));
+    setAllForms(prev => prev.map(x => x.id === f.id ? updated : x));
+    if (archive && selectedForm?.id === f.id) {
+      setSelectedForm(allForms.find(x => x.id !== f.id && !x.isArchived) ?? null);
+    }
+    toast.success(archive ? '보관함으로 이동됐습니다.' : '복원됐습니다.');
+  }, [allForms, selectedForm, toast]);
+
+  // ── 항목 저장 ──────────────────────────────────────────
   const handleSaveEntry = useCallback(async (entry: StoreFormEntry) => {
     await setDoc(doc(salesDb, 'store_form_entries', entry.id), scrub(entry));
     setEntries(prev => {
       const exists = prev.find(e => e.id === entry.id);
-      if (exists) return prev.map(e => e.id === entry.id ? entry : e);
-      return [...prev, entry];
+      return exists ? prev.map(e => e.id === entry.id ? entry : e) : [...prev, entry];
     });
     toast.success(`${entry.storeName} 저장됐습니다.`);
   }, [toast]);
@@ -541,30 +758,45 @@ export function StoreMindmapView({ currentUser }: Props) {
     setHighlightRegion(region);
     setExpandedRegions(prev => new Set([...prev, region]));
     setTimeout(() => {
-      const el = regionRefs.current.get(region);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      regionRefs.current.get(region)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 150);
   };
 
   // ── 렌더 ──────────────────────────────────────────────
   if (loadingForms) {
-    return (
-      <div className="flex items-center justify-center h-full text-stone-400 text-sm">
-        로딩 중...
-      </div>
-    );
+    return <div className="flex items-center justify-center h-full text-stone-400 text-sm">로딩 중...</div>;
   }
 
   return (
     <div className="flex h-full bg-[#FDFBF7] dark:bg-stone-950">
       {/* ── 왼쪽: 폼 목록 ───────────────────────── */}
       <aside className="w-56 shrink-0 border-r-[3px] border-double border-stone-300 dark:border-stone-700 flex flex-col bg-white dark:bg-stone-900">
-        <div className="flex items-center justify-between px-3 py-2.5 border-b border-stone-200 dark:border-stone-800">
-          <span className="text-[11px] font-black text-stone-600 dark:text-stone-400 tracking-wider">매장 폼</span>
-          {isAdmin && (
+        {/* 탭 헤더 */}
+        <div className="flex items-center border-b border-stone-200 dark:border-stone-800 shrink-0">
+          <button
+            onClick={() => setFormListTab('active')}
+            className={`flex-1 py-2 text-[11px] font-bold transition-colors ${
+              formListTab === 'active'
+                ? 'text-stone-900 dark:text-stone-100 border-b-2 border-stone-800 dark:border-stone-300'
+                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-300'
+            }`}
+          >
+            활성 {activeForms.length > 0 && `(${activeForms.length})`}
+          </button>
+          <button
+            onClick={() => setFormListTab('archived')}
+            className={`flex-1 py-2 text-[11px] font-bold transition-colors ${
+              formListTab === 'archived'
+                ? 'text-stone-900 dark:text-stone-100 border-b-2 border-stone-800 dark:border-stone-300'
+                : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-300'
+            }`}
+          >
+            보관함 {archivedForms.length > 0 && `(${archivedForms.length})`}
+          </button>
+          {isAdmin && formListTab === 'active' && (
             <button
               onClick={() => { setEditingForm(null); setFormEditorOpen(true); }}
-              className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
+              className="px-2 py-2 text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 shrink-0"
               title="새 폼 만들기"
             >
               <Plus size={14} />
@@ -572,8 +804,9 @@ export function StoreMindmapView({ currentUser }: Props) {
           )}
         </div>
 
+        {/* 폼 목록 */}
         <div className="flex-1 overflow-y-auto">
-          {forms.length === 0 && (
+          {formListTab === 'active' && activeForms.length === 0 && (
             <div className="px-3 py-6 text-center">
               <ClipboardList size={24} className="text-stone-300 dark:text-stone-600 mx-auto mb-2" />
               <p className="text-[11px] text-stone-400">폼이 없습니다.</p>
@@ -587,29 +820,29 @@ export function StoreMindmapView({ currentUser }: Props) {
               )}
             </div>
           )}
-          {forms.map(f => {
-            const fEntries = entries.filter(e => e.formId === f.id);
-            const isDone = selectedForm?.id === f.id;
+
+          {(formListTab === 'active' ? activeForms : archivedForms).map(f => {
+            const isSelected = selectedForm?.id === f.id;
             return (
               <div
                 key={f.id}
                 className={`relative group border-b border-stone-100 dark:border-stone-800 ${
-                  isDone ? 'bg-stone-100 dark:bg-stone-800' : ''
+                  isSelected ? 'bg-stone-100 dark:bg-stone-800' : ''
                 }`}
               >
                 <button
                   onClick={() => { setSelectedForm(f); setSearch(''); }}
-                  className="w-full text-left px-3 py-2.5"
+                  className="w-full text-left px-3 py-2.5 pr-14"
                 >
                   <p className={`text-xs font-bold truncate ${
-                    isDone ? 'text-stone-900 dark:text-stone-100' : 'text-stone-600 dark:text-stone-400'
+                    isSelected ? 'text-stone-900 dark:text-stone-100' : 'text-stone-600 dark:text-stone-400'
                   }`}>
                     {f.title}
                   </p>
                   <p className="text-[10px] text-stone-400 mt-0.5">
                     {f.fields.length}개 항목 · {f.createdAt.slice(0, 10)}
                   </p>
-                  {selectedForm?.id === f.id && (
+                  {isSelected && (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {totalStats.done}/{totalStats.total} 완료
                     </p>
@@ -618,18 +851,39 @@ export function StoreMindmapView({ currentUser }: Props) {
 
                 {isAdmin && (
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-0.5">
-                    <button
-                      onClick={() => { setEditingForm(f); setFormEditorOpen(true); }}
-                      className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-                    >
-                      <Edit2 size={11} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteForm(f)}
-                      className="p-1 text-stone-400 hover:text-red-500"
-                    >
-                      <Trash2 size={11} />
-                    </button>
+                    {formListTab === 'active' ? (
+                      <>
+                        <button
+                          onClick={() => { setEditingForm(f); setFormEditorOpen(true); }}
+                          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                          title="수정"
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                        <button
+                          onClick={() => handleArchiveForm(f, true)}
+                          className="p-1 text-stone-400 hover:text-amber-600"
+                          title="보관함으로"
+                        >
+                          <Archive size={11} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteForm(f)}
+                          className="p-1 text-stone-400 hover:text-red-500"
+                          title="삭제"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleArchiveForm(f, false)}
+                        className="p-1 text-stone-400 hover:text-emerald-600"
+                        title="복원"
+                      >
+                        <RotateCcw size={11} />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -650,17 +904,17 @@ export function StoreMindmapView({ currentUser }: Props) {
         ) : (
           <>
             {/* 헤더 */}
-            <div className="flex items-center gap-3 px-4 py-2.5 border-b-[3px] border-double border-stone-300 dark:border-stone-700 shrink-0 bg-white dark:bg-stone-900">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b-[3px] border-double border-stone-300 dark:border-stone-700 shrink-0 bg-white dark:bg-stone-900">
               <div className="flex-1 min-w-0">
                 <h2 className="text-sm font-black text-stone-900 dark:text-stone-100 truncate">{selectedForm.title}</h2>
                 {selectedForm.description && (
                   <p className="text-[10px] text-stone-400">{selectedForm.description}</p>
                 )}
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* 진행률 */}
                 <div className="flex items-center gap-1.5">
-                  <div className="w-20 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+                  <div className="w-16 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 transition-all"
                       style={{ width: `${totalStats.total > 0 ? Math.round(totalStats.done / totalStats.total * 100) : 0}%` }}
@@ -670,6 +924,14 @@ export function StoreMindmapView({ currentUser }: Props) {
                     {totalStats.done}/{totalStats.total}
                   </span>
                 </div>
+                {/* 인쇄 버튼 */}
+                <button
+                  onClick={() => setPrintOpen(true)}
+                  className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+                  title="인쇄"
+                >
+                  <Printer size={15} />
+                </button>
                 {/* 탭 전환 */}
                 <div className="flex border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
                   <button
@@ -703,32 +965,27 @@ export function StoreMindmapView({ currentUser }: Props) {
                 {/* ── 마인드맵 탭 ──────────────── */}
                 {activeTab === 'mindmap' && (
                   <div className="flex-1 overflow-auto p-6">
-                    <div className="flex items-start gap-0 min-w-max">
-                      {/* 루트 노드 */}
-                      <div className="flex flex-col items-center shrink-0 mr-0">
+                    <div className="flex items-start min-w-max">
+                      <div className="flex flex-col items-center shrink-0">
                         <div className="bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-4 py-2 rounded-sm font-black text-sm">
                           {selectedForm.title}
                         </div>
                         <div className="text-[10px] text-stone-400 mt-1">
                           {totalStats.done}/{totalStats.total} 완료 ({totalStats.total > 0 ? Math.round(totalStats.done / totalStats.total * 100) : 0}%)
                         </div>
-                        {/* 루트에서 나오는 수평선 */}
                         <div className="w-px flex-1 bg-stone-300 dark:bg-stone-600 mt-2" style={{ minHeight: 32 }} />
                       </div>
 
-                      {/* 수평 연결선 */}
                       <div className="w-8 self-stretch flex flex-col justify-center shrink-0 relative" style={{ marginTop: 48 }}>
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-full h-px bg-stone-300 dark:bg-stone-600" />
                         </div>
                       </div>
 
-                      {/* 권역 노드들 */}
-                      <div className="flex flex-col" style={{ marginTop: 0 }}>
-                        <div className="relative" style={{ paddingLeft: 0 }}>
-                          {/* 세로 연결선 */}
+                      <div className="flex flex-col">
+                        <div className="relative">
                           <div className="absolute left-0 top-6 bottom-6 w-px bg-stone-300 dark:bg-stone-600" />
-                          <div className="space-y-1 pl-0">
+                          <div className="space-y-1">
                             {regionGroups.map(([region, regionStores]) => (
                               <MindMapRegionNode
                                 key={region}
@@ -757,7 +1014,7 @@ export function StoreMindmapView({ currentUser }: Props) {
                         <input
                           value={search} onChange={e => setSearch(e.target.value)}
                           placeholder="매장명, 지역, 대표자명으로 검색..."
-                          className="w-full pl-8 pr-3 py-1.5 text-xs border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 rounded-sm focus:outline-none focus:border-stone-400"
+                          className="w-full pl-8 pr-8 py-1.5 text-xs border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 rounded-sm focus:outline-none focus:border-stone-400"
                         />
                         {search && (
                           <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700">
@@ -767,7 +1024,7 @@ export function StoreMindmapView({ currentUser }: Props) {
                       </div>
                       {search && (
                         <p className="text-[10px] text-stone-400 mt-1">
-                          {filteredGroups.reduce((s, [, l]) => s + l.length, 0)}개 매장 검색됨
+                          {filteredGroups.reduce((s, [, l]) => s + l.length, 0)}개 매장
                         </p>
                       )}
                     </div>
@@ -775,14 +1032,10 @@ export function StoreMindmapView({ currentUser }: Props) {
                     {/* 지역별 그룹 */}
                     <div ref={listRef} className="flex-1 overflow-y-auto">
                       {filteredGroups.length === 0 && (
-                        <div className="flex items-center justify-center h-32 text-stone-400 text-sm">
-                          검색 결과가 없습니다.
-                        </div>
+                        <div className="flex items-center justify-center h-32 text-stone-400 text-sm">검색 결과가 없습니다.</div>
                       )}
                       {filteredGroups.map(([region, regionStores]) => {
-                        const isOpen = expandedRegions.has(region) ||
-                          search.trim().length > 0 ||
-                          highlightRegion === region;
+                        const isOpen = expandedRegions.has(region) || search.trim().length > 0 || highlightRegion === region;
                         const regionDone = regionStores.filter(s => entryMap.get(s.id)?.isDone).length;
 
                         return (
@@ -790,7 +1043,6 @@ export function StoreMindmapView({ currentUser }: Props) {
                             key={region}
                             ref={el => { if (el) regionRefs.current.set(region, el); }}
                           >
-                            {/* 지역 헤더 */}
                             <button
                               onClick={() => {
                                 setExpandedRegions(prev => {
@@ -808,11 +1060,8 @@ export function StoreMindmapView({ currentUser }: Props) {
                             >
                               {isOpen ? <ChevronDown size={13} className="text-stone-400 shrink-0" /> : <ChevronRight size={13} className="text-stone-400 shrink-0" />}
                               <span className="text-xs font-black text-stone-700 dark:text-stone-300">{region}</span>
-                              <span className="text-[10px] text-stone-400">
-                                {regionDone}/{regionStores.length} 완료
-                              </span>
+                              <span className="text-[10px] text-stone-400">{regionDone}/{regionStores.length} 완료</span>
                               <div className="flex-1" />
-                              {/* 지역 진행률 바 */}
                               <div className="w-16 h-1 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-emerald-400 transition-all"
@@ -821,27 +1070,21 @@ export function StoreMindmapView({ currentUser }: Props) {
                               </div>
                             </button>
 
-                            {/* 매장 행 */}
                             {isOpen && regionStores.map(store => {
                               const entry = entryMap.get(store.id);
                               return (
                                 <div
                                   key={store.id}
-                                  className="flex items-center gap-2 px-6 py-2 border-b border-stone-50 dark:border-stone-800/50 hover:bg-stone-50 dark:hover:bg-stone-800/30 group"
+                                  className="flex items-center gap-2 px-6 py-1.5 border-b border-stone-50 dark:border-stone-800/50 hover:bg-stone-50 dark:hover:bg-stone-800/30 group"
                                 >
-                                  {/* 완료 상태 도트 */}
                                   <div className={`w-2 h-2 rounded-full shrink-0 ${
-                                    entry?.isDone ? 'bg-emerald-500' :
-                                    entry ? 'bg-amber-400' :
-                                    'bg-stone-200 dark:bg-stone-700'
+                                    entry?.isDone ? 'bg-emerald-500' : entry ? 'bg-amber-400' : 'bg-stone-200 dark:bg-stone-700'
                                   }`} />
 
-                                  {/* 매장명 */}
                                   <span className="text-xs font-bold text-stone-700 dark:text-stone-300 flex-1 min-w-0 truncate">
                                     {store.name}
                                   </span>
 
-                                  {/* 입력된 값 미리보기 */}
                                   {entry && !entry.isDone && (
                                     <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">입력중</span>
                                   )}
@@ -853,6 +1096,15 @@ export function StoreMindmapView({ currentUser }: Props) {
                                   {entry?.updatedBy && (
                                     <span className="text-[10px] text-stone-400 shrink-0 hidden group-hover:inline">{entry.updatedBy}</span>
                                   )}
+
+                                  {/* 이력 버튼 */}
+                                  <button
+                                    onClick={() => setHistoryStore(store)}
+                                    className="text-[10px] shrink-0 p-1 text-stone-300 dark:text-stone-600 hover:text-stone-600 dark:hover:text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="폼 이력 보기"
+                                  >
+                                    <History size={13} />
+                                  </button>
 
                                   {/* 입력/수정 버튼 */}
                                   <button
@@ -876,18 +1128,17 @@ export function StoreMindmapView({ currentUser }: Props) {
         )}
       </main>
 
-      {/* ── 폼 에디터 모달 ──────────────────── */}
+      {/* ── 모달들 ──────────────────────────────── */}
       {formEditorOpen && (
         <FormEditorModal
           form={editingForm}
-          allForms={forms}
+          activeForms={activeForms}
           onSave={handleSaveForm}
           onClose={() => { setFormEditorOpen(false); setEditingForm(null); }}
           currentUser={currentUser}
         />
       )}
 
-      {/* ── 매장 입력 모달 ──────────────────── */}
       {editingEntry && selectedForm && (
         <EntryModal
           store={editingEntry.store}
@@ -896,6 +1147,23 @@ export function StoreMindmapView({ currentUser }: Props) {
           onSave={handleSaveEntry}
           onClose={() => setEditingEntry(null)}
           currentUser={currentUser}
+        />
+      )}
+
+      {historyStore && (
+        <StoreHistoryModal
+          store={historyStore}
+          allForms={allForms}
+          onClose={() => setHistoryStore(null)}
+        />
+      )}
+
+      {printOpen && selectedForm && (
+        <PrintView
+          form={selectedForm}
+          regionGroups={regionGroups}
+          entryMap={entryMap}
+          onClose={() => setPrintOpen(false)}
         />
       )}
     </div>
