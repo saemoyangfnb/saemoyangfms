@@ -820,6 +820,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     }).catch(console.error).finally(() => setLoadingWeek(false));
   }, [tab, weekViewStart]);
 
+  /* undefined 필드 제거 — Firestore는 undefined 거부 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clean = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)) as T;
+
   /* 출근 보고 제출 / 수정 */
   const submitMorning = async (submitted: MorningItem[]) => {
     try {
@@ -830,20 +834,19 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         ...(it.memo ? { memo: it.memo } : {}),
       }));
       if (isEditingMorning && myMorning) {
-        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-          items: newItems, updatedAt: new Date().toISOString(),
-        });
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id),
+          clean({ items: newItems, updatedAt: new Date().toISOString() }));
         saveMentions(submitted.map(it => it.text), 'daily', myMorning.id, `${date} 출근보고`, date);
         setIsEditingMorning(false);
         toast.success('출근 보고가 수정되었습니다');
       } else {
         const id = genId();
-        await setDoc(doc(salesDb, 'daily_reports', id), {
+        await setDoc(doc(salesDb, 'daily_reports', id), clean({
           id, employeeId: myEmployee?.id ?? currentUser.uid, employeeName: currentUser.name ?? '',
           departmentId: myEmployee?.departmentId ?? '',
           date, type: 'morning', items: newItems,
           submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        });
+        }));
         saveMentions(submitted.map(it => it.text), 'daily', id, `${date} 출근보고`, date);
         toast.success('출근 보고 완료');
         setKakaoTarget({
@@ -855,7 +858,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       fetchData();
     } catch (e) {
       console.error('submitMorning error:', e);
-      toast.error('보고 저장 실패 — 네트워크 또는 권한 문제를 확인하세요');
+      toast.error(`보고 저장 실패: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -863,30 +866,28 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const submitEvening = async (items: DailyReportItem[]) => {
     if (!myMorning) return;
     try {
+      const cleanItems = clean(items);
       if (isEditingEvening && myEvening) {
-        await updateDoc(doc(salesDb, 'daily_reports', myEvening.id), {
-          items, updatedAt: new Date().toISOString(),
-        });
-        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-          items, updatedAt: new Date().toISOString(),
-        });
+        await updateDoc(doc(salesDb, 'daily_reports', myEvening.id),
+          clean({ items: cleanItems, updatedAt: new Date().toISOString() }));
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id),
+          clean({ items: cleanItems, updatedAt: new Date().toISOString() }));
         setIsEditingEvening(false);
         toast.success('퇴근 보고가 수정되었습니다');
       } else {
         const id = genId();
-        await setDoc(doc(salesDb, 'daily_reports', id), {
+        await setDoc(doc(salesDb, 'daily_reports', id), clean({
           id, employeeId: myMorning.employeeId, employeeName: myMorning.employeeName,
           departmentId: myMorning.departmentId,
-          date, type: 'evening', items,
+          date, type: 'evening', items: cleanItems,
           submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        });
-        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-          items, updatedAt: new Date().toISOString(),
-        });
+        }));
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id),
+          clean({ items: cleanItems, updatedAt: new Date().toISOString() }));
         toast.success('퇴근 보고 완료');
         setKakaoTarget({
           type: 'evening',
-          items: items.map((it, idx) => {
+          items: cleanItems.map((it: DailyReportItem, idx: number) => {
             const mp = myMorning?.items[idx]?.progress ?? 0;
             const ep = it.progress ?? 0;
             const delta = ep - mp;
@@ -899,7 +900,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       fetchData();
     } catch (e) {
       console.error('submitEvening error:', e);
-      toast.error('보고 저장 실패 — 네트워크 또는 권한 문제를 확인하세요');
+      toast.error(`보고 저장 실패: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
