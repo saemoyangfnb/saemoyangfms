@@ -392,18 +392,12 @@ export function CompanyCalendar({ currentUser }: Props) {
       const workItems = processSettingsMap[s.brandId] || [];
       const taskItems = workItems.filter(wt => wt.category === 'task' && wt.calendarVisible !== false);
       if (workItems.length > 0 && taskItems.length > 0) {
-        // computeWorkItemDates로 드래그 오버라이드 반영
         const dates = computeWorkItemDates(workItems, s);
         taskItems.forEach(wt => {
           const d = dates[wt.id];
           if (!d?.start) return;
           fEvents.push({ id: `ftk_${s.id}_${wt.id}`, type: 'franchise', title: `${wt.text} — ${s.storeName}`, startDate: d.start, endDate: d.end, allDay: true, visibility: 'all', createdAt: '', updatedAt: '' });
         });
-      } else {
-        // 폴백: processSettings 없으면 레거시 필드 사용
-        add('fpt', `📚 ${s.storeName} 사전교육`, s.preTrainingStart, s.preTrainingEnd);
-        add('ftr', `🎓 ${s.storeName} 본교육`, s.trainingStart, s.trainingEnd);
-        add('feq', `🍳 ${s.storeName} 화구류`, s.equipmentIn);
       }
     });
     return fEvents;
