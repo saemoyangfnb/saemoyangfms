@@ -1402,7 +1402,6 @@ export default function App() {
               items: [
                 { section: 'projects' as SidebarSection,  icon: <FolderKanban size={13} />, label: '프로젝트' },
                 { section: 'okr' as SidebarSection,       icon: <Target size={13} />,       label: 'OKR & KPI' },
-                { section: 'workmap' as SidebarSection,   icon: <LayoutList size={13} />,   label: '업무지도' },
                 { section: 'sop' as SidebarSection,       icon: <BookOpen size={13} />,     label: '업무규정' },
                 { section: 'factory' as SidebarSection,   icon: <Package size={13} />,      label: '제조실' },
               ],
@@ -1790,11 +1789,6 @@ export default function App() {
             <CompanyInfoView section={sidebar.section} currentUser={currentUser} />
           )}
 
-          {/* 업무 지도 */}
-          {sidebar.section === 'workmap' && (
-            <WorkMapView currentUser={currentUser} />
-          )}
-
           {/* 제조실 */}
           {sidebar.section === 'factory' && (
             <FactoryView currentUser={currentUser} />
@@ -1805,9 +1799,9 @@ export default function App() {
             <OKRView currentUser={currentUser} />
           )}
 
-          {/* 프로젝트 */}
-          {sidebar.section === 'projects' && (
-            <ProjectsView currentUser={currentUser} />
+          {/* 프로젝트 (구 업무지도 통합) */}
+          {(sidebar.section === 'projects' || sidebar.section === 'workmap') && (
+            <WorkMapView currentUser={currentUser} />
           )}
 
           {/* 회의록 */}
