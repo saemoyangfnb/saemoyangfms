@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-06-12 (3) — Claude Code
+
+### Firestore undefined 버그 수정 + TypeScript 타입 에러 전수 해소
+
+- `DailyReportView`: `clean()` 헬퍼(JSON.parse/stringify) 적용 → `submitMorning`/`submitEvening` setDoc/updateDoc 모두 undefined 제거 처리 (commit: 07743ef)
+- `types.ts`: `ChecklistItemData`에 `fixedDate/fixedEndDate` 추가, `LeaveRequest`에 `employeeName` 추가, `TaskTemplate`/`TaskInputType`/`MenuSalesRecord` 신규 정의
+- `tsconfig.json`: `영수증관리/` 서브프로젝트 exclude 추가
+- 15개 파일 타입 불일치 수정 (AdminPanel, DatabaseView, IngredientManager, ProjectsView, FranchiseScheduleView, MarketingScheduleView, MenuSalesUploadView, ProfitabilityView, App.tsx 등)
+- `npx tsc --noEmit` 에러 0개, 빌드 성공, 배포 완료 (commit: ec06c58)
+
+---
+
+## 2026-06-12 (2) — Claude Code
+
+### WorkMapView 탭 통합 + 업무 칸반 + 업무보고 패널 우측 이동
+
+- WorkMapView: `viewMode` 토글 제거, 단일 탭바(목록/칸반/마인드맵/캘린더) 통합
+- `TaskKanbanView` 신규: pending/in_progress/done 컬럼, DnD로 상태 변경 (목록↔칸반 동일 task 데이터 공유)
+- 마인드맵 탭: `ProjectMindMap` export 추가 후 직접 렌더 (ProjectDetail 내 tab bar 중첩 회피)
+- DailyReportView: 회의 실행항목 패널 → 오른쪽 사이드 패널로 이동 (`lg:w-72 sticky`)
+- 빌드 성공, commit: aa3c9a5
+
+---
+
 ## 2026-06-12 (1) — Claude Code
 
 ### DailyReportView — 회의 실행항목 → 업무보고 DnD 연동 + 항목별 메모
