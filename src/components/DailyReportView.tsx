@@ -129,8 +129,9 @@ function MorningForm({
     if (newCount > processedCount.current) {
       const newTitles = pendingTaskTitles.slice(processedCount.current);
       setItems(p => {
-        const withoutTrailingEmpty = p[p.length - 1]?.text === '' ? p.slice(0, -1) : p;
-        return [...withoutTrailingEmpty, ...newTitles.map(t => ({ text: t, progress: 0 })), { text: '', progress: 0 }];
+        let base = [...p];
+        while (base.length > 0 && base[base.length - 1].text === '') base.pop();
+        return [...base, ...newTitles.map(t => ({ text: t, progress: 0 })), { text: '', progress: 0 }];
       });
       processedCount.current = newCount;
     }
@@ -821,72 +822,82 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
 
   /* 출근 보고 제출 / 수정 */
   const submitMorning = async (submitted: MorningItem[]) => {
-    const newItems: DailyReportItem[] = submitted.map(it => ({
-      text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress, memo: it.memo || undefined,
-    }));
-    if (isEditingMorning && myMorning) {
-      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-        items: newItems, updatedAt: new Date().toISOString(),
-      });
-      saveMentions(submitted.map(it => it.text), 'daily', myMorning.id, `${date} 출근보고`, date);
-      setIsEditingMorning(false);
-      toast.success('출근 보고가 수정되었습니다');
-    } else {
-      const id = genId();
-      await setDoc(doc(salesDb, 'daily_reports', id), {
-        id, employeeId: myEmployee?.id ?? currentUser.uid, employeeName: currentUser.name,
-        departmentId: myEmployee?.departmentId ?? '',
-        date, type: 'morning', items: newItems,
-        submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      });
-      saveMentions(submitted.map(it => it.text), 'daily', id, `${date} 출근보고`, date);
-      toast.success('출근 보고 완료');
-      setKakaoTarget({
-        type: 'morning',
-        items: submitted.map(it => it.progress > 0 ? `${it.text} [${it.progress}%]` : it.text),
-      });
+    try {
+      const newItems: DailyReportItem[] = submitted.map(it => ({
+        text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress, memo: it.memo || undefined,
+      }));
+      if (isEditingMorning && myMorning) {
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+          items: newItems, updatedAt: new Date().toISOString(),
+        });
+        saveMentions(submitted.map(it => it.text), 'daily', myMorning.id, `${date} 출근보고`, date);
+        setIsEditingMorning(false);
+        toast.success('출근 보고가 수정되었습니다');
+      } else {
+        const id = genId();
+        await setDoc(doc(salesDb, 'daily_reports', id), {
+          id, employeeId: myEmployee?.id ?? currentUser.uid, employeeName: currentUser.name ?? '',
+          departmentId: myEmployee?.departmentId ?? '',
+          date, type: 'morning', items: newItems,
+          submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        saveMentions(submitted.map(it => it.text), 'daily', id, `${date} 출근보고`, date);
+        toast.success('출근 보고 완료');
+        setKakaoTarget({
+          type: 'morning',
+          items: submitted.map(it => it.progress > 0 ? `${it.text} [${it.progress}%]` : it.text),
+        });
+      }
+      setPendingTaskTitles([]);
+      fetchData();
+    } catch (e) {
+      console.error('submitMorning error:', e);
+      toast.error('보고 저장 실패 — 네트워크 또는 권한 문제를 확인하세요');
     }
-    setPendingTaskTitles([]);
-    fetchData();
   };
 
   /* 퇴근 보고 제출 / 수정 */
   const submitEvening = async (items: DailyReportItem[]) => {
     if (!myMorning) return;
-    if (isEditingEvening && myEvening) {
-      await updateDoc(doc(salesDb, 'daily_reports', myEvening.id), {
-        items, updatedAt: new Date().toISOString(),
-      });
-      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-        items, updatedAt: new Date().toISOString(),
-      });
-      setIsEditingEvening(false);
-      toast.success('퇴근 보고가 수정되었습니다');
-    } else {
-      const id = genId();
-      await setDoc(doc(salesDb, 'daily_reports', id), {
-        id, employeeId: myMorning.employeeId, employeeName: myMorning.employeeName,
-        departmentId: myMorning.departmentId,
-        date, type: 'evening', items,
-        submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      });
-      await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
-        items, updatedAt: new Date().toISOString(),
-      });
-      toast.success('퇴근 보고 완료');
-      setKakaoTarget({
-        type: 'evening',
-        items: items.map((it, idx) => {
-          const mp = myMorning?.items[idx]?.progress ?? 0;
-          const ep = it.progress ?? 0;
-          const delta = ep - mp;
-          const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
-          if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
-          return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
-        }),
-      });
+    try {
+      if (isEditingEvening && myEvening) {
+        await updateDoc(doc(salesDb, 'daily_reports', myEvening.id), {
+          items, updatedAt: new Date().toISOString(),
+        });
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+          items, updatedAt: new Date().toISOString(),
+        });
+        setIsEditingEvening(false);
+        toast.success('퇴근 보고가 수정되었습니다');
+      } else {
+        const id = genId();
+        await setDoc(doc(salesDb, 'daily_reports', id), {
+          id, employeeId: myMorning.employeeId, employeeName: myMorning.employeeName,
+          departmentId: myMorning.departmentId,
+          date, type: 'evening', items,
+          submittedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
+          items, updatedAt: new Date().toISOString(),
+        });
+        toast.success('퇴근 보고 완료');
+        setKakaoTarget({
+          type: 'evening',
+          items: items.map((it, idx) => {
+            const mp = myMorning?.items[idx]?.progress ?? 0;
+            const ep = it.progress ?? 0;
+            const delta = ep - mp;
+            const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
+            if (it.status === 'done') return `${it.text} — 완료 ✓${progressStr}`;
+            return `${it.text} — 진행중${it.note ? ` [${it.note}]` : ''}${progressStr}`;
+          }),
+        });
+      }
+      fetchData();
+    } catch (e) {
+      console.error('submitEvening error:', e);
+      toast.error('보고 저장 실패 — 네트워크 또는 권한 문제를 확인하세요');
     }
-    fetchData();
   };
 
   /* 관리자 보고 확인 — 이후 수정 불가 */
@@ -1169,7 +1180,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         </div>
       ) : tab === 'my' ? (
         /* ── 내 보고 탭 ── */
-        <div className="max-w-3xl space-y-4">
+        <div className="max-w-5xl space-y-4">
           {/* 오픈 일정 섹션 */}
           {scheduleEvents.length > 0 && (
             <div className="bg-white dark:bg-stone-900 border border-orange-200 dark:border-orange-800/50 rounded-2xl overflow-hidden">
@@ -1333,7 +1344,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
 
               {/* ── 오른쪽: 회의 실행항목 패널 (오늘만) ── */}
               {isToday && (
-                <div className="w-full lg:w-72 shrink-0 lg:sticky lg:top-4">
+                <div className="w-full lg:w-[576px] shrink-0 lg:sticky lg:top-4">
                   <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
                     <button
                       onClick={() => {
