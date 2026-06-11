@@ -635,6 +635,7 @@ export interface DailyReportItem {
   text: string;
   status: DailyItemStatus;
   note?: string;     // 미완료 사유
+  memo?: string;     // 업무 진행 계획 메모 (출근 시 입력)
   progress?: number; // 0~100, 10단위 수동 설정
 }
 

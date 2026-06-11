@@ -63,7 +63,8 @@ const STATUS_CONFIG: Record<DailyItemStatus, { label: string; icon: React.ReactN
 };
 
 /* ── 미니 진행률 피커 ───────────────────────────────────── */
-type MorningItem = { text: string; progress: number };
+type MorningItem = { text: string; progress: number; memo?: string };
+interface MeetingActionSource { id: string; text: string; meetingTitle: string; meetingDate: string; assignee?: string; }
 
 function MiniProgressPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hov, setHov] = useState<number | null>(null);
@@ -164,6 +165,8 @@ function MorningForm({
     setItems(p => p.map((x, idx) => idx === i ? { ...x, text: v } : x));
   const updateProgress = (i: number, v: number) =>
     setItems(p => p.map((x, idx) => idx === i ? { ...x, progress: v } : x));
+  const updateMemo = (i: number, v: string) =>
+    setItems(p => p.map((x, idx) => idx === i ? { ...x, memo: v } : x));
 
   const handleKeyDown = (e: React.KeyboardEvent, i: number) => {
     if (e.key === 'Enter') {
@@ -253,6 +256,15 @@ function MorningForm({
             <div className="pl-7">
               <MiniProgressPicker value={item.progress} onChange={v => updateProgress(i, v)} />
             </div>
+            {/* 메모 */}
+            <div className="pl-7 mt-1">
+              <input
+                value={item.memo ?? ''}
+                onChange={e => updateMemo(i, e.target.value)}
+                placeholder="메모 — 어떻게 진행할지 (선택)"
+                className="w-full px-2.5 py-1.5 text-xs border border-dashed border-stone-200 dark:border-stone-700 rounded-lg bg-transparent text-stone-600 dark:text-stone-400 outline-none focus:border-stone-400 dark:focus:border-stone-500 placeholder:text-stone-300 dark:placeholder:text-stone-600"
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -311,9 +323,14 @@ function EveningForm({
               {/* 업무명 + 상태 토글 */}
               <div className="flex items-center gap-3">
                 <span className="text-sm font-black text-stone-400 w-5 shrink-0 text-right">{i + 1}.</span>
-                <span className={`flex-1 text-sm font-semibold ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>
-                  {it.text}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <span className={`text-sm font-semibold ${it.status === 'done' ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>
+                    {it.text}
+                  </span>
+                  {morning.items[i]?.memo && (
+                    <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 truncate">📝 {morning.items[i].memo}</p>
+                  )}
+                </div>
                 <button
                   onClick={() => toggleStatus(i)}
                   className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-colors ${STATUS_CONFIG[it.status].cls}`}
@@ -617,6 +634,29 @@ function DraggableTaskCard({ task, onAdd, onReject, isToday, rejectLabel }: {
   );
 }
 
+/* ── 회의 실행항목 드래그 카드 ──────────────────────────── */
+function DraggableMeetingItem({ item, onAdd }: { item: MeetingActionSource; onAdd: (item: MeetingActionSource) => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: 'meeting-' + item.id });
+  const style = transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined;
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}
+      className={`flex items-start gap-2 px-3 py-2.5 border-b border-stone-100 dark:border-stone-800 last:border-0 transition-opacity ${isDragging ? 'opacity-30' : ''}`}>
+      <button {...listeners} className="mt-0.5 cursor-grab active:cursor-grabbing text-stone-300 hover:text-blue-400 shrink-0 touch-none">
+        <GripVertical size={14} />
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-stone-800 dark:text-stone-200 leading-snug">{item.text}</p>
+        <p className="text-[10px] text-stone-400 mt-0.5 truncate">{item.meetingTitle} · {item.meetingDate}</p>
+        {item.assignee && <span className="text-[10px] text-blue-500">{item.assignee}</span>}
+      </div>
+      <button onClick={() => onAdd(item)}
+        className="shrink-0 flex items-center gap-0.5 px-2 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+        <Plus size={11} /> 추가
+      </button>
+    </div>
+  );
+}
+
 /* ── MorningForm 드롭 존 래퍼 ────────────────────────── */
 function DroppableMorningZone({ children, active }: { children: React.ReactNode; active: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'morning-form' });
@@ -632,6 +672,10 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   const toast = useToast();
   const isAdmin = currentUser.role === 'admin';
   const [draggingTask, setDraggingTask] = useState<Task | null>(null);
+  const [draggingMeetingItem, setDraggingMeetingItem] = useState<MeetingActionSource | null>(null);
+  const [meetingActions, setMeetingActions] = useState<MeetingActionSource[]>([]);
+  const [showMeetingPanel, setShowMeetingPanel] = useState(false);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const [date, setDate] = useState(today());
@@ -778,7 +822,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
   /* 출근 보고 제출 / 수정 */
   const submitMorning = async (submitted: MorningItem[]) => {
     const newItems: DailyReportItem[] = submitted.map(it => ({
-      text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress,
+      text: it.text, status: 'pending' as DailyItemStatus, progress: it.progress, memo: it.memo || undefined,
     }));
     if (isEditingMorning && myMorning) {
       await updateDoc(doc(salesDb, 'daily_reports', myMorning.id), {
@@ -864,6 +908,34 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
     if (myMorning && !isEditingMorning) setIsEditingMorning(true);
     setPendingTaskTitles(prev => [...prev, task.title]);
     setMyTasks(prev => prev.filter(t => t.id !== task.id)); // 인박스에서 즉시 제거
+  };
+
+  /* 회의 실행항목 로드 */
+  const loadMeetingActions = useCallback(async () => {
+    if (loadingMeetings) return;
+    setLoadingMeetings(true);
+    try {
+      const snap = await getDocs(query(collection(salesDb, 'meetings'), orderBy('date', 'desc')));
+      const items: MeetingActionSource[] = [];
+      snap.docs.slice(0, 10).forEach(d => {
+        const m = d.data() as { title?: string; date?: string; actionItems?: Array<{ id: string; text: string; assignee?: string; done?: boolean }> };
+        (m.actionItems ?? []).filter(a => !a.done).forEach(a => {
+          items.push({ id: `${d.id}_${a.id}`, text: a.text, meetingTitle: m.title ?? '회의', meetingDate: m.date ?? '', assignee: a.assignee });
+        });
+      });
+      setMeetingActions(items);
+    } finally {
+      setLoadingMeetings(false);
+    }
+  }, [loadingMeetings]);
+
+  /* 회의 실행항목 → 오전 보고 폼에 추가 */
+  const addMeetingItemToMorning = (item: MeetingActionSource) => {
+    if (!isToday) { toast.error('오늘 날짜에서만 추가할 수 있습니다'); return; }
+    if (myMorning?.confirmedAt) { toast.error('관리자가 확인한 보고서는 수정할 수 없습니다'); return; }
+    if (myMorning && !isEditingMorning) setIsEditingMorning(true);
+    setPendingTaskTitles(prev => [...prev, item.text]);
+    setMeetingActions(prev => prev.filter(a => a.id !== item.id));
   };
 
   /* 업무 반려 */
@@ -1141,19 +1213,64 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
           <DndContext
             sensors={dndSensors}
             onDragStart={({ active }) => {
-              const id = (active.id as string).replace(/^task-/, '');
-              setDraggingTask(myTasks.find(t => t.id === id) ?? null);
+              const sid = active.id as string;
+              if (sid.startsWith('task-')) {
+                setDraggingTask(myTasks.find(t => t.id === sid.replace('task-', '')) ?? null);
+              } else if (sid.startsWith('meeting-')) {
+                setDraggingMeetingItem(meetingActions.find(a => a.id === sid.replace('meeting-', '')) ?? null);
+              }
             }}
             onDragEnd={({ active, over }) => {
-              if ((active.id as string).startsWith('task-') && over?.id === 'morning-form') {
-                const id = (active.id as string).replace(/^task-/, '');
-                const task = myTasks.find(t => t.id === id);
+              const sid = active.id as string;
+              if (sid.startsWith('task-') && over?.id === 'morning-form') {
+                const task = myTasks.find(t => t.id === sid.replace('task-', ''));
                 if (task) addTaskToMorning(task);
+              } else if (sid.startsWith('meeting-') && over?.id === 'morning-form') {
+                const item = meetingActions.find(a => a.id === sid.replace('meeting-', ''));
+                if (item) addMeetingItemToMorning(item);
               }
               setDraggingTask(null);
+              setDraggingMeetingItem(null);
             }}
-            onDragCancel={() => setDraggingTask(null)}
+            onDragCancel={() => { setDraggingTask(null); setDraggingMeetingItem(null); }}
           >
+            {/* 회의 실행항목 패널 */}
+            {isToday && (
+              <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    const next = !showMeetingPanel;
+                    setShowMeetingPanel(next);
+                    if (next && meetingActions.length === 0) loadMeetingActions();
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+                >
+                  <FileText size={13} className="text-stone-500 dark:text-stone-400" />
+                  <span className="text-xs font-black text-stone-800 dark:text-stone-200">회의 실행항목</span>
+                  {meetingActions.length > 0 && (
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">{meetingActions.length}</span>
+                  )}
+                  <span className="ml-auto text-[10px] text-stone-400">보고서로 드래그하거나 추가 버튼을 누르세요</span>
+                  <ChevronDown size={13} className={`text-stone-400 transition-transform ${showMeetingPanel ? 'rotate-180' : ''}`} />
+                </button>
+                {showMeetingPanel && (
+                  <div className="border-t border-stone-100 dark:border-stone-800">
+                    {loadingMeetings ? (
+                      <div className="px-4 py-6 text-center text-xs text-stone-400">불러오는 중...</div>
+                    ) : meetingActions.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-xs text-stone-400">미완료 실행항목이 없습니다</div>
+                    ) : (
+                      <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                        {meetingActions.map(item => (
+                          <DraggableMeetingItem key={item.id} item={item} onAdd={addMeetingItemToMorning} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 업무 인박스 */}
             {myTasks.length > 0 && (
               <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
@@ -1188,7 +1305,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
             {/* 오전 보고 */}
             {(!myMorning || isEditingMorning) ? (
               isToday ? (
-                <DroppableMorningZone active={draggingTask !== null}>
+                <DroppableMorningZone active={draggingTask !== null || draggingMeetingItem !== null}>
                   <MorningForm
                     key={isEditingMorning ? 'edit' : 'new'}
                     onSubmit={submitMorning}
@@ -1245,15 +1362,17 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
               </>
             )}
 
-            {/* 드래그 오버레이 — 드래그 중인 업무 카드 미리보기 */}
+            {/* 드래그 오버레이 — 드래그 중인 카드 미리보기 */}
             <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
-              {draggingTask && (
+              {(draggingTask || draggingMeetingItem) && (
                 <div className="bg-white dark:bg-stone-900 border-2 border-blue-400 rounded-xl shadow-2xl px-4 py-3 max-w-xs rotate-1 opacity-95">
                   <div className="flex items-center gap-2">
                     <GripVertical size={13} className="text-blue-400 shrink-0" />
-                    <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{draggingTask.title}</p>
+                    <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">
+                      {draggingTask ? draggingTask.title : draggingMeetingItem?.text}
+                    </p>
                   </div>
-                  {draggingTask.dueDate && (
+                  {draggingTask?.dueDate && (
                     <p className="text-[10px] text-red-400 mt-1 pl-5">~{draggingTask.dueDate}</p>
                   )}
                   <p className="text-[10px] text-blue-500 font-bold mt-1 pl-5">→ 보고서에 추가</p>

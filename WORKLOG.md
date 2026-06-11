@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-06-12 (1) — Claude Code
+
+### DailyReportView — 회의 실행항목 → 업무보고 DnD 연동 + 항목별 메모
+
+- `DailyReportItem`에 `memo?: string` 필드 추가 (퇴근 보고 시 출근 메모 컨텍스트로 표시)
+- 오전 보고 각 항목 아래 "메모 — 어떻게 진행할지" 입력칸 추가
+- 회의 실행항목 패널: 최근 회의록 `actionItems` (미완료) 불러오기, `DraggableMeetingItem` → `DroppableMorningZone` DnD 추가
+- 기존 task inbox DnD 인프라 확장 — `draggingMeetingItem` state, `onDragStart/End` 분기 처리
+- 빌드 성공
+
+---
+
+## 2026-06-11 (8) — Claude Code
+
+### WorkMapView — B안 프로젝트 보드 모드 + 주간 현황 탭 완성
+
+- `viewMode` 토글(업무/칸반·맵): 프로젝트 선택 시 헤더에 버튼 표시
+- `board` 모드: `ProjectDetail`이 우측 패널 전체 점유 → 중복 헤더·스크롤 중첩 해소
+- `CalendarTab` 제거 → `ProjectWeekTab`(프로젝트 멤버×요일 주간 매트릭스)로 교체
+- 깨진 `monthReports`, `calMonth`, `activeTab === 'detail'` 참조 모두 제거
+- 빌드 성공 + 푸시 완료 (commit: 45bcf11)
+
+---
+
 ## 2026-06-11 (7) — Claude Code
 
 ### DailyReportView — 주간 현황 탭 구현 완료
