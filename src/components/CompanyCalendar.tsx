@@ -13,11 +13,7 @@ const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
 const FRANCHISE_PHASES: Record<string, { emoji: string; label: string }> = {
-  open:         { emoji: '🏪', label: '오픈일' },
-  preTraining:  { emoji: '📚', label: '사전교육' },
-  training:     { emoji: '🎓', label: '본교육' },
-  equipmentIn:  { emoji: '🍳', label: '화구류입고' },
-  task:         { emoji: '📋', label: '공정 업무' },
+  task: { emoji: '📋', label: '공정 업무' },
 };
 
 const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
@@ -418,11 +414,7 @@ export function CompanyCalendar({ currentUser }: Props) {
   const eventsForDate = (ymd: string, view: typeof activeTab = activeTab) => {
     if (view === 'open') {
       return franchiseEvents.filter(e => {
-        const phaseKey = e.id.startsWith('fop_') ? 'open'
-          : e.id.startsWith('fpt_') ? 'preTraining'
-          : e.id.startsWith('ftr_') ? 'training'
-          : e.id.startsWith('feq_') ? 'equipmentIn'
-          : 'task';
+        const phaseKey = 'task';
         return openFilters.has(phaseKey) && e.startDate <= ymd && e.endDate >= ymd;
       });
     }
