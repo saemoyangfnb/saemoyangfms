@@ -20,7 +20,7 @@ export type SidebarSection =
   | 'okr' | 'projects'
   | 'daily' | 'calendar' | 'notice' | 'meetings' | 'reports' | 'employees' | 'sop'
   // 브랜드별
-  | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'marketing'
+  | 'cost' | 'sales' | 'review' | 'franchise' | 'stores' | 'storeforms' | 'marketing'
   // 관리자 도구
   | 'database' | 'history' | 'admin'
   // (레거시, UI에 미노출)
@@ -62,7 +62,7 @@ export const PERMISSION_SECTIONS = [
   'mvc', 'brand_history', 'company_profile',
   'okr', 'projects',
   'daily', 'calendar', 'notice', 'meetings', 'reports', 'employees', 'sop',
-  'cost', 'sales', 'franchise', 'stores', 'marketing', 'review',
+  'cost', 'sales', 'franchise', 'stores', 'storeforms', 'marketing', 'review',
   'database', 'history', 'admin',
 ] as const;
 export type PermissionSection = typeof PERMISSION_SECTIONS[number];
@@ -86,6 +86,7 @@ export const SECTION_LABELS: Record<PermissionSection, string> = {
   sales: '매출 현황',
   franchise: '가맹 일정',
   stores: '매장 관리',
+  storeforms: '매장 폼 관리',
   marketing: '마케팅',
   review: '가맹점 관제',
   database: '식재료 데이터베이스',
@@ -461,6 +462,40 @@ export interface Store {
   registeredAt: string;    // CRM 등록일
   scheduleId?: string;     // franchise_schedules.id 참조 (수동 매핑 후)
   importedAt: string;      // 최종 엑셀 임포트 일시
+}
+
+// ==========================================
+// 매장 폼 관리 (salesDb: store_forms, store_form_entries)
+// ==========================================
+
+export interface StoreFormField {
+  id: string;
+  label: string;
+  type: 'text' | 'date' | 'checkbox' | 'select';
+  options?: string[];
+}
+
+export interface StoreForm {
+  id: string;
+  title: string;
+  description?: string;
+  fields: StoreFormField[];
+  createdAt: string;
+  createdBy: string;
+  isArchived?: boolean;
+}
+
+export interface StoreFormEntry {
+  id: string;
+  formId: string;
+  storeId: string;
+  storeName: string;
+  storeRegion: string;
+  data: Record<string, string | boolean>;
+  isDone: boolean;
+  completedAt?: string;
+  updatedAt: string;
+  updatedBy?: string;
 }
 
 // ==========================================

@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-06-11 (4) — Claude Code
+
+### 완료 — 매장 폼 관리 (StoreMindmapView) 신규 구현
+
+- `types.ts`: `StoreFormField`, `StoreForm`, `StoreFormEntry` 인터페이스 추가 + `storeforms` 섹션 등록
+- `StoreMindmapView.tsx` 신규: 왼쪽 폼 목록 + 오른쪽 맵/목록 양방향 탭
+  - **마인드맵 탭**: 권역 노드 클릭 → 목록 탭으로 전환 + 해당 권역 하이라이트·스크롤
+  - **목록 탭**: 검색(매장명/지역/대표자) + 권역별 아코디언 + 완료율 진행바
+  - 폼 에디터(기존 폼에서 항목 불러오기 지원) + 매장별 입력 모달
+- `firestore.rules`: `store_forms`(admin write), `store_form_entries`(인증 read/write) 추가
+- **⚠️ Firestore rules 배포 필요**: `npx firebase deploy --only firestore:rules`
+
+### 주의
+- 폼 생성/삭제는 admin만 가능, 항목 입력은 승인 직원 전체 가능
+- 매장 데이터는 기존 `salesDb.stores` 컬렉션 사용 (새 데이터 없음)
+
+---
+
 ## 2026-06-11 (3) — Claude Code
 
 ### 완료 — 캘린더 개선: 일일/주간보고 표시 + 공사일정 제거 + 셀 확대
