@@ -33,12 +33,14 @@ const scrub = (o: Record<string, unknown>): Record<string, unknown> =>
 interface MindMapNode {
   id: string; text: string; parentId: string | null; order: number;
   reportId?: string;
-  sopId?: string;       // sop_project_templates 노드 참조
-  dueDate?: string;     // YYYY-MM-DD
-  duration?: number;    // 소요 일수
-  assigneeId?: string;  // employee.id
+  sopId?: string;
+  dueDate?: string;
+  duration?: number;
+  assigneeId?: string;
   department?: string;
   status?: 'todo' | 'in_progress' | 'done';
+  memo?: string;
+  linkedNodeIds?: string[];
 }
 
 function nodeWarnLevel(node: MindMapNode): 'done' | 'overdue' | 'soon' | 'ok' | null {
@@ -1309,6 +1311,8 @@ function MindMapNodeKanban({ projectId, employees }: {
       if (n.assigneeId) o.assigneeId = n.assigneeId;
       if (n.department) o.department = n.department;
       if (n.status) o.status = n.status;
+      if (n.memo) o.memo = n.memo;
+      if (n.linkedNodeIds?.length) o.linkedNodeIds = n.linkedNodeIds;
       return o;
     });
     setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() }).catch(() => {});
@@ -1421,6 +1425,8 @@ function MindMapNodeTable({ projectId, projectTitle, employees }: {
       if (n.assigneeId) o.assigneeId = n.assigneeId;
       if (n.department) o.department = n.department;
       if (n.status) o.status = n.status;
+      if (n.memo) o.memo = n.memo;
+      if (n.linkedNodeIds?.length) o.linkedNodeIds = n.linkedNodeIds;
       return o;
     });
     setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() }).catch(() => {});
@@ -1636,7 +1642,7 @@ function MindMapTreeNode({
   node, nodes, depth, editingId, selectedId, linkPickerId,
   docs, employees, onSelect, onStartEdit, onUpdateText, onStopEdit,
   onAddSibling, onAddChild, onDelete,
-  onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker,
+  onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker, onUpdateNode,
 }: {
   node: MindMapNode;
   nodes: MindMapNode[];
@@ -1657,6 +1663,7 @@ function MindMapTreeNode({
   onUnlinkReport: (nodeId: string) => void;
   onOpenDoc: (r: Report) => void;
   onToggleLinkPicker: (id: string | null) => void;
+  onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
 }) {
   const children = nodes.filter(n => n.parentId === node.id).sort((a, b) => a.order - b.order);
   const isEditing = editingId === node.id;
@@ -1665,8 +1672,25 @@ function MindMapTreeNode({
   const linkedReport = node.reportId ? docs.find(d => d.id === node.reportId) : undefined;
   const isLinkPickerOpen = linkPickerId === node.id;
   const inputRef = useRef<HTMLInputElement>(null);
+  const [linkSearch, setLinkSearch] = useState('');
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
   const warn = nodeWarnLevel(node);
   const assigneeName = node.assigneeId ? (employees.find(e => e.id === node.assigneeId)?.name ?? null) : null;
+  const linkedNodes = (node.linkedNodeIds ?? []).map(id => nodes.find(n => n.id === id)).filter(Boolean) as MindMapNode[];
+  const addLink = (targetId: string) => {
+    if (!node.linkedNodeIds?.includes(targetId)) {
+      onUpdateNode(node.id, { linkedNodeIds: [...(node.linkedNodeIds ?? []), targetId] });
+    }
+    setLinkSearch(''); setShowLinkPicker(false);
+  };
+  const removeLink = (targetId: string) => {
+    onUpdateNode(node.id, { linkedNodeIds: (node.linkedNodeIds ?? []).filter(id => id !== targetId) });
+  };
+  const linkCandidates = nodes.filter(n =>
+    n.id !== node.id && n.parentId !== null &&
+    !(node.linkedNodeIds ?? []).includes(n.id) &&
+    (n.text ?? '').toLowerCase().includes(linkSearch.toLowerCase())
+  );
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -1781,6 +1805,122 @@ function MindMapTreeNode({
             )}
           </div>
         )}
+
+        {/* 노드 팝업 — 선택 시 노드 바로 아래 표시 */}
+        {isSelected && !isEditing && !isRoot && (
+          <div
+            className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded shadow-2xl"
+            style={{ minWidth: 240 }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 상태 */}
+            <div className="flex gap-1 p-2 border-b border-stone-100 dark:border-stone-800">
+              {(['todo', 'in_progress', 'done'] as NodeStatusKey[]).map(s => (
+                <button key={s}
+                  onClick={() => onUpdateNode(node.id, { status: (node.status ?? 'todo') === s && s === 'todo' ? undefined : s })}
+                  className={`flex-1 py-1 text-[10px] font-bold rounded border transition-colors ${
+                    (node.status ?? 'todo') === s
+                      ? s === 'done' ? 'bg-emerald-500 text-white border-emerald-500'
+                        : s === 'in_progress' ? 'bg-amber-400 text-white border-amber-400'
+                        : 'bg-stone-600 text-white border-stone-600'
+                      : 'border-stone-200 dark:border-stone-700 text-stone-400 hover:border-stone-400'
+                  }`}>
+                  {s === 'todo' ? '예정' : s === 'in_progress' ? '진행중' : '완료'}
+                </button>
+              ))}
+            </div>
+
+            {/* 담당자 + 마감일 */}
+            <div className="p-2 space-y-1.5 border-b border-stone-100 dark:border-stone-800">
+              {employees.length > 0 && (
+                <select
+                  value={node.assigneeId ?? ''}
+                  onChange={e => onUpdateNode(node.id, { assigneeId: e.target.value || undefined })}
+                  className="w-full px-2 py-1 text-[11px] border border-stone-200 dark:border-stone-700 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+                >
+                  <option value="">담당자 없음</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              )}
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={node.dueDate ?? ''}
+                  onChange={e => onUpdateNode(node.id, { dueDate: e.target.value || undefined })}
+                  className="flex-1 px-2 py-1 text-[11px] border border-stone-200 dark:border-stone-700 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
+                />
+                {node.dueDate && (
+                  <button onClick={() => onUpdateNode(node.id, { dueDate: undefined })}
+                    className="text-stone-300 hover:text-red-400 transition-colors shrink-0">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 메모 */}
+            <div className="p-2 border-b border-stone-100 dark:border-stone-800">
+              <textarea
+                value={node.memo ?? ''}
+                onChange={e => onUpdateNode(node.id, { memo: e.target.value || undefined })}
+                placeholder="메모..."
+                rows={2}
+                className="w-full px-2 py-1 text-[11px] border border-stone-200 dark:border-stone-700 rounded bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 outline-none focus:border-blue-400 resize-none placeholder-stone-300"
+              />
+            </div>
+
+            {/* 노드 연결 */}
+            <div className="p-2">
+              <div className="text-[10px] font-bold text-stone-400 mb-1.5 flex items-center gap-1">
+                <Link size={9} /> 연결된 노드
+              </div>
+              {linkedNodes.length === 0 && (
+                <p className="text-[10px] text-stone-300 dark:text-stone-700 mb-1.5">연결 없음</p>
+              )}
+              {linkedNodes.map(ln => (
+                <div key={ln.id} className="flex items-center gap-1 mb-1 group">
+                  <span className="text-[10px] flex-1 truncate text-stone-600 dark:text-stone-400 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+                    {ln.text || '(이름 없음)'}
+                  </span>
+                  <button onClick={() => removeLink(ln.id)}
+                    className="text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+              {/* 연결 추가 */}
+              {showLinkPicker ? (
+                <div>
+                  <input
+                    value={linkSearch}
+                    onChange={e => setLinkSearch(e.target.value)}
+                    placeholder="노드 검색..."
+                    autoFocus
+                    className="w-full px-2 py-1 text-[11px] border border-stone-300 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400 mb-1"
+                  />
+                  <div className="max-h-28 overflow-y-auto">
+                    {linkCandidates.slice(0, 12).map(n => (
+                      <button key={n.id} onClick={() => addLink(n.id)}
+                        className="w-full text-left px-2 py-1 text-[11px] hover:bg-stone-50 dark:hover:bg-stone-800 rounded truncate text-stone-700 dark:text-stone-300">
+                        {n.text || '(이름 없음)'}
+                      </button>
+                    ))}
+                    {linkCandidates.length === 0 && (
+                      <p className="text-[10px] text-stone-300 dark:text-stone-700 px-2 py-1">없음</p>
+                    )}
+                  </div>
+                  <button onClick={() => { setShowLinkPicker(false); setLinkSearch(''); }}
+                    className="mt-1 text-[10px] text-stone-400 hover:text-stone-600">취소</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowLinkPicker(true)}
+                  className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 mt-0.5">
+                  <Plus size={10} /> 연결 추가
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 하위 가지 */}
@@ -1811,6 +1951,7 @@ function MindMapTreeNode({
                   onAddSibling={onAddSibling} onAddChild={onAddChild} onDelete={onDelete}
                   onLinkReport={onLinkReport} onUnlinkReport={onUnlinkReport}
                   onOpenDoc={onOpenDoc} onToggleLinkPicker={onToggleLinkPicker}
+                  onUpdateNode={onUpdateNode}
                 />
               </div>
               );
@@ -2147,87 +2288,6 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
         </div>
       )}
 
-      {/* 선택된 노드 상세 패널 */}
-      {selectedNode && selectedNode.parentId !== null && (
-        <div className="no-print mb-3 px-3 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-sm">
-          <div className="flex items-center gap-1 mb-2">
-            <SlidersHorizontal size={11} className="text-blue-500 dark:text-blue-400" />
-            <span className="text-[11px] font-bold text-blue-700 dark:text-blue-300 truncate max-w-[200px]">
-              {selectedNode.text || '(제목 없음)'}
-            </span>
-            <button onClick={() => setSelectedId(null)} className="ml-auto text-blue-300 hover:text-blue-600 dark:hover:text-blue-200">
-              <X size={12} />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* 상태 */}
-            <div className="flex items-center gap-1">
-              {(['todo', 'in_progress', 'done'] as const).map(s => (
-                <button key={s}
-                  onClick={() => handleUpdateNode(selectedNode.id, { status: selectedNode.status === s ? undefined : s })}
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full border transition-colors ${
-                    selectedNode.status === s
-                      ? s === 'done' ? 'bg-green-500 text-white border-green-500'
-                        : s === 'in_progress' ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-stone-400 text-white border-stone-400'
-                      : 'bg-white dark:bg-stone-900 text-stone-400 border-stone-200 dark:border-stone-700 hover:border-stone-400'
-                  }`}>
-                  {s === 'todo' ? '예정' : s === 'in_progress' ? '진행중' : '완료'}
-                </button>
-              ))}
-            </div>
-            <div className="w-px h-4 bg-stone-200 dark:bg-stone-700" />
-            {/* 마감일 */}
-            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-              <Clock size={10} />마감일
-              <input
-                type="date"
-                value={selectedNode.dueDate ?? ''}
-                onChange={e => handleUpdateNode(selectedNode.id, { dueDate: e.target.value || undefined })}
-                className="ml-1 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
-              />
-            </label>
-            {/* 소요 일수 */}
-            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-              <span>소요</span>
-              <input
-                type="number"
-                min={1}
-                max={999}
-                value={selectedNode.duration ?? ''}
-                onChange={e => handleUpdateNode(selectedNode.id, { duration: e.target.value ? parseInt(e.target.value) : undefined })}
-                className="w-12 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
-                placeholder="일수"
-              />
-              <span>일</span>
-            </label>
-            {/* 담당자 */}
-            {employees.length > 0 && (
-              <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-                <Users size={10} />
-                <select
-                  value={selectedNode.assigneeId ?? ''}
-                  onChange={e => handleUpdateNode(selectedNode.id, { assigneeId: e.target.value || undefined })}
-                  className="px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
-                >
-                  <option value="">담당자</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
-              </label>
-            )}
-            {/* 부서 */}
-            <label className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-              <input
-                type="text"
-                value={selectedNode.department ?? ''}
-                onChange={e => handleUpdateNode(selectedNode.id, { department: e.target.value || undefined })}
-                placeholder="부서"
-                className="w-20 px-1.5 py-0.5 text-[10px] border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-blue-400"
-              />
-            </label>
-          </div>
-        </div>
-      )}
 
       {/* 마인드맵 트리 */}
       <div className="overflow-x-auto pb-4">
@@ -2248,6 +2308,7 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
               onUnlinkReport={handleUnlinkReport}
               onOpenDoc={onOpenDoc}
               onToggleLinkPicker={setLinkPickerId}
+              onUpdateNode={handleUpdateNode}
             />
           </div>
         )}
