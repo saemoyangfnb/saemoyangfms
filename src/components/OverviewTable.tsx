@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Menu, Ingredient, Region, MenuCategory, RecipeItem } from '../types';
 import { calculateTotalCost, formatCurrency, formatPercent, checkMenuAlert, hasMissingIngredients } from '../utils';
-import { AlertCircle, CheckCircle2, EyeOff, TrendingUp, TrendingDown, ChefHat, LayoutGrid, Table as TableIcon, ChevronDown, ChevronUp, Plus, Trash2, Search, X } from 'lucide-react';
+import {
+  AlertCircle, EyeOff, TrendingUp, TrendingDown, ChefHat,
+  LayoutGrid, Table as TableIcon, ChevronDown, ChevronUp,
+  Plus, Trash2, Search, X, Copy, BookOpen,
+} from 'lucide-react';
 
 interface Props {
   menus: Menu[];
@@ -18,10 +22,14 @@ interface Props {
   onNavigateToTab: (tab: string) => void;
   onToggleColumn: (column: keyof Props['visibleColumns']) => void;
   onSaveRecipe?: (menuId: string, recipe: RecipeItem[], notes: string) => void;
+  onDuplicateMenu?: (menuId: string) => void;
 }
 
-// 💡 [신규] 카드 내부에서 바로 동작하는 인라인 레시피 에디터 컴포넌트
-const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { menu: Menu, ingredients: Ingredient[], allMenus: Menu[], onSave: (id: string, recipe: RecipeItem[], notes: string) => void, onClose: () => void }) => {
+const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: {
+  menu: Menu; ingredients: Ingredient[]; allMenus: Menu[];
+  onSave: (id: string, recipe: RecipeItem[], notes: string) => void;
+  onClose: () => void;
+}) => {
   const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe);
   const [activeTab, setActiveTab] = useState<'ingredient' | 'menu' | 'custom'>('ingredient');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,13 +67,15 @@ const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { 
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2">
+    <div>
       <div className="flex items-center justify-between mb-3">
-         <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">레시피 상세 및 수정</h4>
-         <span className="text-xs font-bold text-rose-500 dark:text-rose-400">총 원가: {formatCurrency(calculateTotalCost(recipe, ingredients, allMenus))}</span>
+        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">레시피 상세 및 수정</h4>
+        <span className="text-xs font-bold text-rose-500 dark:text-rose-400">총 원가: {formatCurrency(calculateTotalCost(recipe, ingredients, allMenus))}</span>
       </div>
       <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-1">
-        {recipe.length === 0 ? <div className="text-xs text-center py-4 text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">등록된 레시피 항목이 없습니다.</div> : (
+        {recipe.length === 0 ? (
+          <div className="text-xs text-center py-4 text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">등록된 레시피 항목이 없습니다.</div>
+        ) : (
           recipe.map((item, index) => {
             let name = ''; let unitPrice = 0; let unit = ''; let isMissing = false;
             if (item.type === 'menu') {
@@ -83,7 +93,7 @@ const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { 
               <div key={index} className="flex flex-col gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700/50 text-xs">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-slate-700 dark:text-slate-300 truncate pr-2">{isMissing ? `(누락) ${name}` : name}</span>
-                  <button onClick={() => setRecipe(recipe.filter((_, i) => i !== index))} className="text-slate-400 hover:text-rose-500"><Trash2 size={12}/></button>
+                  <button onClick={() => setRecipe(recipe.filter((_, i) => i !== index))} className="text-slate-400 hover:text-rose-500"><Trash2 size={12} /></button>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-400 w-10 truncate">{formatCurrency(unitPrice)}</span>
@@ -108,7 +118,7 @@ const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { 
           {activeTab !== 'custom' ? (
             <div className="relative">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder={selectedItemName || "항목 검색..."} value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} className="w-full pl-6 pr-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500" />
+              <input type="text" placeholder={selectedItemName || '항목 검색...'} value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setIsDropdownOpen(true); }} onFocus={() => setIsDropdownOpen(true)} className="w-full pl-6 pr-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500" />
               {isDropdownOpen && (
                 <div className="absolute z-[60] left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-lg max-h-40 overflow-y-auto">
                   {filteredItems.map(item => <button key={item.id} onClick={() => { setSelectedId(item.id); setIsDropdownOpen(false); setSearchQuery(''); }} className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 truncate">{item.name}</button>)}
@@ -117,77 +127,135 @@ const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { 
               )}
             </div>
           ) : (
-            <div className="flex gap-1.5"><input type="text" placeholder="항목명" value={customName} onChange={e => setCustomName(e.target.value)} className="flex-1 w-0 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" /><input type="number" placeholder="단가" value={customCost || ''} onChange={e => setCustomCost(parseFloat(e.target.value))} className="w-16 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" /></div>
+            <div className="flex gap-1.5">
+              <input type="text" placeholder="항목명" value={customName} onChange={e => setCustomName(e.target.value)} className="flex-1 w-0 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" />
+              <input type="number" placeholder="단가" value={customCost || ''} onChange={e => setCustomCost(parseFloat(e.target.value))} className="w-16 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" />
+            </div>
           )}
           <div className="flex gap-1.5">
             <input type="number" min="0.1" step="0.1" placeholder="수량" value={quantity || ''} onChange={e => setQuantity(parseFloat(e.target.value))} className="flex-1 w-0 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" />
             <input type="number" min="1" max="100" step="1" placeholder="수율" value={yieldRate || ''} onChange={e => setYieldRate(parseFloat(e.target.value))} className="flex-1 w-0 px-2 py-1 text-xs border border-slate-200 dark:border-slate-700 rounded bg-slate-50 dark:bg-slate-800 focus:outline-none focus:border-blue-500" />
-            <button onClick={handleAdd} disabled={activeTab === 'custom' ? !customName.trim() : !selectedId} className="px-2 bg-slate-800 dark:bg-blue-600 text-white rounded text-xs font-bold disabled:opacity-50"><Plus size={14}/></button>
+            <button onClick={handleAdd} disabled={activeTab === 'custom' ? !customName.trim() : !selectedId} className="px-2 bg-slate-800 dark:bg-blue-600 text-white rounded text-xs font-bold disabled:opacity-50"><Plus size={14} /></button>
           </div>
         </div>
       </div>
       <div className="flex gap-2 mt-3">
-         <button onClick={onClose} className="flex-1 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-md transition-colors">닫기</button>
-         <button onClick={() => onSave(menu.id, recipe, menu.notes || '')} className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">변경사항 저장</button>
+        <button onClick={onClose} className="flex-1 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-md transition-colors">닫기</button>
+        <button onClick={() => onSave(menu.id, recipe, menu.notes || '')} className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">변경사항 저장</button>
       </div>
     </div>
   );
 };
 
-export const OverviewTable: React.FC<Props> = ({ 
-  menus, 
+export const OverviewTable: React.FC<Props> = ({
+  menus,
   menuCategories,
-  ingredients, 
-  isAdmin, 
+  ingredients,
+  isAdmin,
   visibleColumns,
   onAcknowledgeAlert,
   onNavigateToTab,
   onToggleColumn,
-  onSaveRecipe
+  onSaveRecipe,
+  onDuplicateMenu,
 }) => {
   const regions: Region[] = ['지방권', '광역권', '수도권'];
-  
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
 
-  // Group menus by category
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
+  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
+  const [recipeModalMenuId, setRecipeModalMenuId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  const filteredMenus = menus.filter(m => {
+    const matchesSearch = !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCat = categoryFilter === 'all' || m.categoryId === categoryFilter || (categoryFilter === '__none' && !m.categoryId);
+    return matchesSearch && matchesCat;
+  });
+
   const groupedMenus = menuCategories.map(category => ({
     category,
-    menus: menus.filter(m => m.categoryId === category.id).sort((a, b) => (a.order || 0) - (b.order || 0))
+    menus: filteredMenus.filter(m => m.categoryId === category.id).sort((a, b) => (a.order || 0) - (b.order || 0)),
   }));
-
-  // Add uncategorized menus
-  const uncategorizedMenus = menus.filter(m => !m.categoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const uncategorizedMenus = filteredMenus.filter(m => !m.categoryId).sort((a, b) => (a.order || 0) - (b.order || 0));
   if (uncategorizedMenus.length > 0) {
-    groupedMenus.push({
-      category: { id: '', name: '미분류', order: 999, isVisible: true },
-      menus: uncategorizedMenus
-    });
+    groupedMenus.push({ category: { id: '__none', name: '미분류', order: 999, isVisible: true }, menus: uncategorizedMenus });
   }
 
+  const visibleGroupCount = groupedMenus.filter(g => (g.category.isVisible || isAdmin) && g.menus.length > 0).length;
+
   return (
-    <div className="p-4 sm:p-6 bg-stone-100 dark:bg-stone-950 space-y-8">
-      
-      {/* 상단 컨트롤 패널 (뷰 토글 및 지역 선택) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div className="flex bg-stone-200 dark:bg-stone-800 p-1 rounded-sm border border-stone-300 dark:border-stone-700">
-          <button 
-            onClick={() => setViewMode('card')} 
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'card' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
+    <div className="p-4 sm:p-6 bg-stone-100 dark:bg-stone-950 space-y-6">
+
+      {/* 툴바 */}
+      <div className="flex flex-col gap-3">
+        {/* 뷰 토글 + 검색 */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex bg-stone-200 dark:bg-stone-800 p-1 rounded-sm border border-stone-300 dark:border-stone-700 shrink-0">
+            <button
+              onClick={() => setViewMode('card')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'card' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
+            >
+              <LayoutGrid size={16} /> 카드형
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'table' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
+            >
+              <TableIcon size={16} /> 표 보기
+            </button>
+          </div>
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="메뉴 검색..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-sm border border-stone-300 dark:border-stone-700 rounded-sm bg-white dark:bg-stone-900 text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-600 dark:focus:border-stone-400"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 카테고리 필터 탭 */}
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setCategoryFilter('all')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${categoryFilter === 'all' ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-stone-700'}`}
           >
-            <LayoutGrid size={16} /> 카드형 메뉴판
+            전체 {menus.filter(m => !m.isArchived).length > 0 && <span className="opacity-60">{menus.filter(m => !m.isArchived).length}</span>}
           </button>
-          <button 
-            onClick={() => setViewMode('table')} 
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-sm text-sm font-bold transition-all ${viewMode === 'table' ? 'bg-stone-50 dark:bg-stone-700 text-stone-900 dark:text-white shadow-sm border border-stone-300 dark:border-stone-600' : 'text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'}`}
-          >
-            <TableIcon size={16} /> 전체 표 보기
-          </button>
+          {menuCategories.filter(c => c.isVisible || isAdmin).map(c => {
+            const count = menus.filter(m => m.categoryId === c.id).length;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setCategoryFilter(c.id)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-sm transition-colors ${categoryFilter === c.id ? 'bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900' : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-300 dark:hover:bg-stone-700'}`}
+              >
+                {c.name} {count > 0 && <span className="opacity-60">{count}</span>}
+                {!c.isVisible && isAdmin && <span className="ml-1 opacity-50">(숨김)</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 뷰어 영역 */}
-      {viewMode === 'card' ? (
+      {/* 검색 결과 없음 */}
+      {searchQuery && visibleGroupCount === 0 && (
+        <div className="py-12 text-center text-stone-400">
+          <Search size={32} className="mx-auto mb-3 opacity-40" />
+          <p className="font-medium">'{searchQuery}'에 해당하는 메뉴가 없습니다.</p>
+        </div>
+      )}
+
+      {/* 카드 뷰 */}
+      {viewMode === 'card' && (
         <div className="space-y-10">
           {groupedMenus.map(group => {
             if (!group.category.isVisible && !isAdmin) return null;
@@ -210,18 +278,13 @@ export const OverviewTable: React.FC<Props> = ({
                     const missing = hasMissingIngredients(menu.recipe, ingredients, menus);
 
                     return (
-                      <div 
-                        key={menu.id} 
-                        className={`group relative flex flex-col bg-[#FDFBF7] dark:bg-stone-900 rounded-sm p-6 border transition-all hover:-translate-y-1 hover:shadow-md ${
-                          hasAlert 
-                            ? 'border-rose-800 dark:border-rose-600' 
-                            : 'border-stone-300 dark:border-stone-700 hover:border-stone-800 dark:hover:border-stone-400'
-                        }`}
+                      <div
+                        key={menu.id}
+                        className={`group relative flex flex-col bg-[#FDFBF7] dark:bg-stone-900 rounded-sm p-6 border transition-all hover:-translate-y-1 hover:shadow-md ${hasAlert ? 'border-rose-800 dark:border-rose-600' : 'border-stone-300 dark:border-stone-700 hover:border-stone-800 dark:hover:border-stone-400'}`}
                       >
-                        {/* 상단 알림 뱃지 */}
                         {hasAlert && (
                           <div className="absolute -top-3 -right-3">
-                            <button 
+                            <button
                               onClick={() => onNavigateToTab('변동사항')}
                               className="flex items-center gap-1 bg-rose-800 dark:bg-rose-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-sm shadow-md animate-bounce hover:bg-rose-900 transition-colors"
                             >
@@ -234,13 +297,10 @@ export const OverviewTable: React.FC<Props> = ({
                           <div className="absolute -top-3 -left-3 bg-stone-700 text-white text-[10px] font-bold px-2 py-1 rounded-sm shadow">숨김</div>
                         )}
 
-                        {/* 메뉴명 영역 */}
                         <div className="mb-5 flex-1">
                           <h4 className="text-xl font-black text-stone-900 dark:text-white leading-tight pr-4 tracking-tight">{menu.name}</h4>
                         </div>
 
-                        
-                        {/* 식재료 원가 (공통) */}
                         <div className="flex justify-between items-center bg-white dark:bg-stone-800/50 px-4 py-3 rounded-sm border border-stone-200 dark:border-stone-700 mb-6">
                           <span className="text-[11px] font-bold text-stone-500 dark:text-stone-400">식재료 원가</span>
                           <span className="text-base font-bold text-stone-700 dark:text-stone-200 tracking-tight">
@@ -248,19 +308,17 @@ export const OverviewTable: React.FC<Props> = ({
                           </span>
                         </div>
 
-                        
-                        {/* 💡 전체보기 특화: 3개 권역 한눈에 보기 */}
                         <div className="flex gap-2 mt-auto">
                           {regions.map(r => {
                             const price = menu.prices[r] || 0;
                             const rate = price > 0 ? cost / price : 0;
                             const isGood = rate > 0 && rate < 0.40;
                             const isWarning = rate >= 0.40 && rate <= 0.42;
-                            
+
                             const bgClass = isGood ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-800 dark:border-emerald-800/50' : isWarning ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-800 dark:border-amber-800/50' : 'bg-rose-50/50 dark:bg-rose-900/10 border-rose-800 dark:border-rose-800/50';
                             const textClass = isGood ? 'text-emerald-800 dark:text-emerald-400' : isWarning ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400';
                             const Icon = isGood ? TrendingDown : TrendingUp;
-                            
+
                             return (
                               <div key={r} className={`flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-sm border ${bgClass}`}>
                                 <span className="text-[10px] font-bold text-stone-500 dark:text-stone-400 mb-1">{r}</span>
@@ -278,23 +336,35 @@ export const OverviewTable: React.FC<Props> = ({
                           })}
                         </div>
 
-                        {/* 💡 추가: 레시피 인라인 편집 아코디언 */}
-                        {onSaveRecipe && (
+                        {(onSaveRecipe || onDuplicateMenu) && (
                           <>
-                            <div className="mt-6 pt-4 border-t border-stone-300 dark:border-stone-800">
-                              <button 
-                                onClick={() => setExpandedRecipeId(expandedRecipeId === menu.id ? null : menu.id)}
-                                className="w-full flex items-center justify-center gap-1 text-[11px] font-bold text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 transition-colors py-1 tracking-widest"
-                              >
-                                레시피 상세 및 수정 {expandedRecipeId === menu.id ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                              </button>
+                            <div className="mt-6 pt-4 border-t border-stone-300 dark:border-stone-800 flex items-center gap-2">
+                              {onSaveRecipe && (
+                                <button
+                                  onClick={() => setExpandedRecipeId(expandedRecipeId === menu.id ? null : menu.id)}
+                                  className="flex-1 flex items-center justify-center gap-1 text-[11px] font-bold text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 transition-colors py-1 tracking-widest"
+                                >
+                                  레시피 {expandedRecipeId === menu.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </button>
+                              )}
+                              {onDuplicateMenu && (
+                                <button
+                                  onClick={() => onDuplicateMenu(menu.id)}
+                                  className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded transition-colors"
+                                  title="메뉴 복사"
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              )}
                             </div>
-                            {expandedRecipeId === menu.id && (
-                              <InlineRecipeEditor 
-                                menu={menu} ingredients={ingredients} allMenus={menus} 
-                                onSave={(id, recipe, notes) => { onSaveRecipe(id, recipe, notes); setExpandedRecipeId(null); }} 
-                                onClose={() => setExpandedRecipeId(null)} 
-                              />
+                            {onSaveRecipe && expandedRecipeId === menu.id && (
+                              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2">
+                                <InlineRecipeEditor
+                                  menu={menu} ingredients={ingredients} allMenus={menus}
+                                  onSave={(id, recipe, notes) => { onSaveRecipe(id, recipe, notes); setExpandedRecipeId(null); }}
+                                  onClose={() => setExpandedRecipeId(null)}
+                                />
+                              </div>
                             )}
                           </>
                         )}
@@ -306,127 +376,194 @@ export const OverviewTable: React.FC<Props> = ({
             );
           })}
         </div>
-      ) : (
-        <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
-            <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th rowSpan={2} className="px-4 py-3 border-r border-slate-200 dark:border-slate-700 align-middle whitespace-nowrap">메뉴명</th>
-                <th rowSpan={2} className="px-4 py-3 text-right border-r border-slate-200 dark:border-slate-700 align-middle cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors whitespace-nowrap" onClick={() => onToggleColumn('cost')}>
-                  원가 {visibleColumns.cost ? '' : '(숨김)'}
-                </th>
-                {regions.map(r => (
-                  <th key={r} colSpan={4} className="px-4 py-2 text-center border-b border-r border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800 whitespace-nowrap">{r}</th>
-                ))}
-              </tr>
-              <tr>
-                {regions.map(r => (
-                  <React.Fragment key={`${r}-sub`}>
-                    <th className="px-2 py-2 text-right bg-slate-50 dark:bg-slate-800/30 whitespace-nowrap">판매가</th>
-                    <th className="px-2 py-2 text-right bg-slate-50 dark:bg-slate-800/30 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors whitespace-nowrap" onClick={() => onToggleColumn('margin')}>
-                      마진 {visibleColumns.margin ? '' : '(숨김)'}
-                    </th>
-                    <th className="px-2 py-2 text-right bg-slate-50 dark:bg-slate-800/30 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors whitespace-nowrap" onClick={() => onToggleColumn('costRate')}>
-                      원가율 {visibleColumns.costRate ? '' : '(숨김)'}
-                    </th>
-                    <th className="px-2 py-2 text-right border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors whitespace-nowrap" onClick={() => onToggleColumn('marginRate')}>
-                      마진율 {visibleColumns.marginRate ? '' : '(숨김)'}
-                    </th>
-                  </React.Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {groupedMenus.map(group => {
-                if (!group.category.isVisible && !isAdmin) return null;
-                if (group.menus.length === 0) return null;
-                
-                return (
-                  <React.Fragment key={group.category.id || 'uncategorized'}>
-                    <tr className="bg-slate-100/50 dark:bg-slate-800/30">
-                      <td colSpan={14} className="px-4 py-2 font-semibold text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          {group.category.name}
-                          {!group.category.isVisible && <span className="text-xs bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400">숨김</span>}
-                        </div>
-                      </td>
-                    </tr>
-                    {group.menus.map(menu => {
-                      if (menu.isVisible === false && !isAdmin) return null;
+      )}
 
-                      const cost = calculateTotalCost(menu.recipe, ingredients, menus);
-                      const hasAlert = menu.hasAlert || checkMenuAlert(menu, ingredients, menus);
-                      const missing = hasMissingIngredients(menu.recipe, ingredients, menus);
+      {/* 표 뷰 */}
+      {viewMode === 'table' && (
+        <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b-2 border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60">
+                  <th className="py-3 px-4 text-left text-[11px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider whitespace-nowrap">메뉴명</th>
+                  <th
+                    className="py-3 px-4 text-right text-[11px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-stone-700 dark:hover:text-stone-200 select-none"
+                    onClick={() => onToggleColumn('cost')}
+                    title="클릭하여 숨기기/표시"
+                  >
+                    원가 {!visibleColumns.cost && <span className="text-[9px] opacity-60">(숨김)</span>}
+                  </th>
+                  {regions.map(r => (
+                    <th key={r} colSpan={2} className="py-3 px-4 text-center text-[11px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider whitespace-nowrap border-l border-stone-200 dark:border-stone-700">
+                      {r}
+                    </th>
+                  ))}
+                  <th className="py-3 px-3 text-center text-[11px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider whitespace-nowrap"></th>
+                </tr>
+                <tr className="border-b border-stone-100 dark:border-stone-800 bg-stone-50/60 dark:bg-stone-800/30">
+                  <th className="pb-2 px-4"></th>
+                  <th className="pb-2 px-4"></th>
+                  {regions.map(r => (
+                    <React.Fragment key={`${r}-sub`}>
+                      <th className="pb-2 px-4 text-right text-[10px] font-semibold text-stone-400 border-l border-stone-100 dark:border-stone-800 whitespace-nowrap">판매가</th>
+                      <th
+                        className="pb-2 px-4 text-left text-[10px] font-semibold text-stone-400 whitespace-nowrap cursor-pointer hover:text-stone-600 select-none"
+                        onClick={() => onToggleColumn('costRate')}
+                        title="클릭하여 숨기기/표시"
+                      >
+                        원가율 {!visibleColumns.costRate && <span className="text-[9px]">(숨김)</span>}
+                      </th>
+                    </React.Fragment>
+                  ))}
+                  <th className="pb-2 px-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedMenus.map(group => {
+                  if (!group.category.isVisible && !isAdmin) return null;
+                  if (group.menus.length === 0) return null;
 
-                      return (
-                        <tr key={menu.id} className={`bg-white dark:bg-slate-900 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors group ${hasAlert ? 'border-l-4 border-l-rose-500' : ''} ${menu.isVisible === false ? 'opacity-50' : ''}`}>
-                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {menu.name}
-                              {menu.isVisible === false && <EyeOff size={14} className="text-slate-400" />}
-                              {hasAlert && (
-                                <button 
-                                  onClick={() => onNavigateToTab('변동사항')}
-                                  className="flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/30 px-1.5 py-0.5 rounded uppercase tracking-wider hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors"
-                                  title={missing ? '식자재 누락. 클릭하여 확인' : '원가 변동. 클릭하여 확인'}
-                                >
-                                  <AlertCircle size={10} />
-                                  {missing ? '누락' : '변동'}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className={`px-4 py-3 text-right border-r border-slate-200 dark:border-slate-700 ${hasAlert ? 'text-rose-600 dark:text-rose-400 font-bold' : ''} whitespace-nowrap`}>
-                            {visibleColumns.cost ? formatCurrency(cost) : '-'}
-                          </td>
-                          
-                          {regions.map(r => {
-                            const price = menu.prices[r] || 0;
-                            const margin = price - cost;
-                            const costRate = price > 0 ? cost / price : 0;
-                            const marginRate = price > 0 ? margin / price : 0;
-                            
-                            // 표(Table) 모드에서도 원가율 신호등 색상 적용
-                            const getRateColorClasses = (r: number) => {
-                              if (r > 0 && r < 0.40) return 'text-emerald-600 dark:text-emerald-400';
-                              if (r >= 0.40 && r <= 0.42) return 'text-amber-600 dark:text-amber-400';
-                              return 'text-rose-600 dark:text-rose-400';
-                            };
-                            const rateColor = getRateColorClasses(costRate);
+                  return (
+                    <React.Fragment key={group.category.id || 'uncategorized'}>
+                      <tr className="bg-stone-100/80 dark:bg-stone-800/50 border-y border-stone-200 dark:border-stone-700">
+                        <td colSpan={9} className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-black text-stone-600 dark:text-stone-400 uppercase tracking-widest">{group.category.name}</span>
+                            {!group.category.isVisible && <span className="text-[10px] font-medium text-stone-400">(숨김)</span>}
+                            <span className="text-[10px] text-stone-400 ml-1">{group.menus.length}개</span>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.menus.map(menu => {
+                        if (menu.isVisible === false && !isAdmin) return null;
+                        const cost = calculateTotalCost(menu.recipe, ingredients, menus);
+                        const hasAlert = menu.hasAlert || checkMenuAlert(menu, ingredients, menus);
+                        const missing = hasMissingIngredients(menu.recipe, ingredients, menus);
 
-                            return (
-                              <React.Fragment key={`${menu.id}-${r}`}>
-                                <td className="px-2 py-3 text-right font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">{formatCurrency(price)}</td>
-                                <td className="px-2 py-3 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                  {visibleColumns.margin ? formatCurrency(margin) : '-'}
-                                </td>
-                                <td className={`px-2 py-3 text-right font-bold ${rateColor} whitespace-nowrap`}>
-                                  {visibleColumns.costRate ? formatPercent(costRate) : '-'}
-                                </td>
-                                <td className="px-2 py-3 text-right border-r border-slate-200 dark:border-slate-700 text-slate-400 whitespace-nowrap">
-                                  {visibleColumns.marginRate ? formatPercent(marginRate) : '-'}
-                                </td>
-                              </React.Fragment>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                        return (
+                          <React.Fragment key={menu.id}>
+                            <tr className={`border-b border-stone-100 dark:border-stone-800/60 hover:bg-stone-50 dark:hover:bg-stone-800/30 transition-colors ${hasAlert ? 'bg-rose-50/40 dark:bg-rose-900/10' : ''} ${menu.isVisible === false ? 'opacity-50' : ''}`}>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-stone-900 dark:text-stone-100">{menu.name}</span>
+                                  {menu.isVisible === false && <EyeOff size={12} className="text-stone-400 shrink-0" />}
+                                  {hasAlert && (
+                                    <button
+                                      onClick={() => onNavigateToTab('변동사항')}
+                                      className="flex items-center gap-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/30 px-1.5 py-0.5 rounded-sm hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors shrink-0"
+                                    >
+                                      <AlertCircle size={9} />
+                                      {missing ? '누락' : '변동'}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className={`py-3 px-4 text-right font-mono text-sm whitespace-nowrap ${hasAlert ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-stone-700 dark:text-stone-300'}`}>
+                                {visibleColumns.cost ? formatCurrency(cost) : '—'}
+                              </td>
+                              {regions.map(r => {
+                                const price = menu.prices[r] || 0;
+                                const rate = price > 0 ? cost / price : 0;
+                                const isGood = rate > 0 && rate < 0.40;
+                                const isWarn = rate >= 0.40 && rate <= 0.42;
+                                const barColor = isGood ? 'bg-emerald-500' : isWarn ? 'bg-amber-400' : 'bg-rose-500';
+                                const textColor = isGood ? 'text-emerald-600 dark:text-emerald-400' : isWarn ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400';
+                                return (
+                                  <React.Fragment key={`${menu.id}-${r}`}>
+                                    <td className="py-3 px-4 text-right font-semibold text-stone-700 dark:text-stone-200 border-l border-stone-100 dark:border-stone-800/50 whitespace-nowrap text-sm">
+                                      {formatCurrency(price)}
+                                    </td>
+                                    <td className="py-3 px-4 whitespace-nowrap">
+                                      {price > 0 && visibleColumns.costRate ? (
+                                        <div className="flex items-center gap-2 min-w-[90px]">
+                                          <span className={`text-xs font-bold ${textColor} w-10 text-right shrink-0`}>{formatPercent(rate)}</span>
+                                          <div className="flex-1 h-1.5 bg-stone-100 dark:bg-stone-700 rounded-full overflow-hidden min-w-[36px]">
+                                            <div
+                                              className={`h-full ${barColor} rounded-full transition-all`}
+                                              style={{ width: `${Math.min((rate / 0.6) * 100, 100)}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-stone-300 dark:text-stone-600">—</span>
+                                      )}
+                                    </td>
+                                  </React.Fragment>
+                                );
+                              })}
+                              <td className="py-3 px-3">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  {onSaveRecipe && (
+                                    <button
+                                      onClick={() => setRecipeModalMenuId(menu.id)}
+                                      className="p-1.5 text-stone-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                      title="레시피 편집"
+                                    >
+                                      <BookOpen size={14} />
+                                    </button>
+                                  )}
+                                  {onDuplicateMenu && (
+                                    <button
+                                      onClick={() => onDuplicateMenu(menu.id)}
+                                      className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded transition-colors"
+                                      title="메뉴 복사"
+                                    >
+                                      <Copy size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {menus.length === 0 && (
-        <div className="py-20 text-center text-slate-500 dark:text-slate-400">
+        <div className="py-20 text-center text-stone-500 dark:text-stone-400">
           <ChefHat size={48} className="mx-auto mb-4 opacity-50" />
           <p className="text-lg font-medium">등록된 메뉴가 없습니다.</p>
           <p className="text-sm mt-1">메뉴 관리 탭에서 새로운 메뉴를 추가해 보세요.</p>
         </div>
       )}
+
+      {/* 레시피 편집 모달 */}
+      {recipeModalMenuId && onSaveRecipe && (() => {
+        const menu = menus.find(m => m.id === recipeModalMenuId);
+        if (!menu) return null;
+        return (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={e => { if (e.target === e.currentTarget) setRecipeModalMenuId(null); }}
+          >
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-0.5">레시피 편집</p>
+                  <h3 className="text-lg font-black text-stone-900 dark:text-white">{menu.name}</h3>
+                </div>
+                <button onClick={() => setRecipeModalMenuId(null)} className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <InlineRecipeEditor
+                menu={menu}
+                ingredients={ingredients}
+                allMenus={menus}
+                onSave={(id, recipe, notes) => { onSaveRecipe(id, recipe, notes); setRecipeModalMenuId(null); }}
+                onClose={() => setRecipeModalMenuId(null)}
+              />
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

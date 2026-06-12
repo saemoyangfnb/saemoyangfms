@@ -999,6 +999,18 @@ export default function App() {
     } catch (error) { handleFirestoreError(error, OperationType.UPDATE, `menus/${menuId}`); }
   };
 
+  const handleDuplicateMenu = async (menuId: string) => {
+    const menu = brandMenus.find(m => m.id === menuId);
+    if (!menu) return;
+    const newId = `${Date.now()}`;
+    const newMenu = { ...menu, id: newId, name: `${menu.name} (복사본)`, hasAlert: false, lastAcknowledgedCost: undefined };
+    try {
+      await setDoc(doc(db, 'menus', newId), { ...newMenu, brandId: activeBrand });
+      logActivity('메뉴 복사', `[${currentBrand?.name || '공통'}] ${menu.name} → ${newMenu.name}`);
+      toast.success(`'${menu.name}' 복사 완료`);
+    } catch (error) { handleFirestoreError(error, OperationType.WRITE, `menus/${newId}`); }
+  };
+
   const handleAcknowledgeAlert = async (menuId: string) => {
     if (currentUser?.role !== 'admin') { toast.error('관리자만 알림을 해결할 수 있습니다.'); return; }
     const menu = brandMenus.find(m => m.id === menuId);
@@ -2008,7 +2020,7 @@ export default function App() {
 
                   <div className="bg-white dark:bg-slate-900 shadow-sm rounded-b-xl overflow-hidden border border-t-0 border-slate-200 dark:border-slate-800">
                     {sidebar.costTab === '전체보기' ? (
-                      <OverviewTable menus={activeMenus} menuCategories={brandCategories} ingredients={brandIngredients} isAdmin={currentUser.role === 'admin'} visibleColumns={visibleColumns} onAcknowledgeAlert={handleAcknowledgeAlert} onNavigateToTab={(tab) => setSidebar(prev => ({ ...prev, costTab: tab as CostTabType }))} onToggleColumn={(column) => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }))} onSaveRecipe={handleSaveRecipe} />
+                      <OverviewTable menus={activeMenus} menuCategories={brandCategories} ingredients={brandIngredients} isAdmin={currentUser.role === 'admin'} visibleColumns={visibleColumns} onAcknowledgeAlert={handleAcknowledgeAlert} onNavigateToTab={(tab) => setSidebar(prev => ({ ...prev, costTab: tab as CostTabType }))} onToggleColumn={(column) => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column] }))} onSaveRecipe={handleSaveRecipe} onDuplicateMenu={handleDuplicateMenu} />
                     ) : sidebar.costTab === '메뉴 관리' ? (
                       <div className="p-4 sm:p-6">
                         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
