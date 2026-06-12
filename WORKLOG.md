@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-06-12 (6) — Claude Code
+
+### 매장관리 폼 완료 현황 연결 (StoreListView — 올바른 파일)
+
+- 이전 작업은 미사용 `StoreManagement.tsx`에 잘못 적용, 이번에 `StoreListView.tsx`에 올바르게 적용
+- `StoreListView`: `activeForms` + `allEntries` 상태 추가, 초기 로드에 form 컬렉션 포함
+- `formStatsByStore`: storeId 기준 `Map<storeId, {done, total}>` 계산
+- 목록 아이템: "폼 N/M" 뱃지 (전체완료=초록, 일부=노랑, 미입력=없음)
+- 상세 패널: "매장 폼 현황" 섹션 추가 — 활성 폼별 완료/입력중/미입력 현황
+- 빌드 성공
+
+---
+
 ## 2026-06-12 (5) — Claude Code
 
 ### 매장 폼관리 캘린더 hover 팝업 + 매장관리 폼 완료 현황 뱃지

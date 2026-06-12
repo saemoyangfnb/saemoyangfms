@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb } from '../../firebase';
 import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
-import { Store, FranchiseSchedule, User } from '../../types';
-import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare } from 'lucide-react';
+import { Store, FranchiseSchedule, User, StoreForm, StoreFormEntry } from '../../types';
+import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare, ClipboardList } from 'lucide-react';
 import { useToast } from '../Toast';
 import { MentionRecord } from '../ui/AtMentionInput';
 
@@ -32,15 +32,24 @@ export function StoreListView({ currentUser }: Props) {
   const [mappingMode, setMappingMode] = useState(false);
   const [mappingSearch, setMappingSearch] = useState('');
   const [linking, setLinking] = useState<string | null>(null);
+  const [activeForms, setActiveForms] = useState<StoreForm[]>([]);
+  const [allEntries, setAllEntries] = useState<StoreFormEntry[]>([]);
 
   useEffect(() => {
     Promise.all([
       getDocs(collection(salesDb, 'stores')),
       getDocs(collection(salesDb, 'franchise_schedules')),
-    ]).then(([storeSnap, schSnap]) => {
+      getDocs(collection(salesDb, 'store_forms')),
+      getDocs(collection(salesDb, 'store_form_entries')),
+    ]).then(([storeSnap, schSnap, formsSnap, entriesSnap]) => {
       setStores(storeSnap.docs.map(d => ({ id: d.id, ...d.data() } as Store))
         .sort((a, b) => a.name.localeCompare(b.name, 'ko')));
       setSchedules(schSnap.docs.map(d => ({ id: d.id, ...d.data() } as FranchiseSchedule)));
+      setActiveForms(formsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as StoreForm))
+        .filter(f => !f.isArchived)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      setAllEntries(entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry)));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -54,6 +63,32 @@ export function StoreListView({ currentUser }: Props) {
   }, [selected?.id]);
 
   const statuses = useMemo(() => [...new Set(stores.map(s => s.status).filter(Boolean))].sort(), [stores]);
+
+  // storeId → { done, total, entries } (활성 폼 기준)
+  const formStatsByStore = useMemo(() => {
+    const activeFormIds = new Set(activeForms.map(f => f.id));
+    const map = new Map<string, { done: number; total: number }>();
+    if (activeFormIds.size === 0) return map;
+    const entriesByStore = new Map<string, StoreFormEntry[]>();
+    allEntries.forEach(e => {
+      if (!activeFormIds.has(e.formId)) return;
+      if (!entriesByStore.has(e.storeId)) entriesByStore.set(e.storeId, []);
+      entriesByStore.get(e.storeId)!.push(e);
+    });
+    entriesByStore.forEach((entries, storeId) => {
+      map.set(storeId, { done: entries.filter(e => e.isDone).length, total: activeFormIds.size });
+    });
+    return map;
+  }, [activeForms, allEntries]);
+
+  // 선택 매장의 폼별 완료 현황
+  const selectedFormStats = useMemo(() => {
+    if (!selected) return [];
+    return activeForms.map(form => {
+      const entry = allEntries.find(e => e.storeId === selected.id && e.formId === form.id);
+      return { form, entry: entry ?? null };
+    });
+  }, [selected, activeForms, allEntries]);
 
   const filtered = useMemo(() => stores.filter(s => {
     if (filterStatus && s.status !== filterStatus) return false;
@@ -167,6 +202,7 @@ export function StoreListView({ currentUser }: Props) {
           ) : (
             filtered.map(store => {
               const linked = schedules.filter(s => s.storeId === store.id).length;
+              const fStat = formStatsByStore.get(store.id);
               return (
                 <button key={store.id} onClick={() => { setSelected(prev => prev?.id === store.id ? null : store); setMappingMode(false); setMappingSearch(''); }}
                   className={`w-full text-left px-4 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors ${selected?.id === store.id ? 'bg-stone-100 dark:bg-stone-800 border-l-2 border-stone-800 dark:border-stone-400' : ''}`}>
@@ -176,6 +212,17 @@ export function StoreListView({ currentUser }: Props) {
                       <p className="text-[10px] font-bold text-stone-400 mt-0.5">{store.region} · {store.franchiseType || '가맹'}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {fStat && (
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm ${
+                          fStat.done === fStat.total
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : fStat.done > 0
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
+                        }`}>
+                          폼 {fStat.done}/{fStat.total}
+                        </span>
+                      )}
                       {linked > 0 && (
                         <span className="text-[9px] font-black px-1.5 py-0.5 rounded-sm bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                           이력 {linked}
@@ -236,6 +283,38 @@ export function StoreListView({ currentUser }: Props) {
                 ))}
               </div>
             </div>
+
+            {/* 매장 폼 현황 */}
+            {selectedFormStats.length > 0 && (
+              <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center gap-1.5">
+                  <ClipboardList size={10} className="text-stone-400" />
+                  <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">매장 폼 현황</p>
+                  <span className="text-stone-300 dark:text-stone-600 font-bold">
+                    ({selectedFormStats.filter(s => s.entry?.isDone).length}/{selectedFormStats.length} 완료)
+                  </span>
+                </div>
+                <div className="divide-y divide-stone-50 dark:divide-stone-800">
+                  {selectedFormStats.map(({ form, entry }) => (
+                    <div key={form.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${
+                        entry?.isDone ? 'bg-emerald-500' : entry ? 'bg-amber-400' : 'bg-stone-200 dark:bg-stone-700'
+                      }`} />
+                      <span className="text-xs font-bold text-stone-700 dark:text-stone-300 flex-1 min-w-0 truncate">{form.title}</span>
+                      {entry?.isDone ? (
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 flex items-center gap-1">
+                          <Check size={10} /> {entry.completedAt?.slice(0, 10) ?? '완료'}
+                        </span>
+                      ) : entry ? (
+                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0">입력중</span>
+                      ) : (
+                        <span className="text-[10px] text-stone-300 dark:text-stone-600 shrink-0">미입력</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 오픈 이력 */}
             <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden">
