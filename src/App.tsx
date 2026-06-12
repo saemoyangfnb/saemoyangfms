@@ -56,6 +56,7 @@ import {
 import { GlobalSearch } from './components/GlobalSearch';
 import { OnboardingTour } from './components/OnboardingTour';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { calculateTotalCost, formatPercent, doesMenuContainIngredient, checkMenuAlert } from './utils';
 import { auth, db, reviewDb, salesDb } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -1162,28 +1163,89 @@ export default function App() {
   };
 
   const handleExportCsv = () => {
+    const regions: Region[] = ['지방권', '광역권', '수도권'];
     const activeMenus = brandMenus.filter(m => !m.isArchived && m.isVisible !== false);
-    const data = activeMenus.map(m => {
+    const brandName = currentBrand?.name ?? activeBrand;
+
+    // ── 시트 1: 원가 계산표 (수식 포함) ──────────────────────────────
+    const ws1 = XLSX.utils.aoa_to_sheet([]);
+
+    // 헤더 행 (row 0 = 시트 row 1)
+    const headers = ['메뉴명', '카테고리', '원가(원)', ...regions.flatMap(r => [`${r} 판매가`, `${r} 원가율`, `${r} 마진`])];
+    XLSX.utils.sheet_add_aoa(ws1, [headers], { origin: 'A1' });
+
+    // 데이터 행 (row index 1부터 = 시트 row 2부터)
+    activeMenus.forEach((m, i) => {
+      const rowNum = i + 2; // 엑셀 행 번호 (1-based, 헤더가 1행)
       const cost = calculateTotalCost(m.recipe, brandIngredients, brandMenus);
-      const row: any = { '메뉴명': m.name };
-      if (visibleColumns.cost) row['원가'] = cost;
-      (['지방권', '광역권', '수도권'] as Region[]).forEach(r => {
-        const price = m.prices[r] || 0;
-        const margin = price - cost;
-        row[`${r}_판매가`] = price;
-        if (visibleColumns.margin) row[`${r}_마진`] = margin;
-        if (visibleColumns.costRate) row[`${r}_원가율`] = formatPercent(price > 0 ? cost / price : 0);
-        if (visibleColumns.marginRate) row[`${r}_마진율`] = formatPercent(price > 0 ? margin / price : 0);
+      const cat = brandCategories.find(c => c.id === m.categoryId)?.name ?? '';
+      const costCol = 'C'; // 원가 열
+
+      // A: 메뉴명, B: 카테고리, C: 원가
+      ws1[`A${rowNum}`] = { v: m.name, t: 's' };
+      ws1[`B${rowNum}`] = { v: cat, t: 's' };
+      ws1[`C${rowNum}`] = { v: cost, t: 'n', z: '#,##0' };
+
+      // 각 권역: 판매가(D/G/J), 원가율(E/H/K, 수식), 마진(F/I/L, 수식)
+      const colLetters = [['D','E','F'], ['G','H','I'], ['J','K','L']];
+      regions.forEach((_, ri) => {
+        const [priceCol, rateCol, marginCol] = colLetters[ri];
+        const price = m.prices[regions[ri]] || 0;
+        ws1[`${priceCol}${rowNum}`] = { v: price, t: 'n', z: '#,##0' };
+        ws1[`${rateCol}${rowNum}`] = { f: `IF(${priceCol}${rowNum}=0,"",${costCol}${rowNum}/${priceCol}${rowNum})`, t: 'n', z: '0.0%' };
+        ws1[`${marginCol}${rowNum}`] = { f: `IF(${priceCol}${rowNum}=0,"",${priceCol}${rowNum}-${costCol}${rowNum})`, t: 'n', z: '#,##0' };
       });
-      return row;
     });
-    const csv = Papa.unparse(data);
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${activeBrand}_menu_data.csv`;
-    link.click();
-    logActivity('엑셀 다운로드', `[${currentBrand?.name || '공통'}] 메뉴 원가 및 마진 데이터 CSV 다운로드`);
+
+    // 시트 범위 설정
+    ws1['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 11, r: activeMenus.length } });
+
+    // 열 너비
+    ws1['!cols'] = [
+      { wch: 24 }, { wch: 12 }, { wch: 10 },
+      { wch: 11 }, { wch: 9 }, { wch: 10 },
+      { wch: 11 }, { wch: 9 }, { wch: 10 },
+      { wch: 11 }, { wch: 9 }, { wch: 10 },
+    ];
+
+    // 첫 행 고정
+    ws1['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    // ── 시트 2: 레시피 원가 상세 ─────────────────────────────────────
+    const ws2 = XLSX.utils.aoa_to_sheet([]);
+    const detailHeaders = ['메뉴명', '재료명', '종류', '단가(원)', '수량', '수율(%)', '비용(원)'];
+    XLSX.utils.sheet_add_aoa(ws2, [detailHeaders], { origin: 'A1' });
+
+    let detailRow = 2;
+    activeMenus.forEach(m => {
+      m.recipe.forEach(item => {
+        let name = '', unitPrice = 0, unit = '', type = '';
+        if (item.type === 'ingredient') {
+          const ing = brandIngredients.find(i => i.id === item.ingredientId);
+          name = ing?.name ?? '삭제된 식자재'; unitPrice = ing?.unitSalesPrice ?? 0; unit = ing?.unit ?? ''; type = '식자재';
+        } else if (item.type === 'menu') {
+          const mn = brandMenus.find(x => x.id === item.menuId);
+          name = mn?.name ?? '삭제된 메뉴'; unitPrice = mn ? calculateTotalCost(mn.recipe, brandIngredients, brandMenus) : 0; unit = 'ea'; type = '메뉴';
+        } else {
+          name = item.customName ?? ''; unitPrice = item.customCost ?? 0; unit = item.customUnit ?? ''; type = '직접입력';
+        }
+        const yr = item.yieldRate ?? 100;
+        const itemCost = unitPrice * item.quantity * (100 / yr);
+        XLSX.utils.sheet_add_aoa(ws2, [[m.name, name, type, unitPrice, item.quantity, yr, Math.round(itemCost)]], { origin: `A${detailRow}` });
+        detailRow++;
+      });
+    });
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 6, r: detailRow - 1 } });
+    ws2['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 }];
+    ws2['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    // ── 워크북 조립 및 다운로드 ───────────────────────────────────────
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, '원가 계산표');
+    XLSX.utils.book_append_sheet(wb, ws2, '레시피 상세');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `${brandName}_원가계산표_${today}.xlsx`);
+    logActivity('엑셀 다운로드', `[${brandName}] 원가 계산표 xlsx 다운로드 (수식 포함)`);
   };
 
   if (!isAuthReady) return (
@@ -1926,7 +1988,7 @@ export default function App() {
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">원가 계산기</p>
                     </div>
                     <button onClick={handleExportCsv} className="w-full sm:w-auto px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 text-sm shadow-sm">
-                      <Download size={16} /> 내보내기
+                      <Download size={16} /> 엑셀 다운로드
                     </button>
                   </div>
 
