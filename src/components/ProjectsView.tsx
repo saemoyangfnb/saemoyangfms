@@ -1822,12 +1822,13 @@ function MindMapTreeNode({
   );
 }
 
-export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc }: {
+export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpenDoc, showSubToggle = true }: {
   projectId: string;
   projectTitle: string;
   docs: Report[];
   employees: Employee[];
   onOpenDoc: (r: Report) => void;
+  showSubToggle?: boolean;
 }) {
   const [nodes, setNodes] = useState<MindMapNode[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -2083,7 +2084,7 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       }}
     >
       {/* 서브 뷰 토글 */}
-      <div className="no-print flex items-center gap-1 mb-3 border-b border-stone-200 dark:border-stone-700">
+      {showSubToggle && <div className="no-print flex items-center gap-1 mb-3 border-b border-stone-200 dark:border-stone-700">
         {([
           { key: 'tree',     icon: <GitBranch size={12} />,  label: '마인드맵' },
           { key: 'kanban',   icon: <Kanban size={12} />,      label: '칸반' },
@@ -2095,9 +2096,9 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
             {icon} {label}
           </button>
         ))}
-      </div>
+      </div>}
 
-      {mmView === 'tree' && (<>
+      {(!showSubToggle || mmView === 'tree') && (<>
       {/* 도구모음 */}
       <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
@@ -2253,9 +2254,9 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       </div>
       </>)}
 
-      {mmView === 'kanban' && <MindMapNodeKanban projectId={projectId} employees={employees} />}
-      {mmView === 'table' && <MindMapNodeTable projectId={projectId} projectTitle={projectTitle} employees={employees} />}
-      {mmView === 'calendar' && <MindMapNodeCalendar nodes={nodes} employees={employees} />}
+      {showSubToggle && mmView === 'kanban' && <MindMapNodeKanban projectId={projectId} employees={employees} />}
+      {showSubToggle && mmView === 'table' && <MindMapNodeTable projectId={projectId} projectTitle={projectTitle} employees={employees} />}
+      {showSubToggle && mmView === 'calendar' && <MindMapNodeCalendar nodes={nodes} employees={employees} />}
 
       {/* SOP 구조 불러오기 모달 */}
       {sopPickerOpen && (

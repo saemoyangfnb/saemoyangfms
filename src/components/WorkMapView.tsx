@@ -1422,6 +1422,7 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
                   docs={projectDocs}
                   employees={employees}
                   onOpenDoc={() => {}}
+                  showSubToggle={false}
                 />
               )
             ) : (
