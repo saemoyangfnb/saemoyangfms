@@ -1729,6 +1729,7 @@ function MindMapTreeNode({
       {/* 노드 박스 + 링크 피커 */}
       <div className="relative shrink-0">
         <div
+          data-node-id={node.id}
           className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing} transition-all`}
           onClick={e => { e.stopPropagation(); onSelect(node.id); }}
           onDoubleClick={e => { e.stopPropagation(); onStartEdit(node.id); }}
@@ -1985,6 +1986,36 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const printRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
   const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table' | 'calendar'>('tree');
+  const [linkLines, setLinkLines] = useState<{ id: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
+
+  useEffect(() => {
+    if (mmView !== 'tree' || !printRef.current) { setLinkLines([]); return; }
+    const container = printRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const nodePos = new Map<string, { x: number; y: number }>();
+    container.querySelectorAll<HTMLElement>('[data-node-id]').forEach(el => {
+      const nid = el.getAttribute('data-node-id')!;
+      const r = el.getBoundingClientRect();
+      nodePos.set(nid, {
+        x: r.left - containerRect.left + r.width / 2,
+        y: r.top - containerRect.top + r.height / 2,
+      });
+    });
+    const seen = new Set<string>();
+    const newLines: typeof linkLines = [];
+    nodes.forEach(n => {
+      if (!n.linkedNodeIds?.length) return;
+      n.linkedNodeIds.forEach(tid => {
+        const key = [n.id, tid].sort().join('|');
+        if (seen.has(key)) return;
+        seen.add(key);
+        const a = nodePos.get(n.id);
+        const b = nodePos.get(tid);
+        if (a && b) newLines.push({ id: key, x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+      });
+    });
+    setLinkLines(newLines);
+  }, [nodes, mmView, selectedId]);
 
   const handlePrint = () => {
     if (!printRef.current) return;
@@ -2292,7 +2323,32 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       {/* 마인드맵 트리 */}
       <div className="overflow-x-auto pb-4">
         {rootNode && (
-          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
+          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full relative">
+            {/* 노드 연결선 SVG 오버레이 */}
+            {linkLines.length > 0 && (
+              <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
+                <defs>
+                  <marker id="mm-arrow" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
+                    <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
+                  </marker>
+                </defs>
+                {linkLines.map(l => {
+                  const mx = (l.x1 + l.x2) / 2;
+                  return (
+                    <path
+                      key={l.id}
+                      d={`M ${l.x1} ${l.y1} C ${mx} ${l.y1}, ${mx} ${l.y2}, ${l.x2} ${l.y2}`}
+                      fill="none"
+                      stroke="#94a3b8"
+                      strokeWidth={1.5}
+                      strokeDasharray="5 3"
+                      markerEnd="url(#mm-arrow)"
+                      opacity={0.7}
+                    />
+                  );
+                })}
+              </svg>
+            )}
             <MindMapTreeNode
               node={rootNode} nodes={nodes} depth={0}
               editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
