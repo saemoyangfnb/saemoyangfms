@@ -1542,6 +1542,95 @@ function MindMapNodeTable({ projectId, projectTitle, employees }: {
   );
 }
 
+// ── 마인드맵 노드 캘린더 뷰 ─────────────────────────────────
+function MindMapNodeCalendar({ nodes, employees }: {
+  nodes: MindMapNode[];
+  employees: Employee[];
+}) {
+  const [curMonth, setCurMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const year = curMonth.getFullYear();
+  const month = curMonth.getMonth();
+  const firstDow = new Date(year, month, 1).getDay();
+  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const toDateStr = (d: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const nodesWithDate = nodes.filter(n => n.dueDate);
+  const nodesForDay = (d: number) => nodesWithDate.filter(n => n.dueDate === toDateStr(d));
+
+  if (nodesWithDate.length === 0) {
+    return (
+      <div className="text-center py-12 text-[11px] text-stone-400">
+        마인드맵 노드에 마감일을 설정하면 캘린더에 표시됩니다
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-center gap-4 mb-4">
+        <button onClick={() => setCurMonth(new Date(year, month - 1, 1))}
+          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded">
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-sm font-black text-stone-800 dark:text-stone-100">{year}년 {month + 1}월</span>
+        <button onClick={() => setCurMonth(new Date(year, month + 1, 1))}
+          className="p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+          <div key={d} className="text-center text-[10px] font-black text-stone-400 py-1">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-px bg-stone-200 dark:bg-stone-700 border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
+        {cells.map((day, idx) => {
+          if (!day) return <div key={idx} className="bg-stone-50 dark:bg-stone-900/50 min-h-[72px]" />;
+          const dayNodes = nodesForDay(day);
+          const isToday = toDateStr(day) === todayStr;
+          const isWeekend = (idx % 7) >= 5;
+          return (
+            <div key={idx} className={`p-1 min-h-[72px] ${isToday ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-stone-900'}`}>
+              <div className={`text-[10px] font-bold mb-1 w-5 h-5 flex items-center justify-center rounded-full ${
+                isToday ? 'bg-blue-500 text-white'
+                : isWeekend ? 'text-red-400 dark:text-red-500'
+                : 'text-stone-500 dark:text-stone-400'
+              }`}>{day}</div>
+              <div className="space-y-0.5">
+                {dayNodes.map(n => {
+                  const st = n.status ?? 'todo';
+                  return (
+                    <div key={n.id} title={n.text}
+                      className={`text-[9px] px-1 py-px rounded truncate leading-tight ${
+                        st === 'done' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                        : st === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                        : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
+                      }`}>
+                      {n.text || '(이름 없음)'}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── 마인드맵 ──────────────────────────────────────────────
 function MindMapTreeNode({
   node, nodes, depth, editingId, selectedId, linkPickerId,
@@ -1753,6 +1842,7 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
+  const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table' | 'calendar'>('tree');
 
   const handlePrint = () => {
     if (!printRef.current) return;
@@ -1992,6 +2082,22 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
         }
       }}
     >
+      {/* 서브 뷰 토글 */}
+      <div className="no-print flex items-center gap-1 mb-3 border-b border-stone-200 dark:border-stone-700">
+        {([
+          { key: 'tree',     icon: <GitBranch size={12} />,  label: '마인드맵' },
+          { key: 'kanban',   icon: <Kanban size={12} />,      label: '칸반' },
+          { key: 'table',    icon: <LayoutList size={12} />,  label: '목록' },
+          { key: 'calendar', icon: <Calendar size={12} />,    label: '캘린더' },
+        ] as { key: 'tree' | 'kanban' | 'table' | 'calendar'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+          <button key={key} onClick={e => { e.stopPropagation(); setMmView(key); }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${mmView === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+
+      {mmView === 'tree' && (<>
       {/* 도구모음 */}
       <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
@@ -2145,6 +2251,11 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
           </div>
         )}
       </div>
+      </>)}
+
+      {mmView === 'kanban' && <MindMapNodeKanban projectId={projectId} employees={employees} />}
+      {mmView === 'table' && <MindMapNodeTable projectId={projectId} projectTitle={projectTitle} employees={employees} />}
+      {mmView === 'calendar' && <MindMapNodeCalendar nodes={nodes} employees={employees} />}
 
       {/* SOP 구조 불러오기 모달 */}
       {sopPickerOpen && (
@@ -2214,7 +2325,6 @@ export function ProjectDetail({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'mindmap' | 'kanban' | 'table'>('mindmap');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
   // 보고서 팝업 모달 상태
@@ -2416,34 +2526,8 @@ export function ProjectDetail({
         </div>
       </div>
 
-      {/* 뷰 토글 */}
-      <div className="flex items-center gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
-        {([
-          { key: 'mindmap', icon: <GitBranch size={12} />,   label: '마인드맵' },
-          { key: 'kanban',  icon: <Kanban size={12} />,       label: '칸반' },
-          { key: 'table',   icon: <LayoutList size={12} />,   label: '목록' },
-        ] as { key: 'mindmap' | 'kanban' | 'table'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
-          <button key={key} onClick={() => setView(key)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${view === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-            {icon} {label}
-          </button>
-        ))}
-      </div>
-
-      {/* 마인드맵 */}
-      {view === 'mindmap' && (
-        <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} employees={employees} onOpenDoc={openReport} />
-      )}
-
-      {/* 칸반 — 마인드맵 노드 기반 */}
-      {view === 'kanban' && (
-        <MindMapNodeKanban projectId={project.id} employees={employees} />
-      )}
-
-      {/* 목록 — 마인드맵 노드 기반 */}
-      {view === 'table' && (
-        <MindMapNodeTable projectId={project.id} projectTitle={project.title} employees={employees} />
-      )}
+      {/* 마인드맵 (칸반·목록·캘린더 서브탭 포함) */}
+      <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} employees={employees} onOpenDoc={openReport} />
 
       {/* 보고서 팝업 모달 */}
       {reportModal !== null && (
