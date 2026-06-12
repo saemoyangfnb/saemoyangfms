@@ -95,6 +95,38 @@ html.readable-mode [class*="text-[11px]"] { font-size: 13px !important; }
 html.readable-mode [class~="text-xs"]     { font-size: 13px !important; }
 html.readable-mode [class~="text-sm"]     { font-size: 15px !important; }
 
+/* @uiw/react-md-editor 스타일 통합 */
+.wmde-markdown-var {
+  --color-canvas-default: transparent !important;
+}
+.w-md-editor {
+  border: 1px solid rgb(214 211 209) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: none !important;
+}
+.dark .w-md-editor {
+  border-color: rgb(87 83 78) !important;
+}
+/* 에디터 배경 */
+.w-md-editor-text-textarea,
+.w-md-editor-text-pre,
+.w-md-editor-preview {
+  font-size: 13px !important;
+  line-height: 1.7 !important;
+}
+/* 마크다운 뷰어 prose 스타일 */
+.sop-md-view .wmde-markdown,
+.sop-step-note-view .wmde-markdown {
+  background: transparent !important;
+  font-size: inherit !important;
+}
+.sop-md-view .wmde-markdown p { margin: 0.25em 0; }
+.sop-md-view .wmde-markdown ul { padding-left: 1.2em; }
+.sop-md-view .wmde-markdown h1,
+.sop-md-view .wmde-markdown h2,
+.sop-md-view .wmde-markdown h3 { font-size: 1em; font-weight: 900; margin: 0.5em 0 0.25em; }
+.sop-step-note-view .wmde-markdown p { margin: 0; }
+
 @keyframes slideIn {
   from {
     opacity: 0;

@@ -8,6 +8,7 @@ import {
   Clock, Users, Building2, BookOpen, ChevronRight, Printer, GitBranch, Link,
 } from 'lucide-react';
 import { TabBar } from './ui/Tabs';
+import { MarkdownEditor, MarkdownView } from './ui/MarkdownEditor';
 
 const genId = () => `sop_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const tplId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -112,7 +113,7 @@ function SopDetail({
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-stone-800 dark:text-stone-200 leading-snug">{step.text}</p>
-                    {step.note && <p className="text-xs text-stone-400 mt-0.5 pl-0.5">{step.note}</p>}
+                    {step.note && <MarkdownView source={step.note} className="text-xs text-stone-400 mt-1 pl-0.5 sop-step-note-view" />}
                   </div>
                 </div>
               ))}
@@ -122,8 +123,8 @@ function SopDetail({
 
         {sop.note && (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">참고 메모</p>
-            <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed whitespace-pre-wrap">{sop.note}</p>
+            <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-2">참고 메모</p>
+            <MarkdownView source={sop.note} className="text-sm sop-md-view" />
           </div>
         )}
       </div>
@@ -270,11 +271,14 @@ function SopEditor({
         </div>
 
         <div>
-          <p className="text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-2">참고 메모 (선택)</p>
-          <textarea value={note} onChange={e => setNote(e.target.value)}
-            placeholder="주의사항, 예외 케이스, 관련 담당자 등 자유롭게 작성"
-            rows={4}
-            className="w-full px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-xl bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 outline-none focus:border-stone-500 resize-none leading-relaxed" />
+          <p className="text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-2">참고 메모 (선택) — 마크다운 지원</p>
+          <MarkdownEditor
+            value={note}
+            onChange={setNote}
+            placeholder="주의사항, 예외 케이스, 관련 담당자 등 자유롭게 작성 (마크다운 사용 가능)"
+            height={180}
+            preview="live"
+          />
         </div>
       </div>
     </div>
