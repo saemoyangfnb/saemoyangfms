@@ -95,37 +95,33 @@ html.readable-mode [class*="text-[11px]"] { font-size: 13px !important; }
 html.readable-mode [class~="text-xs"]     { font-size: 13px !important; }
 html.readable-mode [class~="text-sm"]     { font-size: 15px !important; }
 
-/* @uiw/react-md-editor 스타일 통합 */
-.wmde-markdown-var {
-  --color-canvas-default: transparent !important;
+/* 마크다운 prose 렌더링 */
+.md-prose p    { margin: 0.3em 0; line-height: 1.7; }
+.md-prose ul,
+.md-prose ol   { padding-left: 1.4em; margin: 0.3em 0; }
+.md-prose li   { margin: 0.15em 0; }
+.md-prose h1, .md-prose h2, .md-prose h3 { font-weight: 900 !important; margin: 0.5em 0 0.2em; }
+.md-prose h1   { font-size: 1.1em; }
+.md-prose h2   { font-size: 1em; }
+.md-prose h3   { font-size: 0.95em; }
+.md-prose strong { font-weight: 900 !important; }
+.md-prose code {
+  font-family: ui-monospace, monospace !important;
+  font-size: 0.85em;
+  background: rgb(245 244 242);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
 }
-.w-md-editor {
-  border: 1px solid rgb(214 211 209) !important;
-  border-radius: 0.75rem !important;
-  box-shadow: none !important;
+.dark .md-prose code { background: rgb(41 37 36); }
+.md-prose pre  { background: rgb(245 244 242); border-radius: 8px; padding: 0.75em 1em; overflow-x: auto; }
+.dark .md-prose pre { background: rgb(28 25 23); }
+.md-prose blockquote {
+  border-left: 3px solid rgb(168 162 158);
+  padding-left: 0.75em;
+  color: rgb(120 113 108);
+  margin: 0.4em 0;
 }
-.dark .w-md-editor {
-  border-color: rgb(87 83 78) !important;
-}
-/* 에디터 배경 */
-.w-md-editor-text-textarea,
-.w-md-editor-text-pre,
-.w-md-editor-preview {
-  font-size: 13px !important;
-  line-height: 1.7 !important;
-}
-/* 마크다운 뷰어 prose 스타일 */
-.sop-md-view .wmde-markdown,
-.sop-step-note-view .wmde-markdown {
-  background: transparent !important;
-  font-size: inherit !important;
-}
-.sop-md-view .wmde-markdown p { margin: 0.25em 0; }
-.sop-md-view .wmde-markdown ul { padding-left: 1.2em; }
-.sop-md-view .wmde-markdown h1,
-.sop-md-view .wmde-markdown h2,
-.sop-md-view .wmde-markdown h3 { font-size: 1em; font-weight: 900; margin: 0.5em 0 0.25em; }
-.sop-step-note-view .wmde-markdown p { margin: 0; }
+.md-prose a    { color: rgb(59 130 246); text-decoration: underline; }
 
 @keyframes slideIn {
   from {

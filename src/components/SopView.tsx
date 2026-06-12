@@ -113,7 +113,7 @@ function SopDetail({
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-stone-800 dark:text-stone-200 leading-snug">{step.text}</p>
-                    {step.note && <MarkdownView source={step.note} className="text-xs text-stone-400 mt-1 pl-0.5 sop-step-note-view" />}
+                    {step.note && <MarkdownView source={step.note} className="text-xs text-stone-400 mt-1 pl-0.5" />}
                   </div>
                 </div>
               ))}
@@ -124,7 +124,7 @@ function SopDetail({
         {sop.note && (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
             <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-2">참고 메모</p>
-            <MarkdownView source={sop.note} className="text-sm sop-md-view" />
+            <MarkdownView source={sop.note} className="text-sm" />
           </div>
         )}
       </div>
