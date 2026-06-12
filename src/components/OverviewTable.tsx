@@ -4,7 +4,7 @@ import { calculateTotalCost, formatCurrency, formatPercent, checkMenuAlert, hasM
 import {
   AlertCircle, EyeOff, TrendingUp, TrendingDown,
   ChefHat, LayoutGrid, Table as TableIcon, FlaskConical,
-  ChevronDown, ChevronUp, Plus, Trash2, Search, X, Copy, BookOpen, RotateCcw, Save,
+  ChevronDown, ChevronUp, Plus, Trash2, Search, X, Copy, BookOpen, RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -23,7 +23,6 @@ interface Props {
   onToggleColumn: (column: keyof Props['visibleColumns']) => void;
   onSaveRecipe?: (menuId: string, recipe: RecipeItem[], notes: string) => void;
   onDuplicateMenu?: (menuId: string) => void;
-  onBulkSavePrices?: (updates: Array<{ menuId: string; prices: Partial<Record<string, number>> }>) => Promise<void>;
 }
 
 const regions: Region[] = ['지방권', '광역권', '수도권'];
@@ -179,7 +178,6 @@ export const OverviewTable: React.FC<Props> = ({
   onToggleColumn,
   onSaveRecipe,
   onDuplicateMenu,
-  onBulkSavePrices,
 }) => {
   const [viewMode, setViewMode] = useState<'card' | 'table' | 'sim'>('table');
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
@@ -188,8 +186,6 @@ export const OverviewTable: React.FC<Props> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   // simPrices: menuId → { region → price }
   const [simPrices, setSimPrices] = useState<Record<string, Partial<Record<Region, number>>>>({});
-  const [simSaving, setSimSaving] = useState(false);
-
   const makeFreshSimPrices = useCallback(() => {
     const p: Record<string, Partial<Record<Region, number>>> = {};
     menus.forEach(m => { p[m.id] = { ...m.prices } as Record<Region, number>; });
@@ -211,20 +207,6 @@ export const OverviewTable: React.FC<Props> = ({
     const orig = menus.find(m => m.id === menuId)?.prices;
     return regions.some(r => (prices[r] ?? 0) !== (orig?.[r] ?? 0));
   }).map(([id]) => id);
-
-  const handleApplySim = async () => {
-    if (!onBulkSavePrices || changedMenuIds.length === 0) return;
-    setSimSaving(true);
-    try {
-      const updates = changedMenuIds.map(menuId => ({
-        menuId,
-        prices: simPrices[menuId] as Record<string, number>,
-      }));
-      await onBulkSavePrices(updates);
-    } finally {
-      setSimSaving(false);
-    }
-  };
 
   const filteredMenus = menus.filter(m => {
     const matchesSearch = !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -511,11 +493,6 @@ export const OverviewTable: React.FC<Props> = ({
               <button onClick={resetSim} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-stone-300 hover:text-white bg-stone-700 dark:bg-stone-600 hover:bg-stone-600 dark:hover:bg-stone-500 rounded-sm transition-colors">
                 <RotateCcw size={13} /> 초기화
               </button>
-              {onBulkSavePrices && (
-                <button onClick={handleApplySim} disabled={changedMenuIds.length === 0 || simSaving} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-stone-900 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 rounded-sm transition-colors">
-                  <Save size={13} /> {simSaving ? '저장 중...' : `가격 적용 (${changedMenuIds.length}개)`}
-                </button>
-              )}
               <button onClick={() => setViewMode('table')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-stone-400 hover:text-white hover:bg-stone-600 rounded-sm transition-colors">
                 <X size={13} /> 닫기
               </button>
@@ -616,14 +593,6 @@ export const OverviewTable: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* 하단 저장 버튼 (긴 목록용 반복) */}
-          {onBulkSavePrices && changedMenuIds.length > 0 && (
-            <div className="flex justify-end pt-2">
-              <button onClick={handleApplySim} disabled={simSaving} className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-stone-900 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 rounded-sm transition-colors">
-                <Save size={15} /> {simSaving ? '저장 중...' : `${changedMenuIds.length}개 메뉴 가격 저장 적용`}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
