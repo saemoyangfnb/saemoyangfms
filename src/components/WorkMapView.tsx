@@ -1302,151 +1302,29 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
           </div>
         </div>
 
-        {/* 탭 버튼 */}
-        <div className="flex border-b border-stone-200 dark:border-stone-700 px-4 shrink-0">
-          {([
-            { key: 'list'     as const, label: '목록',     icon: LayoutList },
-            { key: 'kanban'   as const, label: '칸반',     icon: Kanban },
-            { key: 'mindmap'  as const, label: '마인드맵', icon: Network },
-            { key: 'calendar' as const, label: '캘린더',   icon: Calendar },
-          ]).map(({ key, label, icon: Icon }) => (
-            <button key={key} onClick={() => { setActiveTab(key); if (key === 'kanban') setFilterStatus('all'); }}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-colors ${activeTab === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
-              <Icon size={12} /> {label}
-            </button>
-          ))}
-        </div>
-
-        {/* 탭 콘텐츠 */}
-        <div className={`flex-1 min-h-0 ${activeTab === 'kanban' ? 'overflow-x-auto overflow-y-hidden p-5' : 'overflow-y-auto p-5'}`}>
-
-          {/* ── 목록 탭 ── */}
-          {activeTab === 'list' && (
-            <>
-              <div className="flex gap-2 mb-3">
-                <div className="flex-1 flex items-center gap-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
-                  <Search size={13} className="text-stone-400 shrink-0" />
-                  <input value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="업무명·담당자 검색..."
-                    className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none" />
-                  {search && <button onClick={() => setSearch('')} className="text-stone-400 hover:text-stone-700"><X size={12} /></button>}
-                </div>
-                <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
-                  className="text-xs border border-stone-200 dark:border-stone-600 rounded-sm px-2 py-2 bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 focus:outline-none">
-                  <option value="">전체 담당자</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
+        {/* 프로젝트 마인드맵 */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-5">
+          {selectedProjectId ? (
+            loadingDetail ? (
+              <div className="flex items-center justify-center py-32">
+                <div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" />
               </div>
-              <div className="flex gap-1 border-b border-stone-200 dark:border-stone-700 mb-4 overflow-x-auto">
-                {([
-                  { key: 'all' as const,     label: `전체 ${filteredTasks.length}` },
-                  { key: 'late' as const,    label: `지연 ${counts.late}` },
-                  { key: 'urgent' as const,  label: `임박 ${counts.urgent}` },
-                  { key: 'normal' as const,  label: `진행중 ${counts.normal}` },
-                  { key: 'done' as const,    label: `완료 ${counts.done}` },
-                ] as const).map(({ key, label }) => (
-                  <button key={key} onClick={() => setFilterStatus(key)}
-                    className={`px-3 py-2 text-xs font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${filterStatus === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'} ${key === 'late' && counts.late > 0 && filterStatus !== 'late' ? 'text-red-400' : ''} ${key === 'urgent' && counts.urgent > 0 && filterStatus !== 'urgent' ? 'text-amber-500' : ''}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {grouped.size === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <CheckCircle2 size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
-                  <p className="text-sm font-bold text-stone-500 dark:text-stone-400">
-                    {search || filterAssignee || filterStatus !== 'all' ? '검색 결과가 없습니다' : '업무가 없습니다'}
-                  </p>
-                  {!search && filterStatus === 'all' && (
-                    <button onClick={() => setShowTaskForm(true)} className="mt-3 text-xs text-stone-500 underline hover:text-stone-700">첫 업무 추가하기</button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {[...grouped.entries()].map(([assigneeId, { name, tasks: aTasks }]) => {
-                    const doneCount = aTasks.filter(t => t.status === 'done').length;
-                    const lateCount = aTasks.filter(t => getTrackStatus(t) === 'late').length;
-                    const emp = employees.find(e => e.id === assigneeId);
-                    return (
-                      <div key={assigneeId} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm overflow-hidden">
-                        <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-stone-100 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/50">
-                          <div className="w-7 h-7 rounded-full bg-stone-800 dark:bg-stone-200 flex items-center justify-center text-xs font-black text-white dark:text-stone-900 shrink-0">{name[0]}</div>
-                          <div className="flex-1">
-                            <span className="text-sm font-black text-stone-800 dark:text-stone-200">{name}</span>
-                            {emp?.position && <span className="text-[10px] text-stone-400 ml-1.5">{emp.position}</span>}
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px]">
-                            {lateCount > 0 && <span className="font-bold text-red-500 flex items-center gap-0.5"><AlertCircle size={10} /> 지연 {lateCount}</span>}
-                            <span className="text-stone-400">{doneCount}/{aTasks.length} 완료</span>
-                            <div className="w-16 h-1.5 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
-                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${aTasks.length > 0 ? Math.round(doneCount / aTasks.length * 100) : 0}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                        {aTasks.map(task => (
-                          <TaskRow key={task.id} task={task} meetingMap={meetingMap}
-                            onEdit={() => { setEditingTask(task); setShowTaskForm(true); }}
-                            onDelete={() => handleDeleteTask(task)}
-                            onProgressChange={v => handleProgressChange(task.id, v)}
-                            onToggleDone={() => handleToggleDone(task)} />
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── 칸반 탭 ── */}
-          {activeTab === 'kanban' && (
-            <TaskKanbanView
-              tasks={filteredTasks}
-              employees={employees}
-              onEdit={task => { setEditingTask(task); setShowTaskForm(true); }}
-              onStatusChange={handleStatusChange}
-            />
-          )}
-
-          {/* ── 마인드맵 탭 ── */}
-          {activeTab === 'mindmap' && (
-            selectedProjectId ? (
-              loadingDetail ? (
-                <div className="flex items-center justify-center py-32">
-                  <div className="w-6 h-6 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin" />
-                </div>
-              ) : (
-                <ProjectMindMap
-                  projectId={selectedProjectId}
-                  projectTitle={selectedProject?.title ?? ''}
-                  docs={projectDocs}
-                  employees={employees}
-                  onOpenDoc={() => {}}
-                  showSubToggle={false}
-                />
-              )
             ) : (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <Network size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
-                <p className="text-sm font-bold text-stone-500 dark:text-stone-400">프로젝트를 선택하세요</p>
-                <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">좌측에서 프로젝트를 클릭하면 마인드맵이 표시됩니다</p>
-              </div>
+              <ProjectMindMap
+                projectId={selectedProjectId}
+                projectTitle={selectedProject?.title ?? ''}
+                docs={projectDocs}
+                employees={employees}
+                onOpenDoc={() => {}}
+              />
             )
+          ) : (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <Network size={40} className="text-stone-300 dark:text-stone-600 mb-3" />
+              <p className="text-sm font-bold text-stone-500 dark:text-stone-400">프로젝트를 선택하세요</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500 mt-1">좌측에서 프로젝트를 클릭하면 마인드맵이 표시됩니다</p>
+            </div>
           )}
-
-          {/* ── 캘린더 탭 ── */}
-          {activeTab === 'calendar' && (
-            <ProjectWeekTab
-              selectedProject={selectedProject ?? null}
-              employees={employees}
-              tasks={filteredTasks}
-              weekStart={weekStart}
-              setWeekStart={setWeekStart}
-              weekReports={weekReports}
-              loading={loadingReports}
-            />
-          )}
-
         </div>
       </div>
 
