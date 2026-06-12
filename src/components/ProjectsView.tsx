@@ -21,7 +21,7 @@ import {
   Trash2, Edit2, X, Users, Calendar,
   GripVertical, FolderKanban, Check, Link, Search, Kanban, GitBranch, FileText,
   Archive, CheckCircle2, RotateCcw, BookOpen, BarChart2, Folder, FolderOpen, Printer,
-  AlertCircle, Clock, Download, SlidersHorizontal,
+  AlertCircle, Clock, Download, SlidersHorizontal, LayoutList,
 } from 'lucide-react';
 
 // ── 유틸 ──────────────────────────────────────────────────
@@ -56,6 +56,16 @@ const fmtDate = (iso: string) => {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 };
+
+function getDDay(ymd?: string): string | null {
+  if (!ymd) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const due = new Date(ymd + 'T00:00:00');
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return 'D-Day';
+  if (diff < 0) return `D+${Math.abs(diff)}`;
+  return `D-${diff}`;
+}
 
 // ── 설정 ──────────────────────────────────────────────────
 const COLOR_CFG: Record<string, { headCls: string; bgCls: string; dotCls: string; cardBorderCls: string }> = {
@@ -1246,6 +1256,191 @@ function ProjectGanttView({
   );
 }
 
+// ── 마인드맵 노드 뷰 공통 ─────────────────────────────────
+
+type NodeStatusKey = 'todo' | 'in_progress' | 'done';
+
+const NODE_COL_CFG: Record<NodeStatusKey, { label: string; dotCls: string; headerCls: string; badgeCls: string }> = {
+  todo:        { label: '예정',   dotCls: 'bg-stone-400',   headerCls: 'text-stone-600 dark:text-stone-300',    badgeCls: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300' },
+  in_progress: { label: '진행중', dotCls: 'bg-amber-400',   headerCls: 'text-amber-700 dark:text-amber-400',    badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  done:        { label: '완료',   dotCls: 'bg-emerald-500', headerCls: 'text-emerald-700 dark:text-emerald-400', badgeCls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+};
+
+function flattenTree(nodes: MindMapNode[]): Array<{ node: MindMapNode; depth: number }> {
+  const root = nodes.find(n => n.parentId === null);
+  if (!root) return [];
+  const result: Array<{ node: MindMapNode; depth: number }> = [];
+  const visit = (id: string, depth: number) => {
+    if (depth > 0) {
+      const n = nodes.find(x => x.id === id);
+      if (n) result.push({ node: n, depth });
+    }
+    nodes.filter(n => n.parentId === id)
+      .sort((a, b) => a.order - b.order)
+      .forEach(c => visit(c.id, depth + 1));
+  };
+  visit(root.id, 0);
+  return result;
+}
+
+// ── 마인드맵 노드 칸반 뷰 ─────────────────────────────────
+function MindMapNodeKanban({ nodes, employees, onUpdateNode }: {
+  nodes: MindMapNode[];
+  employees: Employee[];
+  onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
+}) {
+  const flat = flattenTree(nodes);
+  const byStatus = (s: NodeStatusKey) => flat.filter(({ node }) => (node.status ?? 'todo') === s);
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-4 min-h-[240px]">
+      {(['todo', 'in_progress', 'done'] as NodeStatusKey[]).map(status => {
+        const cfg = NODE_COL_CFG[status];
+        const items = byStatus(status);
+        return (
+          <div key={status} className="flex-1 min-w-[180px] max-w-[260px] flex flex-col">
+            <div className="flex items-center gap-1.5 mb-3 px-1">
+              <span className={`w-2 h-2 rounded-full ${cfg.dotCls} shrink-0`} />
+              <span className={`text-xs font-black ${cfg.headerCls}`}>{cfg.label}</span>
+              <span className="ml-auto text-[11px] text-stone-400">{items.length}</span>
+            </div>
+            <div className="space-y-2">
+              {items.map(({ node, depth }) => {
+                const assignee = node.assigneeId ? employees.find(e => e.id === node.assigneeId) : null;
+                const warn = nodeWarnLevel(node);
+                const dday = getDDay(node.dueDate);
+                return (
+                  <div key={node.id} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm p-2.5 hover:border-stone-400 dark:hover:border-stone-500 transition-colors">
+                    <div className="flex items-start gap-1.5 mb-1.5">
+                      {depth > 1 && <span className="text-[9px] text-stone-300 dark:text-stone-700 shrink-0 mt-0.5">{'│'.repeat(depth - 2)}└</span>}
+                      <p className="text-xs font-bold text-stone-800 dark:text-stone-200 leading-snug">{node.text || '(제목 없음)'}</p>
+                    </div>
+                    {(assignee || node.dueDate) && (
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        {assignee && (
+                          <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                            <Users size={9} /> {assignee.name}
+                          </span>
+                        )}
+                        {node.dueDate && (
+                          <span className={`text-[10px] flex items-center gap-1 ${warn === 'overdue' ? 'text-red-400 font-bold' : warn === 'soon' ? 'text-orange-400' : 'text-stone-400'}`}>
+                            <Clock size={9} /> {node.dueDate.slice(5)}
+                            {dday && <span>{dday}</span>}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-1">
+                      {(['todo', 'in_progress', 'done'] as NodeStatusKey[]).map(s => (
+                        <button key={s}
+                          onClick={() => onUpdateNode(node.id, { status: s })}
+                          className={`flex-1 py-0.5 text-[9px] font-bold rounded-sm border transition-colors ${
+                            (node.status ?? 'todo') === s
+                              ? s === 'done' ? 'bg-emerald-500 text-white border-emerald-500'
+                                : s === 'in_progress' ? 'bg-amber-400 text-white border-amber-400'
+                                : 'bg-stone-500 text-white border-stone-500'
+                              : 'border-stone-200 dark:border-stone-700 text-stone-400 hover:border-stone-400'
+                          }`}
+                        >
+                          {NODE_COL_CFG[s].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {items.length === 0 && (
+                <div className="text-center py-8 text-[11px] text-stone-300 dark:text-stone-700 border border-dashed border-stone-200 dark:border-stone-800 rounded-sm">없음</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── 마인드맵 노드 테이블(목록) 뷰 ────────────────────────
+function MindMapNodeTable({ nodes, employees, onUpdateNode, tableRef }: {
+  nodes: MindMapNode[];
+  employees: Employee[];
+  onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
+  tableRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const flat = flattenTree(nodes);
+  const todoCount        = flat.filter(({ node }) => (node.status ?? 'todo') === 'todo').length;
+  const inProgressCount  = flat.filter(({ node }) => node.status === 'in_progress').length;
+  const doneCount        = flat.filter(({ node }) => node.status === 'done').length;
+
+  const cycleStatus = (node: MindMapNode) => {
+    const next: NodeStatusKey = node.status === 'todo' ? 'in_progress' : node.status === 'in_progress' ? 'done' : 'todo';
+    onUpdateNode(node.id, { status: next });
+  };
+
+  return (
+    <div ref={tableRef}>
+      <div className="flex items-center gap-4 mb-3 text-[11px] flex-wrap">
+        <span className="text-stone-500 dark:text-stone-400">전체 <b className="text-stone-800 dark:text-stone-200">{flat.length}</b>개</span>
+        <span className="text-stone-400">예정 {todoCount}</span>
+        <span className="text-amber-500">진행중 {inProgressCount}</span>
+        <span className="text-emerald-500">완료 {doneCount}</span>
+      </div>
+      <div className="overflow-x-auto border border-stone-200 dark:border-stone-700 rounded-sm">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-stone-100 dark:bg-stone-800 border-b border-stone-200 dark:border-stone-700">
+              <th className="text-left px-3 py-2 font-black text-stone-500 dark:text-stone-400 w-8 tabular-nums">#</th>
+              <th className="text-left px-3 py-2 font-black text-stone-500 dark:text-stone-400">항목</th>
+              <th className="text-center px-3 py-2 font-black text-stone-500 dark:text-stone-400 w-20">상태</th>
+              <th className="text-left px-3 py-2 font-black text-stone-500 dark:text-stone-400 w-20">담당자</th>
+              <th className="text-left px-3 py-2 font-black text-stone-500 dark:text-stone-400 w-20">마감일</th>
+              <th className="text-left px-3 py-2 font-black text-stone-500 dark:text-stone-400 w-14">소요</th>
+            </tr>
+          </thead>
+          <tbody>
+            {flat.map(({ node, depth }, idx) => {
+              const status: NodeStatusKey = node.status ?? 'todo';
+              const cfg = NODE_COL_CFG[status];
+              const assignee = node.assigneeId ? employees.find(e => e.id === node.assigneeId) : null;
+              const warn = nodeWarnLevel(node);
+              return (
+                <tr key={node.id} className="border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/40 group">
+                  <td className="px-3 py-2 text-stone-300 dark:text-stone-700 tabular-nums">{idx + 1}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1" style={{ paddingLeft: `${(depth - 1) * 14}px` }}>
+                      {depth > 1 && <span className="text-[10px] text-stone-300 dark:text-stone-700 shrink-0">└</span>}
+                      <span className="font-bold text-stone-800 dark:text-stone-200">{node.text || '(제목 없음)'}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      onClick={() => cycleStatus(node)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${cfg.badgeCls} hover:opacity-80 cursor-pointer`}
+                      title="클릭하여 상태 변경"
+                    >
+                      {cfg.label}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 text-stone-500 dark:text-stone-400">{assignee?.name ?? <span className="text-stone-300 dark:text-stone-700">—</span>}</td>
+                  <td className={`px-3 py-2 tabular-nums ${warn === 'overdue' ? 'text-red-500 font-bold' : warn === 'soon' ? 'text-orange-400 font-bold' : 'text-stone-500 dark:text-stone-400'}`}>
+                    {node.dueDate ? node.dueDate.slice(5) : <span className="text-stone-300 dark:text-stone-700">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-stone-400">
+                    {node.duration ? `${node.duration}일` : <span className="text-stone-300 dark:text-stone-700">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+            {flat.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">마인드맵에 노드를 추가하세요</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── 마인드맵 ──────────────────────────────────────────────
 function MindMapTreeNode({
   node, nodes, depth, editingId, selectedId, linkPickerId,
@@ -1453,9 +1648,11 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const [templates, setTemplates] = useState<ProjectSopTemplate[]>([]);
   const [sopLoading, setSopLoading] = useState(false);
   const [sopSearch, setSopSearch] = useState('');
+  const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table'>('tree');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
 
   const handlePrint = () => {
@@ -1474,6 +1671,34 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
     document.body.insertBefore(container, document.body.firstChild);
     const pageStyle = document.createElement('style');
     pageStyle.textContent = `@media print { @page { size: A4 portrait; } }`;
+    document.head.appendChild(pageStyle);
+    const cleanup = () => { container.remove(); pageStyle.remove(); };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+  };
+
+  const handleTablePrint = () => {
+    if (!tableRef.current) return;
+    const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+    const container = document.createElement('div');
+    container.id = '_mm_print_wrap_';
+    container.innerHTML = `
+      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 업무 목록</div>
+      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
+      <hr style="border:none;border-top:2px solid #222;margin-bottom:16px;">
+    `;
+    const clone = tableRef.current.cloneNode(true) as HTMLElement;
+    // 상태 뱃지 인터랙션 제거 (버튼 → span)
+    clone.querySelectorAll('button').forEach(btn => {
+      const span = document.createElement('span');
+      span.className = btn.className;
+      span.textContent = btn.textContent;
+      btn.replaceWith(span);
+    });
+    container.appendChild(clone);
+    document.body.insertBefore(container, document.body.firstChild);
+    const pageStyle = document.createElement('style');
+    pageStyle.textContent = `@media print { @page { size: A4 landscape; margin: 10mm; } }`;
     document.head.appendChild(pageStyle);
     const cleanup = () => { container.remove(); pageStyle.remove(); };
     window.addEventListener('afterprint', cleanup, { once: true });
@@ -1696,26 +1921,49 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       }}
     >
       {/* 도구모음 */}
-      <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
-        <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
-          <span>더블클릭: 편집</span>
-          <span>Enter: 형제 추가</span>
-          <span>Tab: 하위 추가</span>
-          <span>Del: 삭제</span>
+      <div className="no-print flex items-center justify-between mb-3 flex-wrap gap-2">
+        {/* 뷰 토글 */}
+        <div className="flex items-center gap-0.5 bg-stone-100 dark:bg-stone-800 rounded-sm p-0.5">
+          {([
+            { key: 'tree',   icon: <GitBranch size={11} />, label: '트리' },
+            { key: 'kanban', icon: <Kanban size={11} />,    label: '칸반' },
+            { key: 'table',  icon: <LayoutList size={11} />, label: '목록' },
+          ] as { key: 'tree' | 'kanban' | 'table'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+            <button key={key} onClick={() => setMmView(key)}
+              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-sm transition-colors ${
+                mmView === key
+                  ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm'
+                  : 'text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'
+              }`}
+            >
+              {icon} {label}
+            </button>
+          ))}
         </div>
+        {/* 액션 버튼 */}
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-          <button
-            onClick={openSopPicker}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-          ><Download size={10} />업무규정 불러오기</button>
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-          ><Printer size={10} />인쇄</button>
-          <button
-            onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors"
-          ><Plus size={10} />주제 추가</button>
+          {mmView === 'tree' && (
+            <>
+              <div className="text-[10px] text-stone-300 dark:text-stone-700 flex items-center gap-2 mr-1">
+                <span>더블클릭:편집</span><span>Enter:형제</span><span>Tab:하위</span>
+              </div>
+              <button onClick={openSopPicker}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+              ><Download size={10} />업무규정</button>
+              <button onClick={handlePrint}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+              ><Printer size={10} />인쇄</button>
+              <button
+                onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors"
+              ><Plus size={10} />주제 추가</button>
+            </>
+          )}
+          {mmView === 'table' && (
+            <button onClick={handleTablePrint}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+            ><Printer size={10} />목록 인쇄</button>
+          )}
         </div>
       </div>
 
@@ -1827,29 +2075,41 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
         </div>
       )}
 
+      {/* 칸반 뷰 */}
+      {mmView === 'kanban' && (
+        <MindMapNodeKanban nodes={nodes} employees={employees} onUpdateNode={handleUpdateNode} />
+      )}
+
+      {/* 목록(테이블) 뷰 */}
+      {mmView === 'table' && (
+        <MindMapNodeTable nodes={nodes} employees={employees} onUpdateNode={handleUpdateNode} tableRef={tableRef} />
+      )}
+
       {/* 마인드맵 트리 */}
-      <div className="overflow-x-auto pb-4">
-        {rootNode && (
-          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
-            <MindMapTreeNode
-              node={rootNode} nodes={nodes} depth={0}
-              editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
-              docs={docs} employees={employees}
-              onSelect={setSelectedId}
-              onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
-              onUpdateText={handleUpdateText}
-              onStopEdit={() => setEditingId(null)}
-              onAddSibling={handleAddSibling}
-              onAddChild={handleAddChild}
-              onDelete={handleDelete}
-              onLinkReport={handleLinkReport}
-              onUnlinkReport={handleUnlinkReport}
-              onOpenDoc={onOpenDoc}
-              onToggleLinkPicker={setLinkPickerId}
-            />
-          </div>
-        )}
-      </div>
+      {mmView === 'tree' && (
+        <div className="overflow-x-auto pb-4">
+          {rootNode && (
+            <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
+              <MindMapTreeNode
+                node={rootNode} nodes={nodes} depth={0}
+                editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
+                docs={docs} employees={employees}
+                onSelect={setSelectedId}
+                onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
+                onUpdateText={handleUpdateText}
+                onStopEdit={() => setEditingId(null)}
+                onAddSibling={handleAddSibling}
+                onAddChild={handleAddChild}
+                onDelete={handleDelete}
+                onLinkReport={handleLinkReport}
+                onUnlinkReport={handleUnlinkReport}
+                onOpenDoc={onOpenDoc}
+                onToggleLinkPicker={setLinkPickerId}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SOP 구조 불러오기 모달 */}
       {sopPickerOpen && (
