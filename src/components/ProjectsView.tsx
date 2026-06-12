@@ -1643,6 +1643,7 @@ function MindMapTreeNode({
   docs, employees, onSelect, onStartEdit, onUpdateText, onStopEdit,
   onAddSibling, onAddChild, onDelete,
   onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker, onUpdateNode,
+  linkMode, linkSourceId, onLinkClick,
 }: {
   node: MindMapNode;
   nodes: MindMapNode[];
@@ -1664,6 +1665,9 @@ function MindMapTreeNode({
   onOpenDoc: (r: Report) => void;
   onToggleLinkPicker: (id: string | null) => void;
   onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
+  linkMode: boolean;
+  linkSourceId: string | null;
+  onLinkClick: (id: string) => void;
 }) {
   const children = nodes.filter(n => n.parentId === node.id).sort((a, b) => a.order - b.order);
   const isEditing = editingId === node.id;
@@ -1672,9 +1676,14 @@ function MindMapTreeNode({
   const linkedReport = node.reportId ? docs.find(d => d.id === node.reportId) : undefined;
   const isLinkPickerOpen = linkPickerId === node.id;
   const inputRef = useRef<HTMLInputElement>(null);
+  const skipNextBlur = useRef(false);
   const [linkSearch, setLinkSearch] = useState('');
   const [showLinkPicker, setShowLinkPicker] = useState(false);
   const warn = nodeWarnLevel(node);
+  const isLinkSource = linkMode && linkSourceId === node.id;
+  const isLinkTarget = linkMode && linkSourceId != null && linkSourceId !== node.id;
+  const alreadyLinked = linkMode && linkSourceId != null &&
+    (nodes.find(n => n.id === linkSourceId)?.linkedNodeIds ?? []).includes(node.id);
   const assigneeName = node.assigneeId ? (employees.find(e => e.id === node.assigneeId)?.name ?? null) : null;
   const linkedNodes = (node.linkedNodeIds ?? []).map(id => nodes.find(n => n.id === id)).filter(Boolean) as MindMapNode[];
   const addLink = (targetId: string) => {
@@ -1712,9 +1721,11 @@ function MindMapTreeNode({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      skipNextBlur.current = true;
       if (isRoot) onAddChild(node.id); else onAddSibling(node.id);
     } else if (e.key === 'Tab') {
       e.preventDefault();
+      skipNextBlur.current = true;
       onAddChild(node.id);
     } else if (e.key === 'Escape') {
       onStopEdit();
@@ -1730,9 +1741,23 @@ function MindMapTreeNode({
       <div className="relative shrink-0">
         <div
           data-node-id={node.id}
-          className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing} transition-all`}
-          onClick={e => { e.stopPropagation(); onSelect(node.id); }}
-          onDoubleClick={e => { e.stopPropagation(); onStartEdit(node.id); }}
+          className={`${depthCls} rounded-sm whitespace-nowrap flex items-center gap-1.5 transition-all ${
+            linkMode
+              ? isLinkSource
+                ? 'cursor-crosshair ring-2 ring-orange-400 ring-offset-1 dark:ring-offset-stone-900'
+                : isLinkTarget
+                  ? alreadyLinked
+                    ? 'cursor-crosshair ring-2 ring-red-400 ring-offset-1 dark:ring-offset-stone-900 hover:ring-red-500'
+                    : 'cursor-crosshair ring-1 ring-dashed ring-blue-400 hover:ring-2 ring-offset-1 dark:ring-offset-stone-900'
+                  : 'cursor-crosshair hover:ring-1 hover:ring-blue-300 ring-offset-1 dark:ring-offset-stone-900'
+              : `cursor-pointer ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing}`
+          }`}
+          onClick={e => {
+            e.stopPropagation();
+            if (linkMode) { onLinkClick(node.id); return; }
+            onSelect(node.id);
+          }}
+          onDoubleClick={e => { e.stopPropagation(); if (!linkMode) onStartEdit(node.id); }}
         >
           {/* 상태/경고 도트 */}
           {!isEditing && !isRoot && (
@@ -1749,6 +1774,10 @@ function MindMapTreeNode({
               value={node.text ?? ''}
               onChange={e => onUpdateText(node.id, e.target.value)}
               onKeyDown={handleKeyDown}
+              onBlur={() => {
+                if (skipNextBlur.current) { skipNextBlur.current = false; return; }
+                onStopEdit();
+              }}
               className="bg-transparent outline-none"
               size={Math.max((node.text?.length ?? 0) + 2, 5)}
             />
@@ -1953,6 +1982,7 @@ function MindMapTreeNode({
                   onLinkReport={onLinkReport} onUnlinkReport={onUnlinkReport}
                   onOpenDoc={onOpenDoc} onToggleLinkPicker={onToggleLinkPicker}
                   onUpdateNode={onUpdateNode}
+                  linkMode={linkMode} linkSourceId={linkSourceId} onLinkClick={onLinkClick}
                 />
               </div>
               );
@@ -1984,8 +2014,11 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
   const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table' | 'calendar'>('tree');
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkSourceId, setLinkSourceId] = useState<string | null>(null);
   const [linkLines, setLinkLines] = useState<{ id: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
 
   useEffect(() => {
@@ -2147,17 +2180,57 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
     setNodes(next); saveNodes(next);
   };
 
+  const handleStopEdit = () => {
+    if (editingId) {
+      const n = nodes.find(x => x.id === editingId);
+      if (n && n.parentId !== null && !(n.text ?? '').trim()) {
+        const next = nodes.filter(x => x.id !== editingId);
+        setNodes(next); saveNodes(next);
+        setSelectedId(n.parentId);
+        setEditingId(null); return;
+      }
+    }
+    setEditingId(null);
+  };
+
   const handleContainerKeyDown = (e: React.KeyboardEvent) => {
     if (editingId) return;
     if (!selectedId) return;
-    if (e.key === 'Enter' || e.key === 'F2') {
+    if (e.key === 'F2') {
       e.preventDefault(); setEditingId(selectedId);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const node = nodes.find(n => n.id === selectedId);
+      if (node?.parentId === null) handleAddChild(selectedId);
+      else handleAddSibling(selectedId);
     } else if (e.key === 'Tab') {
       e.preventDefault(); handleAddChild(selectedId);
     } else if (e.key === 'Delete') {
       const node = nodes.find(n => n.id === selectedId);
       if (node && node.parentId !== null) { e.preventDefault(); handleDelete(selectedId); }
     }
+  };
+
+  const handleLinkClick = (clickedId: string) => {
+    if (!linkSourceId) {
+      setLinkSourceId(clickedId);
+      return;
+    }
+    if (linkSourceId === clickedId) {
+      setLinkSourceId(null);
+      return;
+    }
+    const sourceNode = nodes.find(n => n.id === linkSourceId);
+    const alreadyLinked = (sourceNode?.linkedNodeIds ?? []).includes(clickedId);
+    const next = nodes.map(n => {
+      if (n.id === linkSourceId) {
+        const ids = n.linkedNodeIds ?? [];
+        return { ...n, linkedNodeIds: alreadyLinked ? ids.filter(id => id !== clickedId) : [...ids, clickedId] };
+      }
+      return n;
+    });
+    setNodes(next); saveNodes(next);
+    setLinkSourceId(clickedId); // keep last as new source for chaining
   };
 
   const openSopPicker = async () => {
@@ -2240,18 +2313,14 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
 
   return (
     <div
+      ref={containerRef}
       tabIndex={0}
       className="outline-none"
       onKeyDown={handleContainerKeyDown}
       onBlur={e => {
         if (skipBlurRef.current) return;
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          setEditingId(null); setLinkPickerId(null);
-        }
-      }}
-      onClick={e => {
-        if (e.target === e.currentTarget) {
-          setSelectedId(null); setEditingId(null); setLinkPickerId(null);
+          handleStopEdit(); setLinkPickerId(null);
         }
       }}
     >
@@ -2274,12 +2343,28 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       {/* 도구모음 */}
       <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
-          <span>더블클릭: 편집</span>
-          <span>Enter: 형제 추가</span>
-          <span>Tab: 하위 추가</span>
-          <span>Del: 삭제</span>
+          {linkMode ? (
+            linkSourceId
+              ? <span className="text-orange-500 font-bold">출발 노드 선택됨 → 연결할 노드 클릭 (같은 노드 클릭: 취소)</span>
+              : <span className="text-blue-500 font-bold">연결 시작 노드를 클릭하세요</span>
+          ) : (
+            <>
+              <span>클릭: 선택 · Enter: 형제 추가</span>
+              <span>Tab: 하위 추가</span>
+              <span>더블클릭: 편집</span>
+              <span>Del: 삭제</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+          <button
+            onClick={() => { setLinkMode(v => !v); setLinkSourceId(null); }}
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold border rounded-sm transition-colors ${
+              linkMode
+                ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                : 'border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800'
+            }`}
+          ><Link size={10} />연결 모드</button>
           <button onClick={openSopPicker}
             className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
           ><Download size={10} />업무규정 불러오기</button>
@@ -2321,7 +2406,13 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
 
 
       {/* 마인드맵 트리 */}
-      <div className="overflow-x-auto pb-4">
+      <div
+        className="overflow-x-auto pb-4"
+        onClick={() => {
+          if (linkMode) { setLinkSourceId(null); return; }
+          setSelectedId(null); setEditingId(null); setLinkPickerId(null);
+        }}
+      >
         {rootNode && (
           <div ref={printRef} className="pl-2 py-4 inline-block min-w-full relative">
             {/* 노드 연결선 SVG 오버레이 */}
@@ -2353,10 +2444,10 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
               node={rootNode} nodes={nodes} depth={0}
               editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
               docs={docs} employees={employees}
-              onSelect={setSelectedId}
+              onSelect={id => { setSelectedId(id); containerRef.current?.focus(); }}
               onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
               onUpdateText={handleUpdateText}
-              onStopEdit={() => setEditingId(null)}
+              onStopEdit={handleStopEdit}
               onAddSibling={handleAddSibling}
               onAddChild={handleAddChild}
               onDelete={handleDelete}
@@ -2365,6 +2456,7 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
               onOpenDoc={onOpenDoc}
               onToggleLinkPicker={setLinkPickerId}
               onUpdateNode={handleUpdateNode}
+              linkMode={linkMode} linkSourceId={linkSourceId} onLinkClick={handleLinkClick}
             />
           </div>
         )}
