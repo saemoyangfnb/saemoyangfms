@@ -382,7 +382,7 @@ export function StoreListView({ currentUser }: Props) {
                       className="flex items-center gap-3 px-4 py-2.5 cursor-default"
                       onMouseEnter={e => {
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        setFormTooltip({ form, entry: entry ?? null, x: r.right + 8, y: r.top });
+                        setFormTooltip({ form, entry: entry ?? null, x: r.left - 264, y: r.top });
                       }}
                       onMouseLeave={() => setFormTooltip(null)}
                     >
