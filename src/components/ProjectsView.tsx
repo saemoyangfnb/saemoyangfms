@@ -1643,7 +1643,6 @@ function MindMapTreeNode({
   docs, employees, onSelect, onStartEdit, onUpdateText, onStopEdit,
   onAddSibling, onAddChild, onDelete,
   onLinkReport, onUnlinkReport, onOpenDoc, onToggleLinkPicker, onUpdateNode,
-  linkMode, linkSourceId, onLinkClick,
 }: {
   node: MindMapNode;
   nodes: MindMapNode[];
@@ -1665,9 +1664,6 @@ function MindMapTreeNode({
   onOpenDoc: (r: Report) => void;
   onToggleLinkPicker: (id: string | null) => void;
   onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
-  linkMode: boolean;
-  linkSourceId: string | null;
-  onLinkClick: (id: string) => void;
 }) {
   const children = nodes.filter(n => n.parentId === node.id).sort((a, b) => a.order - b.order);
   const isEditing = editingId === node.id;
@@ -1680,10 +1676,6 @@ function MindMapTreeNode({
   const [linkSearch, setLinkSearch] = useState('');
   const [showLinkPicker, setShowLinkPicker] = useState(false);
   const warn = nodeWarnLevel(node);
-  const isLinkSource = linkMode && linkSourceId === node.id;
-  const isLinkTarget = linkMode && linkSourceId != null && linkSourceId !== node.id;
-  const alreadyLinked = linkMode && linkSourceId != null &&
-    (nodes.find(n => n.id === linkSourceId)?.linkedNodeIds ?? []).includes(node.id);
   const assigneeName = node.assigneeId ? (employees.find(e => e.id === node.assigneeId)?.name ?? null) : null;
   const linkedNodes = (node.linkedNodeIds ?? []).map(id => nodes.find(n => n.id === id)).filter(Boolean) as MindMapNode[];
   const addLink = (targetId: string) => {
@@ -1745,26 +1737,12 @@ function MindMapTreeNode({
   return (
     <div className="flex items-center">
       {/* 노드 박스 + 링크 피커 */}
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 group">
         <div
           data-node-id={node.id}
-          className={`${depthCls} rounded-sm whitespace-nowrap flex items-center gap-1.5 transition-all ${
-            linkMode
-              ? isLinkSource
-                ? 'cursor-crosshair ring-2 ring-orange-400 ring-offset-1 dark:ring-offset-stone-900'
-                : isLinkTarget
-                  ? alreadyLinked
-                    ? 'cursor-crosshair ring-2 ring-red-400 ring-offset-1 dark:ring-offset-stone-900 hover:ring-red-500'
-                    : 'cursor-crosshair ring-1 ring-dashed ring-blue-400 hover:ring-2 ring-offset-1 dark:ring-offset-stone-900'
-                  : 'cursor-crosshair hover:ring-1 hover:ring-blue-300 ring-offset-1 dark:ring-offset-stone-900'
-              : `cursor-pointer ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing}`
-          }`}
-          onClick={e => {
-            e.stopPropagation();
-            if (linkMode) { onLinkClick(node.id); return; }
-            onSelect(node.id);
-          }}
-          onDoubleClick={e => { e.stopPropagation(); if (!linkMode) onStartEdit(node.id); }}
+          className={`${depthCls} rounded-sm cursor-pointer whitespace-nowrap flex items-center gap-1.5 transition-all ${isSelected && !isEditing ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-stone-900' : warnRing}`}
+          onClick={e => { e.stopPropagation(); onSelect(node.id); }}
+          onDoubleClick={e => { e.stopPropagation(); onStartEdit(node.id); }}
         >
           {/* 상태/경고 도트 */}
           {!isEditing && !isRoot && (
@@ -1841,6 +1819,17 @@ function MindMapTreeNode({
               </>
             )}
           </div>
+        )}
+
+        {/* 드래그 핸들 — 호버 시 오른쪽에 표시, mousedown으로 연결 드래그 시작 */}
+        {!isEditing && !isRoot && (
+          <div
+            data-drag-handle={node.id}
+            title="드래그하여 연결"
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-400 dark:bg-blue-500 border-2 border-white dark:border-stone-900 shadow opacity-0 group-hover:opacity-80 hover:!opacity-100 cursor-crosshair transition-opacity z-10"
+            style={{ right: -7 }}
+            onMouseDown={e => e.stopPropagation()}
+          />
         )}
 
         {/* 노드 팝업 — 선택 시 노드 바로 아래 표시 (빈 노드는 자동 편집 모드 진입하므로 팝업 불필요) */}
@@ -1989,7 +1978,6 @@ function MindMapTreeNode({
                   onLinkReport={onLinkReport} onUnlinkReport={onUnlinkReport}
                   onOpenDoc={onOpenDoc} onToggleLinkPicker={onToggleLinkPicker}
                   onUpdateNode={onUpdateNode}
-                  linkMode={linkMode} linkSourceId={linkSourceId} onLinkClick={onLinkClick}
                 />
               </div>
               );
@@ -2024,23 +2012,28 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const containerRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
   const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table' | 'calendar'>('tree');
-  const [linkMode, setLinkMode] = useState(false);
-  const [linkSourceId, setLinkSourceId] = useState<string | null>(null);
-  const [linkLines, setLinkLines] = useState<{ id: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [dragging, setDragging] = useState<{ sourceId: string } | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [nodePositions, setNodePositions] = useState<Map<string, { cx: number; cy: number; rx: number }>>(new Map());
+  const [linkLines, setLinkLines] = useState<{ id: string; sourceId: string; targetId: string; x1: number; y1: number; x2: number; y2: number; busX: number }[]>([]);
 
   useEffect(() => {
-    if (mmView !== 'tree' || !printRef.current) { setLinkLines([]); return; }
+    if (mmView !== 'tree' || !printRef.current) { setLinkLines([]); setNodePositions(new Map()); return; }
     const container = printRef.current;
-    const containerRect = container.getBoundingClientRect();
-    const nodePos = new Map<string, { x: number; y: number }>();
+    const cRect = container.getBoundingClientRect();
+    const nodeMap = new Map<string, { cx: number; cy: number; rx: number }>();
+    let maxRx = 0;
     container.querySelectorAll<HTMLElement>('[data-node-id]').forEach(el => {
       const nid = el.getAttribute('data-node-id')!;
       const r = el.getBoundingClientRect();
-      nodePos.set(nid, {
-        x: r.left - containerRect.left + r.width / 2,
-        y: r.top - containerRect.top + r.height / 2,
-      });
+      const cx = r.left - cRect.left + r.width / 2;
+      const cy = r.top - cRect.top + r.height / 2;
+      const rx = r.right - cRect.left;
+      nodeMap.set(nid, { cx, cy, rx });
+      if (rx > maxRx) maxRx = rx;
     });
+    setNodePositions(nodeMap);
+    const busX = maxRx + 52;
     const seen = new Set<string>();
     const newLines: typeof linkLines = [];
     nodes.forEach(n => {
@@ -2049,13 +2042,13 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
         const key = [n.id, tid].sort().join('|');
         if (seen.has(key)) return;
         seen.add(key);
-        const a = nodePos.get(n.id);
-        const b = nodePos.get(tid);
-        if (a && b) newLines.push({ id: key, x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+        const a = nodeMap.get(n.id);
+        const b = nodeMap.get(tid);
+        if (a && b) newLines.push({ id: key, sourceId: n.id, targetId: tid, x1: a.rx, y1: a.cy, x2: b.rx, y2: b.cy, busX });
       });
     });
     setLinkLines(newLines);
-  }, [nodes, mmView, selectedId]);
+  }, [nodes, mmView, selectedId, dragging]);
 
   const handlePrint = () => {
     if (!printRef.current) return;
@@ -2218,26 +2211,21 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
     }
   };
 
-  const handleLinkClick = (clickedId: string) => {
-    if (!linkSourceId) {
-      setLinkSourceId(clickedId);
-      return;
-    }
-    if (linkSourceId === clickedId) {
-      setLinkSourceId(null);
-      return;
-    }
-    const sourceNode = nodes.find(n => n.id === linkSourceId);
-    const alreadyLinked = (sourceNode?.linkedNodeIds ?? []).includes(clickedId);
+  const disconnectLink = (srcId: string, tgtId: string) => {
     const next = nodes.map(n => {
-      if (n.id === linkSourceId) {
-        const ids = n.linkedNodeIds ?? [];
-        return { ...n, linkedNodeIds: alreadyLinked ? ids.filter(id => id !== clickedId) : [...ids, clickedId] };
-      }
+      if (n.id === srcId) return { ...n, linkedNodeIds: (n.linkedNodeIds ?? []).filter(id => id !== tgtId) };
+      if (n.id === tgtId) return { ...n, linkedNodeIds: (n.linkedNodeIds ?? []).filter(id => id !== srcId) };
       return n;
     });
     setNodes(next); saveNodes(next);
-    setLinkSourceId(clickedId); // keep last as new source for chaining
+  };
+
+  const connectNodes = (srcId: string, tgtId: string) => {
+    if (srcId === tgtId) return;
+    const src = nodes.find(n => n.id === srcId);
+    if (!src || (src.linkedNodeIds ?? []).includes(tgtId)) return;
+    const next = nodes.map(n => n.id === srcId ? { ...n, linkedNodeIds: [...(n.linkedNodeIds ?? []), tgtId] } : n);
+    setNodes(next); saveNodes(next);
   };
 
   const openSopPicker = async () => {
@@ -2350,28 +2338,16 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       {/* 도구모음 */}
       <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
-          {linkMode ? (
-            linkSourceId
-              ? <span className="text-orange-500 font-bold">출발 노드 선택됨 → 연결할 노드 클릭 (같은 노드 클릭: 취소)</span>
-              : <span className="text-blue-500 font-bold">연결 시작 노드를 클릭하세요</span>
-          ) : (
-            <>
-              <span>클릭: 선택 · Enter: 형제 추가</span>
-              <span>Tab: 하위 추가</span>
-              <span>더블클릭: 편집</span>
-              <span>Del: 삭제</span>
-            </>
-          )}
+          {dragging
+            ? <span className="text-blue-500 font-bold">연결할 노드 위에서 놓으세요 · 빈 공간에서 놓으면 취소</span>
+            : <>
+                <span>클릭: 선택 · Enter: 형제 추가</span>
+                <span>Tab: 하위 추가 · 더블클릭: 편집</span>
+                <span className="opacity-60">○ 핸들 드래그: 연결 · 선 클릭: 연결 해제</span>
+              </>
+          }
         </div>
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-          <button
-            onClick={() => { setLinkMode(v => !v); setLinkSourceId(null); }}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold border rounded-sm transition-colors ${
-              linkMode
-                ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                : 'border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800'
-            }`}
-          ><Link size={10} />연결 모드</button>
           <button onClick={openSopPicker}
             className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
           ><Download size={10} />업무규정 불러오기</button>
@@ -2415,36 +2391,66 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       {/* 마인드맵 트리 */}
       <div
         className="overflow-x-auto pb-4"
-        onClick={() => {
-          if (linkMode) { setLinkSourceId(null); return; }
-          setSelectedId(null); setEditingId(null); setLinkPickerId(null);
-        }}
+        onClick={() => { setSelectedId(null); setEditingId(null); setLinkPickerId(null); }}
       >
         {rootNode && (
-          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full relative">
-            {/* 노드 연결선 SVG 오버레이 */}
-            {linkLines.length > 0 && (
-              <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }} aria-hidden>
-                <defs>
-                  <marker id="mm-arrow" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto">
-                    <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
-                  </marker>
-                </defs>
+          <div
+            ref={printRef}
+            className="pl-2 py-4 inline-block min-w-full relative"
+            style={{ cursor: dragging ? 'crosshair' : undefined, userSelect: dragging ? 'none' : undefined }}
+            onMouseDown={e => {
+              const handle = (e.target as HTMLElement).closest('[data-drag-handle]');
+              if (handle) {
+                const sourceId = handle.getAttribute('data-drag-handle');
+                if (sourceId) {
+                  e.preventDefault(); e.stopPropagation();
+                  setDragging({ sourceId });
+                  const rect = printRef.current!.getBoundingClientRect();
+                  setDragPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                }
+              }
+            }}
+            onMouseMove={e => {
+              if (!dragging) return;
+              const rect = printRef.current!.getBoundingClientRect();
+              setDragPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            }}
+            onMouseUp={e => {
+              if (!dragging) return;
+              const els = document.elementsFromPoint(e.clientX, e.clientY);
+              const nodeEl = els.find(el => el.hasAttribute?.('data-node-id'));
+              const targetId = nodeEl?.getAttribute('data-node-id');
+              if (targetId) connectNodes(dragging.sourceId, targetId);
+              setDragging(null); setDragPos(null);
+            }}
+          >
+            {/* 노드 연결선 SVG 오버레이 (꺾인 실선, 우측 버스 레인 라우팅) */}
+            {(linkLines.length > 0 || (dragging && dragPos)) && (
+              <svg className="absolute inset-0" style={{ width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }} aria-hidden>
                 {linkLines.map(l => {
-                  const mx = (l.x1 + l.x2) / 2;
+                  const d = `M ${l.x1} ${l.y1} H ${l.busX} V ${l.y2} H ${l.x2}`;
                   return (
-                    <path
-                      key={l.id}
-                      d={`M ${l.x1} ${l.y1} C ${mx} ${l.y1}, ${mx} ${l.y2}, ${l.x2} ${l.y2}`}
-                      fill="none"
-                      stroke="#94a3b8"
-                      strokeWidth={1.5}
-                      strokeDasharray="5 3"
-                      markerEnd="url(#mm-arrow)"
-                      opacity={0.7}
-                    />
+                    <g key={l.id} style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                      onClick={e => { e.stopPropagation(); disconnectLink(l.sourceId, l.targetId); }}
+                    >
+                      {/* 클릭 히트 영역 (투명, 넓게) */}
+                      <path d={d} fill="none" stroke="transparent" strokeWidth={12} />
+                      {/* 실선 */}
+                      <path d={d} fill="none" stroke="#60a5fa" strokeWidth={2}
+                        style={{ transition: 'stroke 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.stroke = '#f87171')}
+                        onMouseLeave={e => (e.currentTarget.style.stroke = '#60a5fa')}
+                      />
+                    </g>
                   );
                 })}
+                {/* 드래그 중 미리보기 선 */}
+                {dragging && dragPos && (() => {
+                  const src = nodePositions.get(dragging.sourceId);
+                  if (!src) return null;
+                  return <line x1={src.rx} y1={src.cy} x2={dragPos.x} y2={dragPos.y}
+                    stroke="#f97316" strokeWidth={2} strokeDasharray="6 3" style={{ pointerEvents: 'none' }} />;
+                })()}
               </svg>
             )}
             <MindMapTreeNode
@@ -2463,7 +2469,6 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
               onOpenDoc={onOpenDoc}
               onToggleLinkPicker={setLinkPickerId}
               onUpdateNode={handleUpdateNode}
-              linkMode={linkMode} linkSourceId={linkSourceId} onLinkClick={handleLinkClick}
             />
           </div>
         )}
