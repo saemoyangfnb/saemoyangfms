@@ -38,6 +38,9 @@ export function StoreListView({ currentUser }: Props) {
   const [mergeSearch, setMergeSearch] = useState('');
   const [mergeTarget, setMergeTarget] = useState<Store | null>(null);
   const [merging, setMerging] = useState(false);
+  const [formTooltip, setFormTooltip] = useState<{
+    form: StoreForm; entry: StoreFormEntry | null; x: number; y: number;
+  } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -199,6 +202,40 @@ export function StoreListView({ currentUser }: Props) {
   }
 
   return (
+    <>
+    {/* 폼 호버 툴팁 */}
+    {formTooltip && (
+      <div
+        style={{ position: 'fixed', left: formTooltip.x, top: formTooltip.y, zIndex: 9999 }}
+        className="w-64 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl shadow-xl p-3 pointer-events-none"
+      >
+        <p className="text-[11px] font-black text-stone-800 dark:text-stone-100 mb-2 truncate">{formTooltip.form.title}</p>
+        {formTooltip.entry ? (
+          <div className="space-y-1.5">
+            {formTooltip.form.fields.map(field => {
+              const val = formTooltip.entry!.data[field.id];
+              const display = field.type === 'checkbox'
+                ? (val ? '✓ 예' : '✗ 아니오')
+                : (val as string) || '—';
+              return (
+                <div key={field.id} className="flex items-start gap-2">
+                  <span className="text-[10px] font-bold text-stone-400 w-20 shrink-0 pt-0.5">{field.label}</span>
+                  <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 flex-1 break-words">{display}</span>
+                </div>
+              );
+            })}
+            <div className="pt-1.5 mt-1.5 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between">
+              <span className="text-[10px] text-stone-400">{formTooltip.entry.updatedBy ?? ''}</span>
+              <span className={`text-[10px] font-black ${formTooltip.entry.isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                {formTooltip.entry.isDone ? `완료 ${formTooltip.entry.completedAt?.slice(0,10) ?? ''}` : '입력중'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] text-stone-400">아직 입력된 데이터가 없습니다.</p>
+        )}
+      </div>
+    )}
     <div className="flex gap-0 h-[calc(100vh-8rem)] -mx-4 sm:-mx-6 lg:-mx-8">
 
       {/* ── 좌: 매장 목록 ── */}
@@ -337,7 +374,15 @@ export function StoreListView({ currentUser }: Props) {
                 </div>
                 <div className="divide-y divide-stone-50 dark:divide-stone-800">
                   {selectedFormStats.map(({ form, entry }) => (
-                    <div key={form.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <div
+                      key={form.id}
+                      className="flex items-center gap-3 px-4 py-2.5 cursor-default"
+                      onMouseEnter={e => {
+                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setFormTooltip({ form, entry: entry ?? null, x: r.right + 8, y: r.top });
+                      }}
+                      onMouseLeave={() => setFormTooltip(null)}
+                    >
                       <div className={`w-2 h-2 rounded-full shrink-0 ${
                         entry?.isDone ? 'bg-emerald-500' : entry ? 'bg-amber-400' : 'bg-stone-200 dark:bg-stone-700'
                       }`} />
@@ -580,5 +625,6 @@ export function StoreListView({ currentUser }: Props) {
         </div>
       )}
     </div>
+    </>
   );
 }
