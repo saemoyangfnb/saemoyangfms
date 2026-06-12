@@ -1284,11 +1284,44 @@ function flattenTree(nodes: MindMapNode[]): Array<{ node: MindMapNode; depth: nu
 }
 
 // ── 마인드맵 노드 칸반 뷰 ─────────────────────────────────
-function MindMapNodeKanban({ nodes, employees, onUpdateNode }: {
-  nodes: MindMapNode[];
+function MindMapNodeKanban({ projectId, employees }: {
+  projectId: string;
   employees: Employee[];
-  onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
 }) {
+  const [nodes, setNodes] = useState<MindMapNode[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getDoc(doc(salesDb, 'project_mindmaps', projectId))
+      .then(snap => { if (snap.exists()) setNodes((snap.data().nodes as MindMapNode[]) ?? []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  const saveNodes = (next: MindMapNode[]) => {
+    const cleaned = next.map(n => {
+      const o: Record<string, unknown> = { id: n.id, text: n.text ?? '', parentId: n.parentId, order: n.order };
+      if (n.reportId) o.reportId = n.reportId;
+      if (n.sopId) o.sopId = n.sopId;
+      if (n.dueDate) o.dueDate = n.dueDate;
+      if (n.duration != null) o.duration = n.duration;
+      if (n.assigneeId) o.assigneeId = n.assigneeId;
+      if (n.department) o.department = n.department;
+      if (n.status) o.status = n.status;
+      return o;
+    });
+    setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() }).catch(() => {});
+  };
+
+  const onUpdateNode = (id: string, patch: Partial<MindMapNode>) => {
+    const next = nodes.map(n => n.id === id ? { ...n, ...patch } : n);
+    setNodes(next);
+    saveNodes(next);
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 dark:border-stone-600 border-t-stone-800 dark:border-t-stone-200 rounded-full animate-spin" /></div>;
+
   const flat = flattenTree(nodes);
   const byStatus = (s: NodeStatusKey) => flat.filter(({ node }) => (node.status ?? 'todo') === s);
 
@@ -1361,12 +1394,73 @@ function MindMapNodeKanban({ nodes, employees, onUpdateNode }: {
 }
 
 // ── 마인드맵 노드 테이블(목록) 뷰 ────────────────────────
-function MindMapNodeTable({ nodes, employees, onUpdateNode, tableRef }: {
-  nodes: MindMapNode[];
+function MindMapNodeTable({ projectId, projectTitle, employees }: {
+  projectId: string;
+  projectTitle: string;
   employees: Employee[];
-  onUpdateNode: (id: string, patch: Partial<MindMapNode>) => void;
-  tableRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const [nodes, setNodes] = useState<MindMapNode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getDoc(doc(salesDb, 'project_mindmaps', projectId))
+      .then(snap => { if (snap.exists()) setNodes((snap.data().nodes as MindMapNode[]) ?? []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  const saveNodes = (next: MindMapNode[]) => {
+    const cleaned = next.map(n => {
+      const o: Record<string, unknown> = { id: n.id, text: n.text ?? '', parentId: n.parentId, order: n.order };
+      if (n.reportId) o.reportId = n.reportId;
+      if (n.sopId) o.sopId = n.sopId;
+      if (n.dueDate) o.dueDate = n.dueDate;
+      if (n.duration != null) o.duration = n.duration;
+      if (n.assigneeId) o.assigneeId = n.assigneeId;
+      if (n.department) o.department = n.department;
+      if (n.status) o.status = n.status;
+      return o;
+    });
+    setDoc(doc(salesDb, 'project_mindmaps', projectId), { projectId, nodes: cleaned, updatedAt: ts() }).catch(() => {});
+  };
+
+  const onUpdateNode = (id: string, patch: Partial<MindMapNode>) => {
+    const next = nodes.map(n => n.id === id ? { ...n, ...patch } : n);
+    setNodes(next);
+    saveNodes(next);
+  };
+
+  const handlePrint = () => {
+    if (!tableRef.current) return;
+    const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+    const container = document.createElement('div');
+    container.id = '_mm_print_wrap_';
+    container.innerHTML = `
+      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 업무 목록</div>
+      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
+      <hr style="border:none;border-top:2px solid #222;margin-bottom:16px;">
+    `;
+    const clone = tableRef.current.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('button').forEach(btn => {
+      const span = document.createElement('span');
+      span.className = btn.className;
+      span.textContent = btn.textContent;
+      btn.replaceWith(span);
+    });
+    container.appendChild(clone);
+    document.body.insertBefore(container, document.body.firstChild);
+    const pageStyle = document.createElement('style');
+    pageStyle.textContent = `@media print { @page { size: A4 landscape; margin: 10mm; } }`;
+    document.head.appendChild(pageStyle);
+    const cleanup = () => { container.remove(); pageStyle.remove(); };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.print();
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-stone-300 dark:border-stone-600 border-t-stone-800 dark:border-t-stone-200 rounded-full animate-spin" /></div>;
+
   const flat = flattenTree(nodes);
   const todoCount        = flat.filter(({ node }) => (node.status ?? 'todo') === 'todo').length;
   const inProgressCount  = flat.filter(({ node }) => node.status === 'in_progress').length;
@@ -1378,6 +1472,12 @@ function MindMapNodeTable({ nodes, employees, onUpdateNode, tableRef }: {
   };
 
   return (
+    <div>
+      <div className="flex justify-end mb-3">
+        <button onClick={handlePrint}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+        ><Printer size={11} /> 목록 인쇄</button>
+      </div>
     <div ref={tableRef}>
       <div className="flex items-center gap-4 mb-3 text-[11px] flex-wrap">
         <span className="text-stone-500 dark:text-stone-400">전체 <b className="text-stone-800 dark:text-stone-200">{flat.length}</b>개</span>
@@ -1437,6 +1537,7 @@ function MindMapNodeTable({ nodes, employees, onUpdateNode, tableRef }: {
           </tbody>
         </table>
       </div>
+    </div>
     </div>
   );
 }
@@ -1648,11 +1749,9 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
   const [templates, setTemplates] = useState<ProjectSopTemplate[]>([]);
   const [sopLoading, setSopLoading] = useState(false);
   const [sopSearch, setSopSearch] = useState('');
-  const [mmView, setMmView] = useState<'tree' | 'kanban' | 'table'>('tree');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const skipBlurRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
   const { confirm } = useConfirm();
 
   const handlePrint = () => {
@@ -1677,33 +1776,6 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
     window.print();
   };
 
-  const handleTablePrint = () => {
-    if (!tableRef.current) return;
-    const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-    const container = document.createElement('div');
-    container.id = '_mm_print_wrap_';
-    container.innerHTML = `
-      <div style="font-size:18px;font-weight:900;color:#111;margin-bottom:4px;">${projectTitle} — 업무 목록</div>
-      <div style="font-size:11px;color:#666;margin-bottom:12px;">인쇄일: ${printDate}</div>
-      <hr style="border:none;border-top:2px solid #222;margin-bottom:16px;">
-    `;
-    const clone = tableRef.current.cloneNode(true) as HTMLElement;
-    // 상태 뱃지 인터랙션 제거 (버튼 → span)
-    clone.querySelectorAll('button').forEach(btn => {
-      const span = document.createElement('span');
-      span.className = btn.className;
-      span.textContent = btn.textContent;
-      btn.replaceWith(span);
-    });
-    container.appendChild(clone);
-    document.body.insertBefore(container, document.body.firstChild);
-    const pageStyle = document.createElement('style');
-    pageStyle.textContent = `@media print { @page { size: A4 landscape; margin: 10mm; } }`;
-    document.head.appendChild(pageStyle);
-    const cleanup = () => { container.remove(); pageStyle.remove(); };
-    window.addEventListener('afterprint', cleanup, { once: true });
-    window.print();
-  };
 
   useEffect(() => {
     (async () => {
@@ -1921,49 +1993,24 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
       }}
     >
       {/* 도구모음 */}
-      <div className="no-print flex items-center justify-between mb-3 flex-wrap gap-2">
-        {/* 뷰 토글 */}
-        <div className="flex items-center gap-0.5 bg-stone-100 dark:bg-stone-800 rounded-sm p-0.5">
-          {([
-            { key: 'tree',   icon: <GitBranch size={11} />, label: '트리' },
-            { key: 'kanban', icon: <Kanban size={11} />,    label: '칸반' },
-            { key: 'table',  icon: <LayoutList size={11} />, label: '목록' },
-          ] as { key: 'tree' | 'kanban' | 'table'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
-            <button key={key} onClick={() => setMmView(key)}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-sm transition-colors ${
-                mmView === key
-                  ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm'
-                  : 'text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'
-              }`}
-            >
-              {icon} {label}
-            </button>
-          ))}
+      <div className="no-print flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div className="text-[10px] text-stone-400 dark:text-stone-600 flex items-center gap-3 flex-wrap">
+          <span>더블클릭: 편집</span>
+          <span>Enter: 형제 추가</span>
+          <span>Tab: 하위 추가</span>
+          <span>Del: 삭제</span>
         </div>
-        {/* 액션 버튼 */}
         <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-          {mmView === 'tree' && (
-            <>
-              <div className="text-[10px] text-stone-300 dark:text-stone-700 flex items-center gap-2 mr-1">
-                <span>더블클릭:편집</span><span>Enter:형제</span><span>Tab:하위</span>
-              </div>
-              <button onClick={openSopPicker}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-              ><Download size={10} />업무규정</button>
-              <button onClick={handlePrint}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-              ><Printer size={10} />인쇄</button>
-              <button
-                onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors"
-              ><Plus size={10} />주제 추가</button>
-            </>
-          )}
-          {mmView === 'table' && (
-            <button onClick={handleTablePrint}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-            ><Printer size={10} />목록 인쇄</button>
-          )}
+          <button onClick={openSopPicker}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+          ><Download size={10} />업무규정 불러오기</button>
+          <button onClick={handlePrint}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
+          ><Printer size={10} />인쇄</button>
+          <button
+            onClick={() => { const r = nodes.find(n => n.parentId === null); if (r) handleAddChild(r.id); }}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 hover:border-stone-400 dark:hover:border-stone-500 rounded-sm transition-colors"
+          ><Plus size={10} />주제 추가</button>
         </div>
       </div>
 
@@ -2075,41 +2122,29 @@ export function ProjectMindMap({ projectId, projectTitle, docs, employees, onOpe
         </div>
       )}
 
-      {/* 칸반 뷰 */}
-      {mmView === 'kanban' && (
-        <MindMapNodeKanban nodes={nodes} employees={employees} onUpdateNode={handleUpdateNode} />
-      )}
-
-      {/* 목록(테이블) 뷰 */}
-      {mmView === 'table' && (
-        <MindMapNodeTable nodes={nodes} employees={employees} onUpdateNode={handleUpdateNode} tableRef={tableRef} />
-      )}
-
       {/* 마인드맵 트리 */}
-      {mmView === 'tree' && (
-        <div className="overflow-x-auto pb-4">
-          {rootNode && (
-            <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
-              <MindMapTreeNode
-                node={rootNode} nodes={nodes} depth={0}
-                editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
-                docs={docs} employees={employees}
-                onSelect={setSelectedId}
-                onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
-                onUpdateText={handleUpdateText}
-                onStopEdit={() => setEditingId(null)}
-                onAddSibling={handleAddSibling}
-                onAddChild={handleAddChild}
-                onDelete={handleDelete}
-                onLinkReport={handleLinkReport}
-                onUnlinkReport={handleUnlinkReport}
-                onOpenDoc={onOpenDoc}
-                onToggleLinkPicker={setLinkPickerId}
-              />
-            </div>
-          )}
-        </div>
-      )}
+      <div className="overflow-x-auto pb-4">
+        {rootNode && (
+          <div ref={printRef} className="pl-2 py-4 inline-block min-w-full">
+            <MindMapTreeNode
+              node={rootNode} nodes={nodes} depth={0}
+              editingId={editingId} selectedId={selectedId} linkPickerId={linkPickerId}
+              docs={docs} employees={employees}
+              onSelect={setSelectedId}
+              onStartEdit={id => { setSelectedId(id); setEditingId(id); }}
+              onUpdateText={handleUpdateText}
+              onStopEdit={() => setEditingId(null)}
+              onAddSibling={handleAddSibling}
+              onAddChild={handleAddChild}
+              onDelete={handleDelete}
+              onLinkReport={handleLinkReport}
+              onUnlinkReport={handleUnlinkReport}
+              onOpenDoc={onOpenDoc}
+              onToggleLinkPicker={setLinkPickerId}
+            />
+          </div>
+        )}
+      </div>
 
       {/* SOP 구조 불러오기 모달 */}
       {sopPickerOpen && (
@@ -2179,7 +2214,7 @@ export function ProjectDetail({
   const toast = useToast();
   const { confirm } = useConfirm();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [view, setView] = useState<'mindmap' | 'kanban' | 'gantt'>('mindmap');
+  const [view, setView] = useState<'mindmap' | 'kanban' | 'table'>('mindmap');
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showDocPicker, setShowDocPicker] = useState(false);
   // 보고서 팝업 모달 상태
@@ -2384,10 +2419,10 @@ export function ProjectDetail({
       {/* 뷰 토글 */}
       <div className="flex items-center gap-1 mb-4 border-b border-stone-200 dark:border-stone-700">
         {([
-          { key: 'mindmap', icon: <GitBranch size={12} />, label: '마인드맵' },
-          { key: 'kanban',  icon: <Kanban size={12} />,    label: '칸반' },
-          { key: 'gantt',   icon: <BarChart2 size={12} />, label: '간트' },
-        ] as { key: 'mindmap' | 'kanban' | 'gantt'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+          { key: 'mindmap', icon: <GitBranch size={12} />,   label: '마인드맵' },
+          { key: 'kanban',  icon: <Kanban size={12} />,       label: '칸반' },
+          { key: 'table',   icon: <LayoutList size={12} />,   label: '목록' },
+        ] as { key: 'mindmap' | 'kanban' | 'table'; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
           <button key={key} onClick={() => setView(key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold border-b-2 -mb-px transition-colors ${view === key ? 'border-stone-800 dark:border-stone-300 text-stone-900 dark:text-white' : 'border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300'}`}>
             {icon} {label}
@@ -2400,66 +2435,14 @@ export function ProjectDetail({
         <ProjectMindMap projectId={project.id} projectTitle={project.title} docs={docs} employees={employees} onOpenDoc={openReport} />
       )}
 
-      {/* 칸반 */}
+      {/* 칸반 — 마인드맵 노드 기반 */}
       {view === 'kanban' && (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex justify-end mb-3">
-            <button
-              onClick={handleAddColumn}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold border border-dashed border-stone-300 dark:border-stone-600 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-sm transition-colors"
-            >
-              <Plus size={11} /> 컬럼 추가
-            </button>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {localCols.map((colDef, idx) => (
-              <DroppableColumn
-                key={colDef.id}
-                colDef={colDef}
-                docs={docs}
-                columns={localCols}
-                isFirst={idx === 0}
-                isLast={idx === localCols.length - 1}
-                onNewReport={() => openNewReport()}
-                onOpenDoc={openReport}
-                onUnlinkDoc={handleUnlink}
-                onStatusChange={handleCardStatusChange}
-                onRename={label => handleRenameColumn(colDef.id, label)}
-                onColorChange={color => handleColorColumn(colDef.id, color)}
-                onMoveLeft={() => handleMoveColumn(colDef.id, 'left')}
-                onMoveRight={() => handleMoveColumn(colDef.id, 'right')}
-                onDelete={() => handleDeleteColumn(colDef.id)}
-              />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeDoc && <ReportCardGhost report={activeDoc} />}
-          </DragOverlay>
-        </DndContext>
+        <MindMapNodeKanban projectId={project.id} employees={employees} />
       )}
 
-      {/* 간트차트 */}
-      {view === 'gantt' && (
-        <ProjectGanttView
-          project={project}
-          docs={docs}
-          columns={localCols}
-          tasks={ganttTasks}
-          onEditProject={() => setShowProjectForm(true)}
-          onOpenDoc={openReport}
-          onAddTask={() => setTaskModal({})}
-          onEditTask={t => setTaskModal({ task: t })}
-        />
-      )}
-
-      {/* 간트 업무 모달 */}
-      {taskModal !== null && (
-        <GanttTaskModal
-          task={taskModal.task}
-          projectId={project.id}
-          onSaved={loadGanttTasks}
-          onClose={() => setTaskModal(null)}
-        />
+      {/* 목록 — 마인드맵 노드 기반 */}
+      {view === 'table' && (
+        <MindMapNodeTable projectId={project.id} projectTitle={project.title} employees={employees} />
       )}
 
       {/* 보고서 팝업 모달 */}
