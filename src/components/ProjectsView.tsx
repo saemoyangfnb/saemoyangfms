@@ -1708,6 +1708,13 @@ function MindMapTreeNode({
     }
   }, [isEditing]);
 
+  // 빈 텍스트 노드가 선택되면 즉시 편집 모드 진입
+  useEffect(() => {
+    if (isSelected && !isEditing && !isRoot && !(node.text ?? '').trim()) {
+      onStartEdit(node.id);
+    }
+  }, [isSelected, isEditing]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const depthCls = [
     'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-black text-sm px-4 py-2',
     'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 font-bold text-xs px-3 py-1.5 border border-stone-200 dark:border-stone-700',
@@ -1836,8 +1843,8 @@ function MindMapTreeNode({
           </div>
         )}
 
-        {/* 노드 팝업 — 선택 시 노드 바로 아래 표시 */}
-        {isSelected && !isEditing && !isRoot && (
+        {/* 노드 팝업 — 선택 시 노드 바로 아래 표시 (빈 노드는 자동 편집 모드 진입하므로 팝업 불필요) */}
+        {isSelected && !isEditing && !isRoot && !!(node.text ?? '').trim() && (
           <div
             className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-700 rounded shadow-2xl"
             style={{ minWidth: 240 }}
