@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { salesDb } from '../../firebase';
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { Store, FranchiseSchedule } from '../../types';
 import { Upload, CheckCircle2, AlertCircle, Info, Eye } from 'lucide-react';
 import { useToast } from '../Toast';
@@ -78,6 +78,7 @@ export function StoreImportPanel() {
   const [showMapping, setShowMapping] = useState(false);
   const [unmappedStores, setUnmappedStores] = useState<Store[]>([]);
   const [schedules, setSchedules] = useState<FranchiseSchedule[]>([]);
+  const [skippedMerged, setSkippedMerged] = useState(0);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -87,12 +88,19 @@ export function StoreImportPanel() {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const parsed = parseRows(ws);
 
-    // 기존 stores 로드
-    const existingSnap = await getDocs(collection(salesDb, 'stores'));
+    // 기존 stores + 합치기 blocklist 로드
+    const [existingSnap, mergedSnap] = await Promise.all([
+      getDocs(collection(salesDb, 'stores')),
+      getDoc(doc(salesDb, 'store_settings', 'merged_ids')),
+    ]);
     const existingMap = new Map<string, Store>();
     existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
+    const mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
 
-    const rows: PreviewRow[] = parsed.map(p => {
+    const skipped = parsed.filter(p => mergedIds.has(p.id));
+    setSkippedMerged(skipped.length);
+
+    const rows: PreviewRow[] = parsed.filter(p => !mergedIds.has(p.id)).map(p => {
       const existing = existingMap.get(p.id);
       if (!existing) return { state: 'new' as const, parsed: p };
       const changed = existing.name !== p.name || existing.status !== p.status ||
@@ -170,6 +178,12 @@ export function StoreImportPanel() {
       {/* 미리보기 */}
       {preview && stateCounts && (
         <div className="space-y-3">
+          {skippedMerged > 0 && (
+            <div className="bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2 flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400">
+              <Info size={13} className="shrink-0" />
+              합치기로 삭제된 매장 <span className="font-black text-stone-700 dark:text-stone-200">{skippedMerged}개</span>가 엑셀에 있지만 임포트에서 자동 제외되었습니다.
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
               <CheckCircle2 size={13} /> 신규 {stateCounts.new}개

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb } from '../../firebase';
-import { collection, getDocs, updateDoc, deleteDoc, doc, query, where, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, deleteDoc, doc, query, where, writeBatch, arrayUnion, setDoc } from 'firebase/firestore';
 import { Store, FranchiseSchedule, User, StoreForm, StoreFormEntry } from '../../types';
 import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare, ClipboardList, GitMerge } from 'lucide-react';
 import { useToast } from '../Toast';
@@ -173,6 +173,9 @@ export function StoreListView({ currentUser }: Props) {
 
       // stores: mergeTarget 삭제
       batch.delete(doc(salesDb, 'stores', mergeTarget.id));
+
+      // 삭제된 ID를 blocklist에 기록 → 임포트 시 재생성 방지
+      batch.set(doc(salesDb, 'store_settings', 'merged_ids'), { ids: arrayUnion(mergeTarget.id) }, { merge: true });
 
       await batch.commit();
 
