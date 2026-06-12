@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-06-12 (7) — Claude Code
+
+### SOP 마크다운 편집기 도입
+
+- `@uiw/react-md-editor` 설치 (v4.1.1)
+- `src/components/ui/MarkdownEditor.tsx` — lazy 로딩 래퍼 (MarkdownEditor, MarkdownView)
+- `SopEditor`: 참고 메모 textarea → 마크다운 live split 에디터
+- `SopDetail`: 참고 메모 + 스텝 note → MarkdownView 렌더링
+- `index.css`: wmde 스타일 통합 및 prose 오버라이드
+- 빌드 성공, 배포 완료 (9b588e2)
+
+---
+
 ## 2026-06-12 (6) — Claude Code
 
 ### 매장관리 폼 완료 현황 연결 (StoreListView — 올바른 파일)

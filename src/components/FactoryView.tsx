@@ -368,12 +368,12 @@ export function FactoryView({ currentUser }: { currentUser: User }) {
       const [itemSnap, recordSnap, settingsDoc] = await Promise.all([
         getDocs(query(collection(salesDb, 'factory_items'), orderBy('order'))),
         getDocs(query(collection(salesDb, 'factory_daily'), orderBy('date', 'desc'))),
-        getDoc(doc(salesDb, 'factory_settings', 'config')),
+        getDoc(doc(salesDb, 'factory_settings', 'config')).catch(() => null),
       ]);
       const loadedItems = itemSnap.docs.map(d => ({ id: d.id, ...d.data() } as FactoryItem));
       setItems(loadedItems);
       setRecords(recordSnap.docs.map(d => ({ id: d.id, ...d.data() } as FactoryDailyRecord)));
-      const sc = (settingsDoc.data()?.storeCount as number) ?? 1;
+      const sc = (settingsDoc?.data()?.storeCount as number) ?? 1;
       setStoreCount(sc);
       setPlanStoreCount(sc);
       if (loadedItems.length > 0 && !historyItemId) setHistoryItemId(loadedItems[0].id);
