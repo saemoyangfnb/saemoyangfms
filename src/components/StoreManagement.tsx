@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
+import { db, salesDb } from '../firebase';
 import {
   collection, getDocs, setDoc, doc, updateDoc, deleteDoc,
   query, where, orderBy,
 } from 'firebase/firestore';
-import { User } from '../types';
+import { User, StoreFormEntry } from '../types';
 import {
   Plus, X, Edit2, Trash2, Store, ChevronDown,
   Calendar, Phone, MapPin, User as UserIcon, Search,
@@ -63,6 +63,23 @@ function calcDday(contractEnd: string): number | null {
   today.setHours(0, 0, 0, 0);
   end.setHours(0, 0, 0, 0);
   return Math.floor((end.getTime() - today.getTime()) / 86400000);
+}
+
+function FormBadge({ stat }: { stat?: { done: number; total: number } }) {
+  if (!stat || stat.total === 0) return null;
+  const allDone = stat.done === stat.total;
+  const hasSome = stat.done > 0;
+  const cls = allDone
+    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+    : hasSome
+      ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+      : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700';
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${cls}`}
+      title="매장 폼 관리 완료 현황">
+      폼 {stat.done}/{stat.total}
+    </span>
+  );
 }
 
 function DdayBadge({ contractEnd }: { contractEnd: string }) {
@@ -236,6 +253,7 @@ export function StoreManagement({ brandId, currentUser }: Props) {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
+  const [formStats, setFormStats] = useState<Map<string, { done: number; total: number }>>(new Map());
 
   const isAdmin = currentUser.role === 'admin';
 
@@ -265,6 +283,41 @@ export function StoreManagement({ brandId, currentUser }: Props) {
   useEffect(() => {
     fetchStores();
   }, [fetchStores]);
+
+  // 폼 완료 현황 로드 (salesDb)
+  useEffect(() => {
+    Promise.all([
+      getDocs(collection(salesDb, 'store_forms')),
+      getDocs(collection(salesDb, 'store_form_entries')),
+    ]).then(([formsSnap, entriesSnap]) => {
+      const activeFormIds = new Set(
+        formsSnap.docs.filter(d => !d.data().isArchived).map(d => d.id)
+      );
+      const totalActive = activeFormIds.size;
+      if (totalActive === 0) return;
+
+      const doneByName = new Map<string, number>();
+      entriesSnap.docs.forEach(d => {
+        const e = d.data() as StoreFormEntry;
+        if (!activeFormIds.has(e.formId)) return;
+        if (!e.isDone) return;
+        doneByName.set(e.storeName, (doneByName.get(e.storeName) ?? 0) + 1);
+      });
+
+      // 매장명이 한 번이라도 entry에 등장한 것만 통계에 포함
+      const allStoreNames = new Set<string>();
+      entriesSnap.docs.forEach(d => {
+        const e = d.data() as StoreFormEntry;
+        if (activeFormIds.has(e.formId)) allStoreNames.add(e.storeName);
+      });
+
+      const stats = new Map<string, { done: number; total: number }>();
+      allStoreNames.forEach(name => {
+        stats.set(name, { done: doneByName.get(name) ?? 0, total: totalActive });
+      });
+      setFormStats(stats);
+    }).catch(console.error);
+  }, []);
 
   // ==========================================
   // 저장/수정/삭제
@@ -396,6 +449,7 @@ export function StoreManagement({ brandId, currentUser }: Props) {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">지역</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">계약 만료일</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">상태</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">폼</th>
                     {isAdmin && <th className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 w-20" />}
                   </tr>
                 </thead>
@@ -428,6 +482,9 @@ export function StoreManagement({ brandId, currentUser }: Props) {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={store.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormBadge stat={formStats.get(store.name)} />
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
@@ -470,7 +527,10 @@ export function StoreManagement({ brandId, currentUser }: Props) {
                         <UserIcon size={10} /> {store.ownerName}
                       </p>
                     </div>
-                    <StatusBadge status={store.status} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <FormBadge stat={formStats.get(store.name)} />
+                      <StatusBadge status={store.status} />
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                     <span className="flex items-center gap-1"><MapPin size={10} />{store.region}</span>

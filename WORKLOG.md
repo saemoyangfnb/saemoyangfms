@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-06-12 (5) — Claude Code
+
+### 매장 폼관리 캘린더 hover 팝업 + 매장관리 폼 완료 현황 뱃지
+
+- `CalendarTab`: `+N개` 텍스트 → hover 버튼으로 교체, `showTooltip/scheduleHide/cancelHide` 로직 추가
+- 툴팁 패널 (`fixed` 포지션): 해당 날짜 전체 매장 목록, 완료/진행 상태 색상 구분, 클릭 시 EntryModal 오픈
+- `StoreManagement`: `salesDb` + `StoreFormEntry` import, `formStats` 상태 추가
+- `salesDb.store_forms`(활성만) + `store_form_entries` 로드 후 storeName 기준 매칭
+- 테이블/모바일 카드에 `FormBadge` 추가 (완료 초록 / 진행중 노랑 / 미입력 회색)
+- 빌드 성공
+
+---
+
 ## 2026-06-12 (4) — Claude Code
 
 ### 업무보고 — 회의 실행항목 패널: 최근 5개 회의록 중 선택

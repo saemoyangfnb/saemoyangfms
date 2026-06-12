@@ -604,6 +604,18 @@ function CalendarTab({ form, entries, stores, onClickStore }: {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+  const [tooltip, setTooltip] = useState<{ items: CalendarDayEntry[]; x: number; y: number } | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showTooltip = (items: CalendarDayEntry[], e: React.MouseEvent) => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.min(rect.left, window.innerWidth - 210);
+    const y = rect.bottom + 4;
+    setTooltip({ items, x, y });
+  };
+  const scheduleHide = () => { hideTimer.current = setTimeout(() => setTooltip(null), 150); };
+  const cancelHide = () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
 
   const dateFields = useMemo(
     () => form.fields.filter(f => f.type === 'date'),
@@ -674,12 +686,42 @@ function CalendarTab({ form, entries, stores, onClickStore }: {
     );
   }
 
+  // hover 툴팁 패널
+  const TooltipPanel = tooltip ? (
+    <div
+      onMouseEnter={cancelHide}
+      onMouseLeave={scheduleHide}
+      style={{ position: 'fixed', left: tooltip.x, top: tooltip.y, zIndex: 9999, minWidth: 180, maxWidth: 240 }}
+      className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl shadow-2xl overflow-hidden"
+    >
+      <div className="px-3 py-1.5 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+        <span className="text-[10px] font-black text-stone-500 dark:text-stone-400 uppercase tracking-wider">전체 {tooltip.items.length}건</span>
+      </div>
+      <div className="max-h-52 overflow-y-auto">
+        {tooltip.items.map((item, i) => (
+          <button
+            key={`${item.store.id}-${i}`}
+            onClick={() => { onClickStore(item.store, item.entry); setTooltip(null); }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-stone-50 dark:hover:bg-stone-800 border-b border-stone-50 dark:border-stone-800 last:border-0 transition-colors"
+          >
+            <div className={`w-2 h-2 rounded-full shrink-0 ${item.entry.isDone ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+            <span className="text-[11px] text-stone-700 dark:text-stone-300 flex-1 min-w-0 truncate">{item.store.name}</span>
+            <span className={`text-[9px] font-bold shrink-0 ${item.entry.isDone ? 'text-emerald-500' : 'text-amber-500'}`}>
+              {item.entry.isDone ? '완료' : '진행'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   const totalOnMonth = [...dateMap.entries()]
     .filter(([key]) => key.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`))
     .reduce((s, [, list]) => s + list.length, 0);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {TooltipPanel}
       {/* 캘린더 헤더 */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0">
         <button
@@ -716,7 +758,7 @@ function CalendarTab({ form, entries, stores, onClickStore }: {
 
       {/* 날짜 그리드 */}
       <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-7 h-full" style={{ gridAutoRows: 'minmax(80px, 1fr)' }}>
+        <div className="grid grid-cols-7 h-full" style={{ gridAutoRows: 'minmax(88px, 1fr)' }}>
           {cells.map((day, idx) => {
             if (day === null) {
               return <div key={`empty-${idx}`} className="border-r border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/20" />;
@@ -760,7 +802,13 @@ function CalendarTab({ form, entries, stores, onClickStore }: {
                     </button>
                   ))}
                   {dayEntries.length > 3 && (
-                    <span className="text-[10px] text-stone-400 px-1">외 {dayEntries.length - 3}개</span>
+                    <button
+                      onMouseEnter={e => showTooltip(dayEntries, e)}
+                      onMouseLeave={scheduleHide}
+                      className="text-[10px] text-blue-500 dark:text-blue-400 font-semibold px-1 text-left hover:underline leading-snug"
+                    >
+                      +{dayEntries.length - 3}개 더
+                    </button>
                   )}
                 </div>
               </div>
