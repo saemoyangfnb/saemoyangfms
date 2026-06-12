@@ -442,7 +442,7 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
   const today = new Date().toLocaleDateString('ko-KR');
 
   return (
-    <div id="form-print-area" className="fixed inset-0 z-[100] bg-white flex flex-col">
+    <div id="form-print-area" className="fixed inset-0 z-[100] bg-white flex flex-col print:relative print:inset-auto print:h-auto">
       <div className="print:hidden flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-stone-50 shrink-0">
         <button onClick={onClose} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900">
           <X size={14} /> 닫기
@@ -456,7 +456,7 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 text-stone-900" style={{ fontFamily: 'serif' }}>
+      <div className="flex-1 overflow-auto print:overflow-visible print:h-auto p-6 text-stone-900" style={{ fontFamily: 'serif' }}>
         <div className="mb-4 pb-3 border-b-2 border-stone-800">
           <h1 className="text-lg font-black">{form.title}</h1>
           {form.description && <p className="text-sm text-stone-600 mt-0.5">{form.description}</p>}
