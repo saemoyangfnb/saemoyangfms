@@ -442,7 +442,7 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
   const today = new Date().toLocaleDateString('ko-KR');
 
   return (
-    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+    <div id="form-print-area" className="fixed inset-0 z-[100] bg-white flex flex-col">
       <div className="print:hidden flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-stone-50 shrink-0">
         <button onClick={onClose} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900">
           <X size={14} /> 닫기

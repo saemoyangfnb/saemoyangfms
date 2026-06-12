@@ -52,6 +52,17 @@
     overflow: visible;
   }
 
+  /* 폼 관리 인쇄 */
+  #form-print-area, #form-print-area * { visibility: visible; }
+  #form-print-area {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    overflow: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   /* 마인드맵 */
   #_mm_print_wrap_, #_mm_print_wrap_ * { visibility: visible; }
   #_mm_print_wrap_ {
