@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { salesDb } from '../../firebase';
-import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, deleteDoc, doc, query, where, writeBatch } from 'firebase/firestore';
 import { Store, FranchiseSchedule, User, StoreForm, StoreFormEntry } from '../../types';
-import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare, ClipboardList } from 'lucide-react';
+import { Search, X, MapPin, Phone, User as UserIcon, Calendar, ChevronRight, Building2, Clock, Link, Link2Off, Plus, Check, MessageSquare, ClipboardList, GitMerge } from 'lucide-react';
 import { useToast } from '../Toast';
 import { MentionRecord } from '../ui/AtMentionInput';
 
@@ -34,6 +34,10 @@ export function StoreListView({ currentUser }: Props) {
   const [linking, setLinking] = useState<string | null>(null);
   const [activeForms, setActiveForms] = useState<StoreForm[]>([]);
   const [allEntries, setAllEntries] = useState<StoreFormEntry[]>([]);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeSearch, setMergeSearch] = useState('');
+  const [mergeTarget, setMergeTarget] = useState<Store | null>(null);
+  const [merging, setMerging] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -146,6 +150,43 @@ export function StoreListView({ currentUser }: Props) {
       toast.error('연결 해제 실패');
     } finally {
       setLinking(null);
+    }
+  };
+
+  // 매장 합치기: selected(유지) ← mergeTarget(삭제)
+  const handleMerge = async () => {
+    if (!selected || !mergeTarget) return;
+    setMerging(true);
+    try {
+      const batch = writeBatch(salesDb);
+
+      // store_form_entries: mergeTarget.id → selected.id
+      const entriesSnap = await getDocs(query(collection(salesDb, 'store_form_entries'), where('storeId', '==', mergeTarget.id)));
+      entriesSnap.docs.forEach(d => batch.update(d.ref, { storeId: selected.id, storeName: selected.name, storeRegion: selected.region }));
+
+      // franchise_schedules: mergeTarget.id → selected.id
+      const schSnap = await getDocs(query(collection(salesDb, 'franchise_schedules'), where('storeId', '==', mergeTarget.id)));
+      schSnap.docs.forEach(d => batch.update(d.ref, { storeId: selected.id }));
+
+      // stores: mergeTarget 삭제
+      batch.delete(doc(salesDb, 'stores', mergeTarget.id));
+
+      await batch.commit();
+
+      // 로컬 상태 갱신
+      setStores(prev => prev.filter(s => s.id !== mergeTarget.id));
+      setSchedules(prev => prev.map(s => s.storeId === mergeTarget.id ? { ...s, storeId: selected.id } : s));
+      setAllEntries(prev => prev.map(e => e.storeId === mergeTarget.id ? { ...e, storeId: selected.id, storeName: selected.name, storeRegion: selected.region } : e));
+
+      toast.success(`"${mergeTarget.name}" → "${selected.name}"으로 합치기 완료`);
+      setMergeOpen(false);
+      setMergeTarget(null);
+      setMergeSearch('');
+    } catch (e) {
+      console.error(e);
+      toast.error('합치기 실패. 다시 시도해주세요.');
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -455,6 +496,85 @@ export function StoreListView({ currentUser }: Props) {
                 </div>
               )}
             </div>
+
+            {/* 관리자 전용: 매장 합치기 */}
+            {currentUser.role === 'admin' && (
+              <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+                  <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase flex items-center gap-1.5">
+                    <GitMerge size={10} /> 중복 매장 합치기
+                  </p>
+                  <button
+                    onClick={() => { setMergeOpen(p => !p); setMergeTarget(null); setMergeSearch(''); }}
+                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-sm border transition-colors ${mergeOpen ? 'bg-red-900 text-white border-red-900' : 'border-stone-300 text-stone-500 hover:border-stone-700 hover:text-stone-800'}`}
+                  >
+                    {mergeOpen ? '닫기' : '합치기'}
+                  </button>
+                </div>
+
+                {mergeOpen && (
+                  <div className="p-4 space-y-3">
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400 leading-relaxed">
+                      <span className="font-black text-stone-800 dark:text-stone-200">"{selected.name}"</span>으로 합칩니다.
+                      아래에서 <span className="font-black text-red-600">삭제할 중복 매장</span>을 선택하면 폼 데이터·이력이 모두 이 매장으로 이전되고 중복 매장은 삭제됩니다.
+                    </p>
+
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-sm">
+                      <Search size={11} className="text-stone-400 shrink-0" />
+                      <input
+                        value={mergeSearch}
+                        onChange={e => setMergeSearch(e.target.value)}
+                        placeholder="삭제할 중복 매장 검색"
+                        className="flex-1 text-xs bg-transparent text-stone-800 dark:text-stone-200 placeholder-stone-400 focus:outline-none"
+                      />
+                      {mergeSearch && <button onClick={() => setMergeSearch('')}><X size={10} className="text-stone-400" /></button>}
+                    </div>
+
+                    <div className="border border-stone-200 dark:border-stone-700 rounded-sm max-h-48 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800">
+                      {stores
+                        .filter(s => s.id !== selected.id && (!mergeSearch || s.name.toLowerCase().includes(mergeSearch.toLowerCase()) || s.region.toLowerCase().includes(mergeSearch.toLowerCase())))
+                        .map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setMergeTarget(prev => prev?.id === s.id ? null : s)}
+                            className={`w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors ${mergeTarget?.id === s.id ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
+                          >
+                            <div className={`w-4 h-4 rounded-sm border-2 shrink-0 flex items-center justify-center ${mergeTarget?.id === s.id ? 'bg-red-600 border-red-600' : 'border-stone-300 dark:border-stone-600'}`}>
+                              {mergeTarget?.id === s.id && <Check size={10} className="text-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-stone-800 dark:text-stone-200 truncate">{s.name}</p>
+                              <p className="text-[10px] text-stone-400">{s.region} · {s.status} · {s.storeCode}</p>
+                            </div>
+                          </button>
+                        ))
+                      }
+                    </div>
+
+                    {mergeTarget && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-sm p-3 space-y-2">
+                        <p className="text-[11px] font-black text-red-700 dark:text-red-400">확인: 아래 작업이 실행됩니다</p>
+                        <ul className="text-[11px] text-red-600 dark:text-red-400 space-y-0.5 list-disc list-inside">
+                          <li>"{mergeTarget.name}"의 폼 데이터 → "{selected.name}"으로 이전</li>
+                          <li>"{mergeTarget.name}"의 오픈 이력 → "{selected.name}"으로 이전</li>
+                          <li>"{mergeTarget.name}" 매장 레코드 <span className="font-black">영구 삭제</span></li>
+                        </ul>
+                        <button
+                          onClick={handleMerge}
+                          disabled={merging}
+                          className="w-full mt-1 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-black rounded-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          {merging
+                            ? <><div className="w-3 h-3 border border-red-300 border-t-white rounded-full animate-spin" /> 처리 중…</>
+                            : <><GitMerge size={12} /> "{mergeTarget.name}" 삭제하고 합치기</>
+                          }
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         </div>
