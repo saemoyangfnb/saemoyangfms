@@ -584,6 +584,8 @@ export interface Notice {
   isPinned: boolean;
   targetDeptIds?: string[]; // 비어있으면 전체
   attachments?: { name: string; url: string }[];
+  isArchived?: boolean;
+  readBy?: Record<string, { name: string; readAt: string }>; // uid → 읽음 정보
   createdAt: string;
   updatedAt: string;
 }

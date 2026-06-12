@@ -488,6 +488,7 @@ export default function App() {
   });
   const [showAllIntranet, setShowAllIntranet] = useState(false);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [noticeUnreadCount, setNoticeUnreadCount] = useState(0);
   const [sidebar, setSidebar] = useState<SidebarState>({
     brandId: null,
     section: 'home',
@@ -627,6 +628,23 @@ export default function App() {
       query(collection(salesDb, 'reports'), where('pendingApproverId', '==', currentUser.uid), where('approvalStatus', '==', 'pending')),
       snap => setPendingApprovalCount(snap.size),
       () => setPendingApprovalCount(0),
+    );
+    return unsub;
+  }, [currentUser?.uid]);
+
+  // 공지사항 미읽음 수 실시간 구독
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = onSnapshot(
+      query(collection(salesDb, 'notices'), where('isArchived', '!=', true)),
+      snap => {
+        const unread = snap.docs.filter(d => {
+          const readBy = d.data().readBy as Record<string, unknown> | undefined;
+          return !readBy?.[currentUser.uid];
+        }).length;
+        setNoticeUnreadCount(unread);
+      },
+      () => setNoticeUnreadCount(0),
     );
     return unsub;
   }, [currentUser?.uid]);
@@ -1398,13 +1416,25 @@ export default function App() {
           {/* ── 공지사항 (단독) ── */}
           <div className="mx-2 mb-0.5">
             <button onClick={() => navigateAndCloseMobile(null, 'notice')}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
+              className={`relative w-full flex items-center gap-2 px-2 py-1.5 rounded-none text-xs transition-colors ${
                 sidebar.section === 'notice' && sidebar.brandId === null
                   ? 'bg-stone-200 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-l-[3px] border-stone-800 dark:border-stone-400 font-bold pl-2'
                   : 'text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-white border-l-[3px] border-transparent pl-2 font-medium'
               }`}>
               <Megaphone size={13} />
-              {(!sidebarCollapsed || isMobile) && '공지사항'}
+              {(!sidebarCollapsed || isMobile) && (
+                <>
+                  <span className="flex-1 text-left">공지사항</span>
+                  {noticeUnreadCount > 0 && (
+                    <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-black px-1 leading-none">
+                      {noticeUnreadCount > 99 ? '99+' : noticeUnreadCount}
+                    </span>
+                  )}
+                </>
+              )}
+              {(sidebarCollapsed && !isMobile) && noticeUnreadCount > 0 && (
+                <span className="absolute right-1 top-0.5 w-2 h-2 rounded-full bg-red-500" />
+              )}
             </button>
           </div>
 
