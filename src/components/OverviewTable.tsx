@@ -50,7 +50,7 @@ const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: {
   onSave: (id: string, recipe: RecipeItem[], notes: string) => void;
   onClose: () => void;
 }) => {
-  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe);
+  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe ?? []);
   const [activeTab, setActiveTab] = useState<'ingredient' | 'menu' | 'custom'>('ingredient');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -188,7 +188,7 @@ export const OverviewTable: React.FC<Props> = ({
   const [simPrices, setSimPrices] = useState<Record<string, Partial<Record<Region, number>>>>({});
   const makeFreshSimPrices = useCallback(() => {
     const p: Record<string, Partial<Record<Region, number>>> = {};
-    menus.forEach(m => { p[m.id] = { ...m.prices } as Record<Region, number>; });
+    menus.forEach(m => { p[m.id] = { ...(m.prices ?? {}) } as Record<Region, number>; });
     return p;
   }, [menus]);
 
@@ -323,7 +323,7 @@ export const OverviewTable: React.FC<Props> = ({
                         {/* 권역별 블록 — 진행바 포함 */}
                         <div className="flex gap-2 mt-auto">
                           {regions.map(r => {
-                            const price = menu.prices[r] || 0;
+                            const price = (menu.prices?.[r]) || 0;
                             const rate = price > 0 ? cost / price : 0;
                             const isGood = rate > 0 && rate < 0.40;
                             const isWarning = rate >= 0.40 && rate <= 0.42;
@@ -443,7 +443,7 @@ export const OverviewTable: React.FC<Props> = ({
                               {visibleColumns.cost ? formatCurrency(cost) : '—'}
                             </td>
                             {regions.map(r => {
-                              const price = menu.prices[r] || 0;
+                              const price = (menu.prices?.[r]) || 0;
                               const rate = price > 0 ? cost / price : 0;
                               return (
                                 <React.Fragment key={r}>
@@ -552,7 +552,7 @@ export const OverviewTable: React.FC<Props> = ({
                               </td>
                               <td className="py-2.5 px-4 text-right font-mono text-sm text-stone-700 dark:text-stone-300 whitespace-nowrap">{formatCurrency(cost)}</td>
                               {regions.map(r => {
-                                const origPrice = menu.prices[r] ?? 0;
+                                const origPrice = menu.prices?.[r] ?? 0;
                                 const simPrice = simPrices[menu.id]?.[r] ?? origPrice;
                                 const changed = simPrice !== origPrice;
                                 const rate = simPrice > 0 ? cost / simPrice : 0;

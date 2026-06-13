@@ -244,7 +244,7 @@ interface Props {
 
 export function FeedView({ reports, myId, myName, onRefresh }: Props) {
   // 최신 순 정렬 (morning/evening 통합)
-  const sorted = [...reports].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const sorted = [...reports].sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
 
   if (sorted.length === 0) {
     return (

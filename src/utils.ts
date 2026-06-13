@@ -6,8 +6,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export const calculateTotalCost = (recipe: RecipeItem[], ingredients: Ingredient[], menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): number => {
-  return recipe.reduce((total, item) => {
+export const calculateTotalCost = (recipe: RecipeItem[] | undefined, ingredients: Ingredient[], menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): number => {
+  return (recipe ?? []).reduce((total, item) => {
     const yr = (item.yieldRate ?? 100) / 100;
     const yieldMultiplier = yr > 0 ? 1 / yr : 1;
 
@@ -29,8 +29,8 @@ export const calculateTotalCost = (recipe: RecipeItem[], ingredients: Ingredient
   }, 0);
 };
 
-export const doesMenuContainIngredient = (recipe: RecipeItem[], ingredientId: string, menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): boolean => {
-  return recipe.some(item => {
+export const doesMenuContainIngredient = (recipe: RecipeItem[] | undefined, ingredientId: string, menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): boolean => {
+  return (recipe ?? []).some(item => {
     if (item.type === 'menu' && item.menuId) {
       if (visitedMenuIds.has(item.menuId)) return false;
       const subMenu = menus.find(m => m.id === item.menuId);
@@ -46,8 +46,8 @@ export const doesMenuContainIngredient = (recipe: RecipeItem[], ingredientId: st
   });
 };
 
-export const hasMissingIngredients = (recipe: RecipeItem[], ingredients: Ingredient[], menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): boolean => {
-  return recipe.some(item => {
+export const hasMissingIngredients = (recipe: RecipeItem[] | undefined, ingredients: Ingredient[], menus: Menu[] = [], visitedMenuIds: Set<string> = new Set()): boolean => {
+  return (recipe ?? []).some(item => {
     if (item.type === 'menu' && item.menuId) {
       if (visitedMenuIds.has(item.menuId)) return false;
       const subMenu = menus.find(m => m.id === item.menuId);

@@ -6,7 +6,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 
 // 💡 [공용] 인라인 레시피 에디터 컴포넌트
 const InlineRecipeEditor = ({ menu, ingredients, allMenus, onSave, onClose }: { menu: Menu, ingredients: Ingredient[], allMenus: Menu[], onSave: (id: string, recipe: RecipeItem[], notes: string) => void, onClose: () => void }) => {
-  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe);
+  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe ?? []);
   const [activeTab, setActiveTab] = useState<'ingredient' | 'menu' | 'custom'>('ingredient');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -181,7 +181,7 @@ export const MenuTable: React.FC<Props> = ({
                           const hasAlert = menu.hasAlert || checkMenuAlert(menu, ingredients, menus);
                           const missing = hasMissingIngredients(menu.recipe, ingredients, menus);
                           
-                          const price = menu.prices[region] || 0;
+                          const price = (menu.prices?.[region]) || 0;
                           const margin = price - cost;
                           const costRate = price > 0 ? cost / price : 0;
                           const marginRate = price > 0 ? margin / price : 0;
@@ -317,7 +317,7 @@ export const MenuTable: React.FC<Props> = ({
                       {(provided) => (
                         <tbody ref={provided.innerRef} {...provided.droppableProps} className="divide-y divide-slate-200 dark:divide-slate-800">
                           {displayMenus.map((menu, index) => {
-                          const price = menu.prices[region] || 0;
+                          const price = (menu.prices?.[region]) || 0;
                           const cost = calculateTotalCost(menu.recipe, ingredients, menus);
                           const margin = price - cost;
                           const costRate = price > 0 ? cost / price : 0;

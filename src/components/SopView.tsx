@@ -276,8 +276,7 @@ function SopEditor({
             value={note}
             onChange={setNote}
             placeholder="주의사항, 예외 케이스, 관련 담당자 등 자유롭게 작성 (마크다운 사용 가능)"
-            height={180}
-            preview="live"
+            rows={7}
           />
         </div>
       </div>

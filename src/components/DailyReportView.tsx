@@ -149,7 +149,7 @@ function MorningForm({
         const reports = snap.docs.map(d => d.data() as DailyReport);
         const evening = reports.find(r => r.type === 'evening');
         if (evening) {
-          const incomplete = evening.items.filter(it => it.status === 'incomplete');
+          const incomplete = (evening.items ?? []).filter(it => it.status === 'incomplete');
           setCarryItems(incomplete);
           setSelectedCarry(new Set(incomplete.map((_, i) => i)));
         }
@@ -392,13 +392,14 @@ function ReportCard({ report, morningReport, showName = false, onEdit, onConfirm
   onShare?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const doneCount = report.items.filter(it => it.status === 'done').length;
-  const total = report.items.length;
+  const items = report.items ?? [];
+  const doneCount = items.filter(it => it.status === 'done').length;
+  const total = items.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
   // 퇴근 보고: 평균 진행률
-  const hasProgress = report.type === 'evening' && report.items.some(it => (it.progress ?? 0) > 0);
+  const hasProgress = report.type === 'evening' && items.some(it => (it.progress ?? 0) > 0);
   const avgProgress = hasProgress
-    ? Math.round(report.items.reduce((s, it) => s + (it.progress ?? 0), 0) / report.items.length)
+    ? Math.round(items.reduce((s, it) => s + (it.progress ?? 0), 0) / items.length)
     : pct;
 
   return (
@@ -409,8 +410,8 @@ function ReportCard({ report, morningReport, showName = false, onEdit, onConfirm
         </span>
         {showName && <span className="text-xs font-bold text-stone-700 dark:text-stone-300 shrink-0">{report.employeeName}</span>}
         <span className="flex-1 text-xs text-stone-500 dark:text-stone-400 truncate">
-          {report.items.slice(0, 2).map(it => it.text).join(' · ')}
-          {report.items.length > 2 && ` 외 ${report.items.length - 2}건`}
+          {items.slice(0, 2).map(it => it.text).join(' · ')}
+          {items.length > 2 && ` 외 ${items.length - 2}건`}
         </span>
         {report.type === 'evening' && (
           <span className={`text-[11px] font-bold shrink-0 ${avgProgress === 100 ? 'text-emerald-600' : avgProgress >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
@@ -446,7 +447,7 @@ function ReportCard({ report, morningReport, showName = false, onEdit, onConfirm
 
       {open && (
         <div className="px-4 pb-3 pt-0 border-t border-stone-100 dark:border-stone-800 space-y-2">
-          {report.items.map((it, i) => {
+          {items.map((it, i) => {
             const morningProg = morningReport?.items[i]?.progress ?? 0;
             const eveningProg = it.progress ?? 0;
             const delta = report.type === 'evening' ? eveningProg - morningProg : 0;
@@ -537,7 +538,7 @@ function DayDetailPopup({ date, emp, morning, evening, onClose }: {
               <div className="px-5 py-3">
                 <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 mb-2.5">☀ 출근 보고</p>
                 <div className="space-y-2">
-                  {morning.items.map((it, i) => (
+                  {(morning.items ?? []).map((it, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <span className="text-[10px] text-stone-300 w-4 text-right font-bold mt-0.5 shrink-0">{i + 1}</span>
                       <span className={`mt-0.5 shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].icon}</span>
@@ -554,7 +555,7 @@ function DayDetailPopup({ date, emp, morning, evening, onClose }: {
               <div className="px-5 py-3">
                 <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mb-2.5">🌙 퇴근 보고 (완료 현황)</p>
                 <div className="space-y-2">
-                  {evening.items.map((it, i) => (
+                  {(evening.items ?? []).map((it, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <span className="text-[10px] text-stone-300 w-4 text-right font-bold mt-0.5 shrink-0">{i + 1}</span>
                       <span className={`mt-0.5 shrink-0 ${STATUS_CONFIG[it.status].cls}`}>{STATUS_CONFIG[it.status].icon}</span>
@@ -737,7 +738,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
       // 클라이언트에서 정렬
       setReports(reportSnap.docs.map(d => ({ id: d.id, ...d.data() } as DailyReport))
-        .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)));
+        .sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? '')));
       const me = emps.find(e => e.linkedUid === currentUser.uid) ?? null;
       setMyEmployee(me);
 
@@ -750,7 +751,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       setWeeklyReports(wReports);
       const myW = me ? wReports.find(r => r.employeeId === me.id) ?? null : null;
       setMyWeekly(myW);
-      if (myW) setWeeklyForm(myW.items.length >= 4 ? myW.items : [...myW.items, ...Array(4 - myW.items.length).fill({ title: '', status: 'planned' })]);
+      if (myW) { const wi = myW.items ?? []; setWeeklyForm(wi.length >= 4 ? wi : [...wi, ...Array(4 - wi.length).fill({ title: '', status: 'planned' })]); }
 
       // 지난주 미완료 이월 — 이번 주 보고 없을 때만
       if (!myW && me) {
@@ -760,7 +761,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         );
         if (prevSnap.docs[0]) {
           const prev = prevSnap.docs[0].data() as WeeklyReport;
-          setWeeklyCarryItems(prev.items.filter(it => it.status === 'planned' || it.status === 'in_progress'));
+          setWeeklyCarryItems((prev.items ?? []).filter(it => it.status === 'planned' || it.status === 'in_progress'));
         }
       } else {
         setWeeklyCarryItems([]);
@@ -773,7 +774,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
       );
       setMyTasks(taskSnap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
         .filter(t => t.status === 'pending' || t.status === 'in_progress')
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')));
 
       // 오픈 일정 — supervisor 이름으로 매칭
       if (me?.name) {
@@ -891,7 +892,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
         setKakaoTarget({
           type: 'evening',
           items: cleanItems.map((it: DailyReportItem, idx: number) => {
-            const mp = myMorning?.items[idx]?.progress ?? 0;
+            const mp = myMorning?.items?.[idx]?.progress ?? 0;
             const ep = it.progress ?? 0;
             const delta = ep - mp;
             const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';
@@ -1318,7 +1319,7 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                     <ReportCard report={myMorning} onEdit={isToday && !myMorning.confirmedAt ? () => setIsEditingMorning(true) : undefined} isAdmin={isAdmin} onConfirm={isAdmin ? () => confirmReport(myMorning) : undefined} onCreateReport={onNavigateToReports}
                       onShare={() => shareDailyReport({
                         name: currentUser.name, date, type: 'morning',
-                        items: myMorning.items.map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
+                        items: (myMorning.items ?? []).map(i => (i.progress ?? 0) > 0 ? `${i.text} [${i.progress}%]` : i.text),
                         onSuccess: toast.success, onError: toast.error,
                       })} />
                     {/* 퇴근 보고 */}
@@ -1343,8 +1344,8 @@ export function DailyReportView({ currentUser, onNavigateToReports }: Props) {
                         onCreateReport={onNavigateToReports}
                         onShare={() => shareDailyReport({
                           name: currentUser.name, date, type: 'evening',
-                          items: myEvening.items.map((it, idx) => {
-                            const mp = myMorning?.items[idx]?.progress ?? 0;
+                          items: (myEvening.items ?? []).map((it, idx) => {
+                            const mp = myMorning?.items?.[idx]?.progress ?? 0;
                             const ep = it.progress ?? 0;
                             const delta = ep - mp;
                             const progressStr = ep > 0 ? ` [${ep}%${delta > 0 ? ` +${delta}%` : ''}]` : '';

@@ -4,6 +4,7 @@ import { X, Plus, Archive, Edit2, RotateCcw, Trash2, Upload, Search, AlertTriang
 import { formatCurrency } from '../utils';
 import Papa from 'papaparse';
 import { PriceHistoryGraph } from './PriceHistoryGraph';
+import { useToast } from './Toast';
 
 interface Props {
   ingredients: Ingredient[];
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export const IngredientManager: React.FC<Props> = ({ ingredients: initialIngredients, ingredientChanges, onSave, onClose }) => {
+  const toast = useToast();
   const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
   const [name, setName] = useState('');
   const [spec, setSpec] = useState('');
@@ -87,18 +89,18 @@ export const IngredientManager: React.FC<Props> = ({ ingredients: initialIngredi
 
         if (newIngredients.length > 0) {
           setIngredients(prev => [...prev, ...newIngredients]);
-          alert(`성공적으로 ${newIngredients.length}개의 식자재를 불러왔습니다.${errorCount > 0 ? `\n(${errorCount}개의 행은 형식이 맞지 않아 제외되었습니다.)` : ''}`);
+          toast.success(`${newIngredients.length}개의 식자재를 불러왔습니다.${errorCount > 0 ? ` (${errorCount}개 형식 오류 제외)` : ''}`);
         } else {
-          alert('불러올 수 있는 유효한 데이터가 없습니다. CSV 파일 형식을 확인해주세요.');
+          toast.error('불러올 수 있는 유효한 데이터가 없습니다. CSV 파일 형식을 확인해주세요.');
         }
-        
+
         // 파일 입력 초기화
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
       },
       error: (error) => {
-        alert(`CSV 파일 읽기 오류: ${error.message}`);
+        toast.error(`CSV 파일 읽기 오류: ${error.message}`);
       }
     });
   };

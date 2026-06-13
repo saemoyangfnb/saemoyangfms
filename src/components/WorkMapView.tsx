@@ -29,6 +29,7 @@ type TrackStatus = 'done' | 'late' | 'urgent' | 'normal' | 'no_date';
 const genId = (prefix = 'item') =>
   `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const nowTs = () => new Date().toISOString();
+const clean = <T,>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 const toYMD = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -498,7 +499,7 @@ function ProjectWeekTab({
                                   {morning && <span className="text-[8px] font-bold text-amber-500">☀</span>}
                                   {evening && <span className="text-[8px] font-bold text-indigo-500">🌙</span>}
                                 </div>
-                                {displayReport.items.slice(0, 3).map((it, idx) => {
+                                {(displayReport.items ?? []).slice(0, 3).map((it, idx) => {
                                   const dot = it.status === 'done' ? '✓' : it.status === 'incomplete' ? '✗' : '●';
                                   const dotCls = it.status === 'done' ? 'text-emerald-500' : it.status === 'incomplete' ? 'text-red-500' : 'text-amber-500';
                                   return (
@@ -508,7 +509,7 @@ function ProjectWeekTab({
                                     </div>
                                   );
                                 })}
-                                {displayReport.items.length > 3 && <p className="text-[9px] text-stone-400 pl-3">+{displayReport.items.length - 3}개</p>}
+                                {(displayReport.items ?? []).length > 3 && <p className="text-[9px] text-stone-400 pl-3">+{(displayReport.items ?? []).length - 3}개</p>}
                               </>
                             )}
                           </div>
@@ -1064,14 +1065,14 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   const handleSaveTask = async (data: Partial<Task>) => {
     try {
       if (editingTask) {
-        await updateDoc(doc(salesDb, 'tasks', editingTask.id), { ...data, updatedAt: nowTs() });
+        await updateDoc(doc(salesDb, 'tasks', editingTask.id), clean({ ...data, updatedAt: nowTs() }));
         toast.success('수정됨');
       } else {
         const id = genId('task');
         const now = nowTs();
-        await setDoc(doc(salesDb, 'tasks', id), {
+        await setDoc(doc(salesDb, 'tasks', id), clean({
           id, ...data, status: data.status ?? 'pending', createdAt: now, updatedAt: now,
-        });
+        }));
         toast.success('업무 등록됨');
       }
       setShowTaskForm(false);
@@ -1094,12 +1095,12 @@ export function WorkMapView({ currentUser }: { currentUser: User }) {
   const handleSaveProject = async (data: Partial<Project>) => {
     try {
       if (editingProject) {
-        await updateDoc(doc(salesDb, 'projects', editingProject.id), { ...data, updatedAt: nowTs() });
+        await updateDoc(doc(salesDb, 'projects', editingProject.id), clean({ ...data, updatedAt: nowTs() }));
         toast.success('프로젝트 수정됨');
       } else {
         const id = genId('proj');
         const now = nowTs();
-        await setDoc(doc(salesDb, 'projects', id), { id, ...data, createdAt: now, updatedAt: now });
+        await setDoc(doc(salesDb, 'projects', id), clean({ id, ...data, createdAt: now, updatedAt: now }));
         toast.success('프로젝트 생성됨');
       }
       setShowProjectForm(false);

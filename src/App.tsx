@@ -1003,9 +1003,10 @@ export default function App() {
     const menu = brandMenus.find(m => m.id === menuId);
     if (!menu) return;
     const newId = `${Date.now()}`;
-    const newMenu = { ...menu, id: newId, name: `${menu.name} (복사본)`, hasAlert: false, lastAcknowledgedCost: undefined };
+    const { lastAcknowledgedCost: _drop, ...rest } = menu;
+    const newMenu = JSON.parse(JSON.stringify({ ...rest, id: newId, name: `${menu.name} (복사본)`, hasAlert: false, brandId: activeBrand }));
     try {
-      await setDoc(doc(db, 'menus', newId), { ...newMenu, brandId: activeBrand });
+      await setDoc(doc(db, 'menus', newId), newMenu);
       logActivity('메뉴 복사', `[${currentBrand?.name || '공통'}] ${menu.name} → ${newMenu.name}`);
       toast.success(`'${menu.name}' 복사 완료`);
     } catch (error) { handleFirestoreError(error, OperationType.WRITE, `menus/${newId}`); }
@@ -1091,7 +1092,7 @@ export default function App() {
         if (ing.isSelectedForMenu) allOps.push({ type: 'update', ref: doc(db, 'ingredients', ing.id), data: { isSelectedForMenu: false } });
       });
       menus.forEach(menu => {
-        if (menu.recipe.length > 0) allOps.push({ type: 'update', ref: doc(db, 'menus', menu.id), data: { hasAlert: true } });
+        if ((menu.recipe?.length ?? 0) > 0) allOps.push({ type: 'update', ref: doc(db, 'menus', menu.id), data: { hasAlert: true } });
       });
       for (let i = 0; i < allOps.length; i += CHUNK_SIZE) {
         const batch = writeBatch(db);
@@ -1202,7 +1203,7 @@ export default function App() {
       const colLetters = [['D','E','F'], ['G','H','I'], ['J','K','L']];
       regions.forEach((_, ri) => {
         const [priceCol, rateCol, marginCol] = colLetters[ri];
-        const price = m.prices[regions[ri]] || 0;
+        const price = (m.prices?.[regions[ri]]) || 0;
         ws1[`${priceCol}${rowNum}`] = { v: price, t: 'n', z: '#,##0' };
         ws1[`${rateCol}${rowNum}`] = { f: `IF(${priceCol}${rowNum}=0,"",${costCol}${rowNum}/${priceCol}${rowNum})`, t: 'n', z: '0.0%' };
         ws1[`${marginCol}${rowNum}`] = { f: `IF(${priceCol}${rowNum}=0,"",${priceCol}${rowNum}-${costCol}${rowNum})`, t: 'n', z: '#,##0' };
@@ -1230,7 +1231,7 @@ export default function App() {
 
     let detailRow = 2;
     activeMenus.forEach(m => {
-      m.recipe.forEach(item => {
+      (m.recipe ?? []).forEach(item => {
         let name = '', unitPrice = 0, unit = '', type = '';
         if (item.type === 'ingredient') {
           const ing = brandIngredients.find(i => i.id === item.ingredientId);

@@ -382,7 +382,7 @@ export function SalesDataImporter({ activeBrand, onUploaded }: { activeBrand: st
           <button
             onClick={async () => {
               const result = await runDiagnostic();
-              alert(`[Firestore 진단]\n${result}\n\n콘솔(F12)에서 상세 로그를 확인하세요.`);
+              toast.info(`[Firestore 진단] ${result} — 상세 로그는 콘솔(F12) 확인`);
             }}
             className="w-full text-xs py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
           >

@@ -5,6 +5,59 @@
 
 ---
 
+## 2026-06-13 (3) — Claude Code
+
+### WorkMapView 프로젝트/업무 생성·수정 Firestore 저장 실패 수정
+
+- **근본 원인**: `handleSaveProject` / `handleSaveTask` 에서 `undefined` 필드(description, startDate, endDate 등)를 Firestore에 직접 전달 → Firestore가 `undefined` 거부, `catch`에서 "저장 실패" toast만 표시
+- **수정**: `clean = JSON.parse(JSON.stringify(...))` 헬퍼 추가 후 두 save 핸들러의 Firestore 쓰기 호출에 적용
+- 빌드 성공
+
+---
+
+## 2026-06-13 (2) — Claude Code
+
+### DailyReportView 추가 버그 수정 6건
+
+- **myW.items undefined**: `setWeeklyForm` 에서 `myW.items` 직접 접근 → `(myW.items ?? [])` 방어
+- **prev.items undefined**: 지난주 이월 항목 `prev.items.filter` → `(prev.items ?? []).filter`
+- **Task.createdAt undefined**: sort 시 `b.createdAt.localeCompare` → `?? ''` 방어
+- **myMorning?.items[idx]**: optional chaining 미완 → `myMorning?.items?.[idx]?.progress` 수정 (2곳)
+- **myMorning.items.map** / **myEvening.items.map**: 공유 시 `items` 직접 접근 → `(items ?? []).map` 방어
+- 빌드 성공, TypeScript 에러 0개
+
+---
+
+## 2026-06-13 — Claude Code
+
+### 전수 버그 수정 — 런타임 크래시 방어 처리 9건
+
+- **SopView.tsx**: `height`/`preview` prop 미존재 → `rows={7}` 교체 (TypeScript 에러 제거)
+- **IngredientManager.tsx**: `alert()` 3건 → `toast.success/error` 교체 + `useToast` 추가
+- **SalesDataImporter.tsx**: Firestore 진단 `alert()` → `toast.info` 교체
+- **utils.ts**: `calculateTotalCost` / `doesMenuContainIngredient` / `hasMissingIngredients` — `recipe` undefined 허용 (`?? []` 방어)
+- **OverviewTable.tsx**: `menu.recipe ?? []` 초기화 + `menu.prices?.[r]` 옵셔널 체이닝 3곳 + `makeFreshSimPrices` 방어
+- **MenuTable.tsx** / **RecipeModal.tsx**: `menu.recipe ?? []` 초기화
+- **App.tsx**: `handleDuplicateMenu` — `lastAcknowledgedCost: undefined` Firestore 저장 버그 수정 (JSON.parse 클린), `m.recipe?.forEach`, `menu.recipe?.length`
+- **DailyReportView.tsx** / **FeedView.tsx**: `submittedAt ?? ''` undefined sort 크래시 방어, `items ?? []` 방어 4곳
+- **WorkMapView.tsx**: `displayReport.items ?? []` 방어 2곳
+- 빌드 성공, TypeScript 에러 0개
+
+---
+
+## 2026-06-12 (8) — Claude Code
+
+### 원가 계산기 개선 — 표 뷰 재설계 + 시뮬레이션 기능
+
+- **표 뷰 기본값으로 변경** + 검색바 + 카테고리 탭 필터 추가
+- **원가율 진행바**: 표 뷰 + 카드 뷰 권역 블록 모두 적용 (60% 기준 스케일, 초록/주황/빨강)
+- **메뉴 복사**: 카드·표 모두 Copy 아이콘, `handleDuplicateMenu` Firestore 저장
+- **레시피 편집**: 표 뷰에서 BookOpen 아이콘 → 중앙 모달로 분리
+- **가격 시뮬레이션 뷰 신설**: 전체 메뉴 판매가 입력 → 원가율 실시간 계산, 수정 셀 주황 하이라이트, 초기화. DB 저장 없음(위험하여 제거)
+- 빌드 성공, 배포 완료 (8fee685)
+
+---
+
 ## 2026-06-12 (7) — Claude Code
 
 ### SOP 마크다운 편집기 도입

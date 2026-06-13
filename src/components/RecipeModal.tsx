@@ -16,7 +16,7 @@ type TabType = 'ingredient' | 'menu' | 'custom';
 
 export const RecipeModal: React.FC<Props> = ({ menu, ingredients, menus, onSave, onClose }) => {
   const toast = useToast();
-  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe);
+  const [recipe, setRecipe] = useState<RecipeItem[]>(menu.recipe ?? []);
   const [activeTab, setActiveTab] = useState<TabType>('ingredient');
 
   const [selectedId, setSelectedId] = useState<string>('');
