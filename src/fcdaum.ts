@@ -133,7 +133,7 @@ export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promi
 
 // FC다움 → 내부 Store 포맷 변환
 export function mapFcdaumStore(s: FcdaumStore) {
-  const owner = s.storeUsers.find(u => u.authority === 'owner');
+  const owner = (s.storeUsers ?? []).find(u => u.authority === 'owner');
   const region = s.address.split(' ')[0] ?? '';
   return {
     id: s.storeId,

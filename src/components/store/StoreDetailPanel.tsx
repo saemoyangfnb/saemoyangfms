@@ -53,8 +53,15 @@ export function StoreDetailPanel({
     setLoadingStore(true);
 
     const loadStore = schedule.storeId
-      ? getDoc(doc(salesDb, 'stores', schedule.storeId))
-          .then(snap => { if (!cancelled && snap.exists()) setStore({ id: snap.id, ...snap.data() } as Store); })
+      ? getDoc(doc(salesDb, 'stores', schedule.storeId)).then(snap => {
+          if (cancelled || !snap.exists()) return;
+          const data = { id: snap.id, ...snap.data() } as Store;
+          // 이름 불일치 안전장치: FC다움 storeId와 Excel 관리번호 충돌 시 잘못된 매장 표시 방지
+          const schName = (schedule.storeName ?? '').trim();
+          const stoName = (data.name ?? '').trim();
+          if (schName && stoName && !schName.includes(stoName) && !stoName.includes(schName)) return;
+          setStore(data);
+        })
       : Promise.resolve();
 
     const loadTasks = getDocs(

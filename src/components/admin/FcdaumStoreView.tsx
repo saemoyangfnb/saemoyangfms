@@ -67,8 +67,11 @@ export function FcdaumStoreView() {
       setStores(fcdaumStores);
       const ids = new Set<string>();
       schedSnap.docs.forEach(d => {
-        const sid = d.data().storeId as string | undefined;
+        const data = d.data();
+        const sid = data.storeId as string | undefined;
+        const fid = data.fcdaumStoreId as string | undefined;
         if (sid) ids.add(sid);
+        if (fid) ids.add(fid);
       });
       setLinkedIds(ids);
     } catch (e) {
@@ -281,11 +284,11 @@ export function FcdaumStoreView() {
                   <Field label="전화번호"   value={selected.phone} />
                   <Field label="휴대전화"   value={selected.mobile} />
                   <div className="col-span-2"><Field label="주소" value={selected.address} /></div>
-                  {selected.storeUsers.length > 0 && (
+                  {(selected.storeUsers ?? []).length > 0 && (
                     <div className="col-span-2 mt-1">
                       <p className="text-xs font-bold text-stone-500 mb-1.5">매장 사용자</p>
                       <div className="space-y-1">
-                        {selected.storeUsers.map(u => (
+                        {(selected.storeUsers ?? []).map(u => (
                           <div key={u.userId} className="flex items-center gap-3 text-xs text-stone-600 dark:text-stone-400">
                             <span className="font-bold">{u.userNm}</span>
                             <span className="text-stone-400">{u.authority}</span>
