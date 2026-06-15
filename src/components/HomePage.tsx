@@ -8,8 +8,9 @@ import {
   CalendarDays, Sparkles, TriangleAlert, FileText,
   ClipboardList, NotebookPen, Megaphone, Calendar,
   Users, ChevronRight, Pin, Settings, FolderKanban,
-  AlertCircle, CheckSquare,
+  AlertCircle, CheckSquare, Building2,
 } from 'lucide-react';
+import { fetchAllStores, fetchQscReports, FcdaumStore, FcdaumQscReport } from '../fcdaum';
 
 function calcDday(openDate: string): number | null {
   if (!openDate) return null;
@@ -23,17 +24,18 @@ const EXEC_POSITIONS = ['대표', '전무', '이사', '부장'];
 
 
 // ── 위젯 정의 ──────────────────────────────────────────────
-type WidgetId = 'quicknav' | 'notices' | 'projects' | 'meetings' | 'brands';
+type WidgetId = 'quicknav' | 'notices' | 'projects' | 'meetings' | 'brands' | 'inspection';
 
 const WIDGETS: { id: WidgetId; label: string }[] = [
-  { id: 'quicknav',  label: '빠른 이동' },
-  { id: 'notices',   label: '공지사항' },
-  { id: 'projects',  label: '최근 프로젝트' },
-  { id: 'meetings',  label: '최근 회의록' },
-  { id: 'brands',    label: '브랜드 업무' },
+  { id: 'quicknav',   label: '빠른 이동' },
+  { id: 'inspection', label: '가맹 점검 현황' },
+  { id: 'notices',    label: '공지사항' },
+  { id: 'projects',   label: '최근 프로젝트' },
+  { id: 'meetings',   label: '최근 회의록' },
+  { id: 'brands',     label: '브랜드 업무' },
 ];
 
-const ALL_ON = new Set<WidgetId>(['quicknav', 'notices', 'projects', 'meetings', 'brands']);
+const ALL_ON = new Set<WidgetId>(['quicknav', 'inspection', 'notices', 'projects', 'meetings', 'brands']);
 
 const CAT_STYLE: Record<string, string> = {
   '긴급':    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -105,6 +107,39 @@ export function HomePage({
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
   const [mySchedules,     setMySchedules]     = useState<FranchiseSchedule[]>([]);
   const [execSchedules,   setExecSchedules]   = useState<FranchiseSchedule[]>([]);
+
+  // QSC 점검 우선순위 위젯
+  interface InspectionItem { name: string; days: number | null; level: 0|1|2|3|4; storeId: string; }
+  const [inspectionItems, setInspectionItems] = useState<InspectionItem[]>([]);
+  const [inspectionLoading, setInspectionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled.has('inspection')) return;
+    const CACHE_KEY = 'inspection_widget_cache';
+    const CACHE_TTL = 3600000; // 1 hour
+    const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
+    if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionItems(cached.data); return; }
+    setInspectionLoading(true);
+    Promise.all([fetchAllStores(), fetchQscReports(undefined, 500)])
+      .then(([storeList, qscList]: [FcdaumStore[], FcdaumQscReport[]]) => {
+        const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86400000);
+        const priLevel = (d: number | null): 0|1|2|3|4 => d === null ? 0 : d >= 60 ? 1 : d >= 45 ? 2 : d >= 30 ? 3 : 4;
+        const items = storeList
+          .filter(s => s.storeStatus === 'O')
+          .map(s => {
+            const reps = qscList.filter(r => r.storeId === s.storeId);
+            const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
+            const days = latest ? daysSince(latest.visitDate) : null;
+            return { name: s.storeNm, days, level: priLevel(days), storeId: s.storeId };
+          })
+          .sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity))
+          .slice(0, 8);
+        setInspectionItems(items);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: items, ts: Date.now() })); } catch {}
+      })
+      .catch(() => {})
+      .finally(() => setInspectionLoading(false));
+  }, [enabled]);
 
   useEffect(() => {
     getDocs(query(collection(salesDb, 'employees'), where('linkedUid', '==', currentUser.uid)))
@@ -386,6 +421,60 @@ export function HomePage({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 가맹 점검 현황 위젯 ── */}
+      {on('inspection') && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Building2 size={14} className="text-indigo-500" />
+              <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">가맹 점검 현황</p>
+            </div>
+            <button onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+              className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
+              전체 <ChevronRight size={11} />
+            </button>
+          </div>
+          {inspectionLoading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-stone-400">
+              <div className="w-4 h-4 border-2 border-stone-300 border-t-indigo-500 rounded-full animate-spin" />
+              <span className="text-xs">불러오는 중...</span>
+            </div>
+          ) : inspectionItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 text-stone-300 dark:text-stone-700 gap-1">
+              <Building2 size={20} />
+              <p className="text-xs">데이터를 불러오지 못했습니다.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {inspectionItems.map(item => {
+                const DOT = ['bg-stone-400', 'bg-red-500', 'bg-orange-500', 'bg-amber-400', 'bg-emerald-500'] as const;
+                const LBL = ['미확인', '긴급', '주의', '관리필요', '양호'] as const;
+                const BADGE = [
+                  'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
+                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                ] as const;
+                return (
+                  <button key={item.storeId} onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+                    className="flex items-start gap-2 p-3 rounded-xl border border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-left">
+                    <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${DOT[item.level]}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{item.name}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${BADGE[item.level]}`}>{LBL[item.level]}</span>
+                        {item.days !== null && <span className="text-[9px] text-stone-400">{item.days}일</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

@@ -124,8 +124,8 @@ export async function fetchHelpdeskSummary(storeIds?: string[]): Promise<FcdaumH
   return { statusCounts: data.statusCounts ?? {}, totalCount: data.totalCount ?? 0 };
 }
 
-export async function fetchQscReports(storeIds?: string[]): Promise<FcdaumQscReport[]> {
-  const params: Record<string, string> = { pageSize: '50' };
+export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promise<FcdaumQscReport[]> {
+  const params: Record<string, string> = { pageSize: String(pageSize) };
   if (storeIds?.length) params['storeIds'] = storeIds.join(',');
   const data = await apiFetch('qsc/report', params);
   return data.qscReports ?? [];
