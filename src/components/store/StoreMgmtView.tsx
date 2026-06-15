@@ -5,8 +5,8 @@ import {
 } from 'firebase/firestore';
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
-  fetchAllStores, fetchQscReports, fetchHelpdeskSummary,
-  FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary,
+  fetchAllStores, fetchQscReports, fetchHelpdeskSummary, fetchOperationInfos,
+  FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
@@ -14,7 +14,7 @@ import {
   Building2, Search, AlertTriangle, Plus, X, ClipboardList,
   History, Check, Trash2, RefreshCw, Loader2, ShieldAlert,
   MessageSquare, User as UserIcon, ChevronRight, Info,
-  StickyNote,
+  StickyNote, Layers,
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
 
@@ -161,7 +161,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   // UI 상태
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
-  const [tab, setTab] = useState<'info' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
+  const [tab, setTab] = useState<'info' | 'operation' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
   const [filterTab, setFilterTab] = useState<'all' | 'needsVisit' | 'ok' | 'unknown'>('all');
   const [search, setSearch] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -177,6 +177,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [logContent, setLogContent] = useState('');
   const [logType, setLogType] = useState<StoreLog['type']>('memo');
   const [savingLog, setSavingLog] = useState(false);
+
+  // 운영정보 탭
+  const [opInfo, setOpInfo] = useState<FcdaumOperationInfo | null>(null);
+  const [opLoading, setOpLoading] = useState(false);
+  const [opLoaded, setOpLoaded] = useState<string | null>(null);
 
   // 매장요청 탭
   const [helpdesk, setHelpdesk] = useState<FcdaumHelpdeskSummary | null>(null);
@@ -351,6 +356,8 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setSvInput(svMap[id] ?? '');
     setHelpdesk(null);
     setHelpdeskLoaded(null);
+    setOpInfo(null);
+    setOpLoaded(null);
     setFormEntries([]);   // 이전 매장 데이터 즉시 클리어
     setLogs([]);
     setIsLinked(false);          // 연동 여부 초기화
@@ -359,9 +366,25 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     loadQscForStore(id);         // 매장별 QSC 개별 fetch
   };
 
+  const loadOpInfo = async (storeId: string) => {
+    if (opLoaded === storeId) return;
+    setOpLoading(true);
+    try {
+      const list = await fetchOperationInfos([storeId]);
+      if (activeStoreRef.current !== storeId) return;
+      setOpInfo(list[0] ?? null);
+      setOpLoaded(storeId);
+    } catch {
+      if (activeStoreRef.current === storeId) setOpInfo(null);
+    } finally {
+      if (activeStoreRef.current === storeId) setOpLoading(false);
+    }
+  };
+
   const handleTabChange = (t: typeof tab) => {
     setTab(t);
     if (t === 'helpdesk' && selectedId) loadHelpdesk(selectedId);
+    if (t === 'operation' && selectedId) loadOpInfo(selectedId);
   };
 
   const handleSaveSv = async () => {
@@ -552,11 +575,12 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
               {/* 탭 메뉴 */}
               <div className="flex items-center gap-0 mt-3 -mb-4 border-b border-slate-200 dark:border-slate-700">
                 {([
-                  { id: 'info',     label: '기본정보',  icon: <Info size={11} /> },
-                  { id: 'forms',    label: '폼 관리',   icon: <ClipboardList size={11} /> },
-                  { id: 'qsc',      label: '점검현황',  icon: <ShieldAlert size={11} /> },
-                  { id: 'helpdesk', label: '매장요청',  icon: <MessageSquare size={11} /> },
-                  { id: 'logs',     label: '이력/메모', icon: <StickyNote size={11} /> },
+                  { id: 'info',      label: '기본정보',  icon: <Info size={11} /> },
+                  { id: 'operation', label: '운영정보',  icon: <Layers size={11} /> },
+                  { id: 'forms',     label: '폼 관리',   icon: <ClipboardList size={11} /> },
+                  { id: 'qsc',       label: '점검현황',  icon: <ShieldAlert size={11} /> },
+                  { id: 'helpdesk',  label: '매장요청',  icon: <MessageSquare size={11} /> },
+                  { id: 'logs',      label: '이력/메모', icon: <StickyNote size={11} /> },
                 ] as { id: typeof tab; label: string; icon: React.ReactNode }[]).map(t => (
                   <button key={t.id} onClick={() => handleTabChange(t.id)}
                     className={`flex items-center gap-1 px-3 py-2 text-xs font-bold border-b-2 transition-colors ${
@@ -617,6 +641,89 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                   ) : (
                     <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
                       QSC 점검 기록이 없습니다. 우선 방문이 필요합니다.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 운영정보 */}
+              {tab === 'operation' && (
+                <div className="p-6">
+                  {opLoading ? (
+                    <div className="flex items-center justify-center h-32 text-slate-400 gap-2">
+                      <Loader2 size={16} className="animate-spin" /><span className="text-sm">불러오는 중…</span>
+                    </div>
+                  ) : !opInfo ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
+                      <Layers size={32} className="opacity-30" />
+                      <p className="text-sm">운영정보 없음</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">매장 환경</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: '입점층수',   value: opInfo.pointType },
+                            { label: '매장 크기',  value: opInfo.size },
+                            { label: '좌석수',     value: opInfo.seat },
+                            { label: '운영형태',   value: opInfo.type },
+                            { label: '상권',       value: opInfo.bizDist },
+                            { label: '세대수',     value: opInfo.household },
+                          ].map(f => f.value ? (
+                            <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                            </div>
+                          ) : null)}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">비용</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: '권리금',     value: opInfo.premium },
+                            { label: '보증금',     value: opInfo.deposit },
+                            { label: '월임차료',   value: opInfo.monthlyRent },
+                            { label: '인건비',     value: opInfo.laborCost },
+                            { label: '배달대행비', value: opInfo.deliveryFee },
+                            { label: '배달지역',   value: opInfo.deliveryArea },
+                          ].map(f => f.value ? (
+                            <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                            </div>
+                          ) : null)}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">인원</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: '홀',       value: opInfo.hallStaff },
+                            { label: '주방',     value: opInfo.kitchenStaff },
+                            { label: '풀타임',   value: opInfo.fullTimeStaff },
+                            { label: '파트타임', value: opInfo.partTimeStaff },
+                          ].map(f => f.value ? (
+                            <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                            </div>
+                          ) : null)}
+                        </div>
+                      </div>
+                      {opInfo.profile && (
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                          <p className="text-[10px] text-slate-400 mb-1">프로파일</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opInfo.profile}</p>
+                        </div>
+                      )}
+                      {opInfo.note && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1 font-bold">특이사항</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opInfo.note}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
