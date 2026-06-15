@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, auth, salesDb } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
 import { User, Ingredient, Department, BrandId, SystemConfig } from '../types';
-import { Check, X, Trash2, ShieldAlert, RefreshCw, AlertCircle, History, Key, Settings2, Tags, FolderOpen } from 'lucide-react';
+import { Check, X, Trash2, ShieldAlert, RefreshCw, AlertCircle, History, Key, Settings2, Tags, FolderOpen, Database } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
