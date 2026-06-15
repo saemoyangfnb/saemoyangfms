@@ -188,8 +188,12 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [svInput, setSvInput] = useState('');
   const [savingSv, setSavingSv] = useState(false);
 
-  // 가맹 일정 연동 여부
-  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
+  // 가맹 일정 연동 여부 (선택된 매장 기준)
+  const [isLinked, setIsLinked] = useState<boolean>(false);
+
+  // 매장별 QSC 상세 (per-store fetch — bulk 매칭 오류 방지)
+  const [selectedQscReports, setSelectedQscReports] = useState<FcdaumQscReport[]>([]);
+  const [qscDetailLoading, setQscDetailLoading] = useState(false);
 
   // ── 초기 로드 ────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -201,13 +205,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       const ids = storeList.map(s => s.storeId);
 
       // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리
-      const [qscList, schSnap, formSnap] = await Promise.all([
+      const [qscList, formSnap] = await Promise.all([
         fetchQscReports(ids, 500),
-        getDocs(collection(salesDb, 'franchise_schedules')),
         getDocs(collection(salesDb, 'store_forms')),
       ]);
       setQscReports(qscList);
-      setLinkedIds(new Set(schSnap.docs.map(d => d.data().storeId as string).filter(Boolean)));
       setForms(
         formSnap.docs.map(d => ({ id: d.id, ...d.data() } as StoreForm))
           .filter(f => !f.isArchived)
@@ -254,6 +256,35 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreLog)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {} finally {
       if (activeStoreRef.current === storeId) setLogsLoading(false);
+    }
+  };
+
+  // 선택된 매장의 가맹 일정 연동 여부 — per-store 쿼리 (FcdaumStoreView 패턴)
+  // storeId (수동 매핑) 또는 fcdaumStoreId (FcdaumScheduleCreateModal) 두 경로 모두 확인
+  const checkLinked = async (storeId: string) => {
+    try {
+      const [snap1, snap2] = await Promise.all([
+        getDocs(query(collection(salesDb, 'franchise_schedules'), where('storeId', '==', storeId))),
+        getDocs(query(collection(salesDb, 'franchise_schedules'), where('fcdaumStoreId', '==', storeId))),
+      ]);
+      if (activeStoreRef.current !== storeId) return;
+      setIsLinked(!snap1.empty || !snap2.empty);
+    } catch {
+      if (activeStoreRef.current === storeId) setIsLinked(false);
+    }
+  };
+
+  // 선택된 매장의 QSC 보고서 — per-store fetch (bulk 500건 한도 및 storeId 매칭 오류 방지)
+  const loadQscForStore = async (storeId: string) => {
+    setQscDetailLoading(true);
+    try {
+      const reports = await fetchQscReports([storeId]);
+      if (activeStoreRef.current !== storeId) return;
+      setSelectedQscReports(reports.sort((a, b) => b.visitDate - a.visitDate));
+    } catch {
+      if (activeStoreRef.current === storeId) setSelectedQscReports([]);
+    } finally {
+      if (activeStoreRef.current === storeId) setQscDetailLoading(false);
     }
   };
 
@@ -312,10 +343,6 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   }, [filteredByCategory, search]);
 
   const selectedStore = useMemo(() => stores.find(s => s.storeId === selectedId) ?? null, [stores, selectedId]);
-  const selectedQsc = useMemo(
-    () => qscReports.filter(r => r.storeId === selectedId).sort((a, b) => b.visitDate - a.visitDate),
-    [qscReports, selectedId]
-  );
 
   // ── 핸들러 ────────────────────────────────────────────────
   const handleSelectStore = (id: string) => {
@@ -328,6 +355,10 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setHelpdeskLoaded(null);
     setFormEntries([]);   // 이전 매장 데이터 즉시 클리어
     setLogs([]);
+    setIsLinked(false);          // 연동 여부 초기화
+    setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
+    checkLinked(id);             // 매장별 연동 여부 비동기 확인
+    loadQscForStore(id);         // 매장별 QSC 개별 fetch
   };
 
   const handleTabChange = (t: typeof tab) => {
@@ -508,7 +539,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                     </button>
                   )}
                   {/* 가맹 일정 연동 */}
-                  {linkedIds.has(selectedStore.storeId) ? (
+                  {isLinked ? (
                     <span className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg">
                       <Check size={12} /> 일정 연동
                     </span>
@@ -565,19 +596,23 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                     <p className="text-[10px] font-bold text-slate-400 mb-1">주소</p>
                     <p className="text-sm text-slate-900 dark:text-white">{selectedStore.address}</p>
                   </div>
-                  {/* 마지막 QSC 요약 */}
-                  {selectedQsc.length > 0 ? (
+                  {/* 마지막 QSC 요약 — per-store fetch 결과 사용 */}
+                  {qscDetailLoading ? (
+                    <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400">
+                      <Loader2 size={13} className="animate-spin" /> QSC 불러오는 중…
+                    </div>
+                  ) : selectedQscReports.length > 0 ? (
                     <div className="bg-slate-50 dark:bg-slate-800 rounded-lg px-4 py-3">
                       <p className="text-[10px] font-bold text-slate-400 mb-2">마지막 QSC 점검</p>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedQsc[0].qscTitle}</p>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedQscReports[0].qscTitle}</p>
                           <p className="text-xs text-slate-500">
-                            {new Date(selectedQsc[0].visitDate).toLocaleDateString('ko-KR')} ({getDaysSince(selectedQsc[0].visitDate)}일 전)
+                            {new Date(selectedQscReports[0].visitDate).toLocaleDateString('ko-KR')} ({getDaysSince(selectedQscReports[0].visitDate)}일 전)
                           </p>
                         </div>
                         {(() => {
-                          const lv = priorityLevel(getDaysSince(selectedQsc[0].visitDate));
+                          const lv = priorityLevel(getDaysSince(selectedQscReports[0].visitDate));
                           return <span className={`px-2.5 py-1 text-[11px] font-bold rounded-full shrink-0 ${PRI[lv].badge}`}>{PRI[lv].label}</span>;
                         })()}
                       </div>
@@ -638,14 +673,19 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
               {/* 점검현황 */}
               {tab === 'qsc' && (
                 <div className="p-6">
-                  {selectedQsc.length === 0 ? (
+                  {qscDetailLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
+                      <Loader2 size={28} className="animate-spin opacity-50" />
+                      <p className="text-sm">QSC 데이터 로딩 중…</p>
+                    </div>
+                  ) : selectedQscReports.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
                       <ShieldAlert size={32} className="opacity-30" />
                       <p className="text-sm">QSC 점검 기록이 없습니다.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {selectedQsc.map(r => {
+                      {selectedQscReports.map(r => {
                         const days = getDaysSince(r.visitDate);
                         const lv = priorityLevel(days);
                         return (
@@ -784,7 +824,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
           onClose={() => setShowScheduleModal(false)}
           onCreated={() => {
             setShowScheduleModal(false);
-            setLinkedIds(prev => new Set([...prev, selectedStore.storeId]));
+            setIsLinked(true);
             toast.success('가맹 일정이 생성되었습니다.');
           }}
         />

@@ -94,12 +94,14 @@ export function FcdaumStoreView() {
     const fsStore = storeSnap.exists() ? { id: storeSnap.id, ...storeSnap.data() } as Store : null;
     setFirestoreStore(fsStore);
 
-    // 연결된 가맹 일정 조회 (storeId 기준)
-    const schedSnap = await getDocs(
-      query(collection(salesDb, 'franchise_schedules'), where('storeId', '==', store.storeId))
-    );
-    if (!schedSnap.empty) {
-      setLinkedSchedule({ id: schedSnap.docs[0].id, ...schedSnap.docs[0].data() } as FranchiseSchedule);
+    // 연결된 가맹 일정 조회 — storeId(수동 매핑) 또는 fcdaumStoreId(FcdaumScheduleCreateModal) 두 경로 확인
+    const [schedSnap, fcdaumSnap] = await Promise.all([
+      getDocs(query(collection(salesDb, 'franchise_schedules'), where('storeId', '==', store.storeId))),
+      getDocs(query(collection(salesDb, 'franchise_schedules'), where('fcdaumStoreId', '==', store.storeId))),
+    ]);
+    const matchDoc = schedSnap.docs[0] ?? fcdaumSnap.docs[0];
+    if (matchDoc) {
+      setLinkedSchedule({ id: matchDoc.id, ...matchDoc.data() } as FranchiseSchedule);
     } else if (fsStore?.scheduleId) {
       // stores.scheduleId 로도 시도
       const schedDoc = await getDoc(doc(salesDb, 'franchise_schedules', fsStore.scheduleId));

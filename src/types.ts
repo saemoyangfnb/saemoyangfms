@@ -260,6 +260,7 @@ export interface FranchiseSchedule {
   supervisor: string;   // 슈퍼바이저 이름 (표시용, 하위 호환)
   supervisorId?: string; // Employee.id 참조 (연동 시 저장)
   storeId?: string;      // stores.id 참조 (수동 매핑 후)
+  fcdaumStoreId?: string; // FC다움 storeId — FcdaumScheduleCreateModal이 저장, StoreDetailPanel 조회와 분리
 
   // 세부 사항
   constructionType: string; // 더원, 감리, 직접입력

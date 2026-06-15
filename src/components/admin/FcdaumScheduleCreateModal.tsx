@@ -59,7 +59,7 @@ export function FcdaumScheduleCreateModal({ store, onClose, onCreated }: Props) 
       const now = new Date().toISOString();
       const docRef = await addDoc(collection(db, 'franchise_schedules'), {
         brandId,
-        storeId: store.storeId,
+        fcdaumStoreId: store.storeId, // FC다움 storeId — stores 컬렉션의 doc ID와 별도 관리
         storeName: store.storeNm,
         storeNumber: form.storeNumber.trim(),
         team: form.team,
