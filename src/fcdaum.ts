@@ -142,11 +142,17 @@ export async function fetchHelpdeskSummary(storeIds?: string[]): Promise<FcdaumH
   return { statusCounts: data.statusCounts ?? {}, totalCount: data.totalCount ?? 0 };
 }
 
+const toMs = (ts: number) => ts < 10_000_000_000 ? ts * 1000 : ts;
+
 export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promise<FcdaumQscReport[]> {
   const params: Record<string, string> = { pageSize: String(pageSize) };
   if (storeIds?.length) params['storeIds'] = storeIds.join(',');
   const data = await apiFetch('qsc/report', params);
-  return data.qscReports ?? [];
+  return (data.qscReports ?? []).map((r: FcdaumQscReport) => ({
+    ...r,
+    visitDate: toMs(r.visitDate),
+    regDate:   toMs(r.regDate),
+  }));
 }
 
 // FC다움 → 내부 Store 포맷 변환
