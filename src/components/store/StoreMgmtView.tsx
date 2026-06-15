@@ -17,6 +17,7 @@ import {
   StickyNote, Layers,
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
+import StoreOverviewMap from './StoreOverviewMap';
 
 // ── 로컬 타입 ──────────────────────────────────────────────────
 interface StoreLog {
@@ -531,11 +532,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       {/* ── 우측 패널 ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!selectedStore ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
-            <Building2 size={40} className="opacity-20" />
-            <p className="text-sm">좌측에서 매장을 선택하세요.</p>
-            <p className="text-xs opacity-70">QSC 점검 경과일 순으로 정렬됩니다. (빨간색 = 긴급)</p>
-          </div>
+          <StoreOverviewMap
+            storeList={storeList}
+            counts={counts}
+            onSelect={handleSelectStore}
+          />
         ) : (
           <>
             {/* 매장 헤더 */}
