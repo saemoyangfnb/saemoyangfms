@@ -149,10 +149,18 @@ function UrgencyBadge({ urgency }: { urgency?: string }) {
 function ImportanceBadge({ importance }: { importance: DecisionImportance }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${impColor(importance)}`}>{impLabel(importance)}</span>;
 }
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({ label, children, accent }: { label: string; children: React.ReactNode; accent?: 'blue' | 'emerald' | 'amber' }) {
+  const borderCls = accent === 'blue' ? 'border-l-4 border-l-blue-400 dark:border-l-blue-600'
+    : accent === 'emerald' ? 'border-l-4 border-l-emerald-500 dark:border-l-emerald-600'
+    : accent === 'amber' ? 'border-l-4 border-l-amber-400 dark:border-l-amber-600'
+    : '';
+  const labelCls = accent === 'blue' ? 'text-blue-600 dark:text-blue-400'
+    : accent === 'emerald' ? 'text-emerald-600 dark:text-emerald-400'
+    : accent === 'amber' ? 'text-amber-600 dark:text-amber-400'
+    : 'text-stone-400';
   return (
-    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4">
-      <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-3">{label}</p>
+    <div className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 ${borderCls}`}>
+      <p className={`text-[11px] font-bold uppercase tracking-widest mb-3 ${labelCls}`}>{label}</p>
       {children}
     </div>
   );
@@ -443,6 +451,10 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [meetingType, setMeetingType] = useState<MeetingType>(initial?.type || '주간업무');
   const [aiLoading, setAiLoading] = useState(false);
+  const [editingActionId, setEditingActionId] = useState<string | null>(null);
+  const [editActText, setEditActText] = useState('');
+  const [editActAssignee, setEditActAssignee] = useState('');
+  const [editActDeadline, setEditActDeadline] = useState('');
   const { confirm } = useConfirm();
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -487,6 +499,28 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
   const carryActionItem = (a: ActionItem) => {
     setActionItems(prev => [...prev, { ...a, id: genId(), text: '[이월] ' + a.text, done: false }]);
     setCarriedActionIds(prev => new Set([...prev, a.id]));
+  };
+
+  const carryAllActionItems = () => {
+    if (!prevMeeting?.actionItems) return;
+    prevMeeting.actionItems.filter(a => !a.done && !carriedActionIds.has(a.id)).forEach(carryActionItem);
+  };
+
+  const startEditAction = (a: ActionItem) => {
+    setEditingActionId(a.id);
+    setEditActText(a.text);
+    setEditActAssignee(a.assignee ?? '');
+    setEditActDeadline(a.deadline ?? '');
+  };
+
+  const saveEditAction = (id: string) => {
+    if (!editActText.trim()) return;
+    setActionItems(prev => prev.map(a => a.id !== id ? a : {
+      ...a, text: editActText.trim(),
+      assignee: editActAssignee || undefined,
+      deadline: editActDeadline || undefined,
+    }));
+    setEditingActionId(null);
   };
 
   const applyTemplate = async (tmpl: MeetingTemplate) => {
@@ -660,7 +694,14 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
               {/* 미완료 실행항목 이월 */}
               {(prevMeeting.actionItems || []).filter(a => !a.done).length > 0 && (
                 <>
-                  <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider mb-2 mt-4">미완료 실행항목</p>
+                  <div className="flex items-center justify-between mb-2 mt-4">
+                    <p className="text-[10px] font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">미완료 실행항목</p>
+                    {(prevMeeting.actionItems || []).filter(a => !a.done && !carriedActionIds.has(a.id)).length > 0 && (
+                      <button onClick={carryAllActionItems} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 rounded-lg hover:opacity-80">
+                        <RefreshCw size={10} /> 전체 이월
+                      </button>
+                    )}
+                  </div>
                   {(prevMeeting.actionItems || []).filter(a => !a.done).map(a => (
                     <div key={a.id} className={`mb-2 p-3 rounded-lg border ${carriedActionIds.has(a.id) ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
                       <p className="text-xs text-stone-800 dark:text-stone-200 mb-2">{a.text}</p>
@@ -781,7 +822,7 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
           </Section>
 
           {/* 3. 결정사항 */}
-          <Section label="결정사항">
+          <Section label="결정사항" accent="blue">
             <div className="space-y-2 mb-3">
               {decisions.map((d, i) => (
                 <div key={d.id} className="flex items-start gap-2 p-2.5 bg-stone-50 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700 rounded-lg">
@@ -809,18 +850,35 @@ function MeetingForm({ initial, prevMeeting, employees, templates, onSave, onCan
           </Section>
 
           {/* 4. 실행항목 */}
-          <Section label="실행항목">
+          <Section label="실행항목" accent="emerald">
             <div className="space-y-2 mb-3">
               {actionItems.map((a, i) => (
-                <div key={a.id} className="flex items-center gap-2 p-2.5 bg-stone-50 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700 rounded-lg">
-                  <input type="checkbox" checked={a.done}
-                    onChange={e => setActionItems(prev => prev.map((x, xi) => xi === i ? { ...x, done: e.target.checked } : x))}
-                    className="w-3.5 h-3.5 shrink-0 accent-emerald-600" />
-                  <span className={`flex-1 text-xs ${a.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{a.text}</span>
-                  {a.assignee && <span className="text-[10px] text-stone-500 bg-stone-100 dark:bg-stone-700 px-1.5 py-0.5 rounded-full shrink-0">{a.assignee}</span>}
-                  {a.deadline && <span className={`text-[10px] font-semibold shrink-0 ${isOverdue(a.deadline) ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{a.deadline}</span>}
-                  <button onClick={() => setActionItems(prev => prev.filter((_, xi) => xi !== i))} className="text-stone-300 hover:text-red-400 shrink-0"><X size={13} /></button>
-                </div>
+                editingActionId === a.id ? (
+                  <div key={a.id} className="p-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg space-y-2">
+                    <input type="text" value={editActText} onChange={e => setEditActText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEditAction(a.id); } if (e.key === 'Escape') setEditingActionId(null); }}
+                      autoFocus
+                      className="w-full px-2 py-1.5 text-xs border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-blue-500" />
+                    <div className="flex gap-2">
+                      <EmployeeSelect employees={employees} value={editActAssignee} onChange={setEditActAssignee} />
+                      <input type="date" value={editActDeadline} onChange={e => setEditActDeadline(e.target.value)}
+                        className="px-2 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none" />
+                      <button onClick={() => saveEditAction(a.id)} className="px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded-lg font-semibold hover:opacity-80 shrink-0"><Check size={12} /></button>
+                      <button onClick={() => setEditingActionId(null)} className="px-2.5 py-1.5 text-xs border border-stone-200 dark:border-stone-600 rounded-lg text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0"><X size={12} /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={a.id} className="flex items-center gap-2 p-2.5 bg-stone-50 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-700 rounded-lg">
+                    <input type="checkbox" checked={a.done}
+                      onChange={e => setActionItems(prev => prev.map((x, xi) => xi === i ? { ...x, done: e.target.checked } : x))}
+                      className="w-3.5 h-3.5 shrink-0 accent-emerald-600" />
+                    <span className={`flex-1 text-xs ${a.done ? 'line-through text-stone-400' : 'text-stone-800 dark:text-stone-200'}`}>{a.text}</span>
+                    {a.assignee && <span className="text-[10px] text-stone-500 bg-stone-100 dark:bg-stone-700 px-1.5 py-0.5 rounded-full shrink-0">{a.assignee}</span>}
+                    {a.deadline && <span className={`text-[10px] font-semibold shrink-0 ${isOverdue(a.deadline) ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>{a.deadline}</span>}
+                    <button onClick={() => startEditAction(a)} className="text-stone-300 hover:text-blue-500 shrink-0"><Edit2 size={12} /></button>
+                    <button onClick={() => setActionItems(prev => prev.filter((_, xi) => xi !== i))} className="text-stone-300 hover:text-red-400 shrink-0"><X size={13} /></button>
+                  </div>
+                )
               ))}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2">
@@ -1093,8 +1151,8 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
 
       {/* 결정사항 */}
       {decisions.length > 0 && (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4">
-          <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest mb-3">결정사항</p>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 border-l-4 border-l-blue-400 dark:border-l-blue-600 rounded-xl p-4 mb-4">
+          <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-3">결정사항</p>
           <div className="space-y-2.5">
             {decisions.map((d, i) => (
               <div key={d.id} className="flex items-start gap-3">
@@ -1109,9 +1167,9 @@ function MeetingDetail({ meeting, onBack, onEdit, onDelete, onToggleCheck, onTog
 
       {/* 실행항목 */}
       {actionItems.length > 0 && (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl p-4 mb-4">
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 border-l-4 border-l-emerald-500 dark:border-l-emerald-600 rounded-xl p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">실행항목</p>
+            <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">실행항목</p>
             <span className="text-[11px] text-stone-400">{actionItems.filter(a => a.done).length}/{actionItems.length} 완료</span>
           </div>
           <div className="space-y-2">
