@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, auth, salesDb } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
 import { User, Ingredient, Department, BrandId, SystemConfig } from '../types';
-import { Check, X, Trash2, ShieldAlert, Database, RefreshCw, AlertCircle, History, Key, Settings2, Tags, FolderOpen } from 'lucide-react';
+import { Check, X, Trash2, ShieldAlert, RefreshCw, AlertCircle, History, Key, Settings2, Tags, FolderOpen } from 'lucide-react';
 import { writeBatch } from 'firebase/firestore';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -12,7 +12,6 @@ import { TabBar } from './ui/Tabs';
 import { UserPermissionManager } from './admin/UserPermissionManager';
 import { StoreImportPanel } from './admin/StoreImportPanel';
 import { EmployeeImportPanel } from './admin/EmployeeImportPanel';
-import { FcdaumStoreView } from './admin/FcdaumStoreView';
 
 enum OperationType {
   CREATE = 'create',
@@ -132,7 +131,7 @@ interface Props {
 
 export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, currentUser, activeBrand }) => {
   const { confirm } = useConfirm();
-  const [adminTab, setAdminTab] = useState<'personnel' | 'system' | 'data' | 'fcdaum'>('personnel');
+  const [adminTab, setAdminTab] = useState<'personnel' | 'system' | 'data'>('personnel');
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -294,15 +293,11 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
           { id: 'personnel', label: '인원 관리',   icon: <ShieldAlert size={14} /> },
           { id: 'system',    label: '시스템 설정', icon: <Settings2 size={14} /> },
           { id: 'data',      label: '데이터 관리', icon: <FolderOpen size={14} /> },
-          { id: 'fcdaum',    label: 'FC다움',      icon: <Database size={14} /> },
         ]}
         active={adminTab}
         onChange={(id) => setAdminTab(id)}
         className="mb-4"
       />
-
-      {/* ── FC다움 연동 ── */}
-      {adminTab === 'fcdaum' && <FcdaumStoreView brandId={brandId} />}
 
       {/* ── 데이터 관리 ── */}
       {adminTab === 'data' && (

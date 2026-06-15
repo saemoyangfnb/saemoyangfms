@@ -2,26 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { salesDb as db, db as mainDb } from '../../firebase';
 import { collection, getDocs, addDoc, query, where, writeBatch, doc } from 'firebase/firestore';
-import { BrandId, TeamSetting, Employee, Department } from '../../types';
+import { BrandId, Brand, DEFAULT_BRANDS, TeamSetting, Employee, Department } from '../../types';
 import { FcdaumStore } from '../../fcdaum';
 import { addDays } from '../../utils';
 import { useToast } from '../Toast';
 
 interface Props {
   store: FcdaumStore;
-  brandId: BrandId;
   onClose: () => void;
   onCreated: () => void;
 }
 
-export function FcdaumScheduleCreateModal({ store, brandId, onClose, onCreated }: Props) {
+export function FcdaumScheduleCreateModal({ store, onClose, onCreated }: Props) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [teams, setTeams] = useState<TeamSetting[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
 
   const [form, setForm] = useState({
+    brandId: '' as BrandId | '',
     storeNumber: '',
     team: '',
     supervisor: '',
@@ -34,10 +35,13 @@ export function FcdaumScheduleCreateModal({ store, brandId, onClose, onCreated }
 
   useEffect(() => {
     Promise.all([
+      getDocs(collection(mainDb, 'brands')),
       getDocs(collection(db, 'team_settings')),
       getDocs(collection(db, 'employees')),
       getDocs(collection(db, 'departments')),
-    ]).then(([teamSnap, empSnap, deptSnap]) => {
+    ]).then(([brandSnap, teamSnap, empSnap, deptSnap]) => {
+      const loadedBrands = brandSnap.docs.map(d => ({ id: d.id, ...d.data() } as Brand));
+      setBrands(loadedBrands.length > 0 ? loadedBrands : DEFAULT_BRANDS);
       setTeams(teamSnap.docs.map(d => ({ id: d.id, ...d.data() } as TeamSetting)));
       setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee)).filter(e => e.isActive && e.position === '슈퍼바이저'));
       setDepartments(deptSnap.docs.map(d => ({ id: d.id, ...d.data() } as Department)));
@@ -47,13 +51,15 @@ export function FcdaumScheduleCreateModal({ store, brandId, onClose, onCreated }
   const set = (key: string, val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
   const handleSave = async () => {
+    if (!form.brandId) { toast.error('브랜드를 선택해주세요.'); return; }
     if (!form.storeNumber.trim()) { toast.error('매장 호수를 입력해주세요.'); return; }
+    const brandId = form.brandId as BrandId;
     setSaving(true);
     try {
       const now = new Date().toISOString();
       const docRef = await addDoc(collection(db, 'franchise_schedules'), {
         brandId,
-        storeId: store.storeId,          // FC다움 연결 키
+        storeId: store.storeId,
         storeName: store.storeNm,
         storeNumber: form.storeNumber.trim(),
         team: form.team,
@@ -142,6 +148,18 @@ export function FcdaumScheduleCreateModal({ store, brandId, onClose, onCreated }
         </div>
 
         <div className="p-5 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">브랜드 <span className="text-rose-500">*</span></label>
+            <select
+              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+              value={form.brandId}
+              onChange={e => set('brandId', e.target.value)}
+            >
+              <option value="">브랜드 선택</option>
+              {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">매장 호수 <span className="text-rose-500">*</span></label>

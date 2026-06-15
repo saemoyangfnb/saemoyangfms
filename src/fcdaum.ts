@@ -1,23 +1,12 @@
 // FC다움 Open API 연동 모듈
-// 키는 .env.local 파일에 입력 (VITE_FCDAUM_API_KEY, VITE_FCDAUM_SECRET_KEY)
-
-export const FCDAUM_BASE_URL = 'https://fcdaum.com';
-const ACCESS_KEY = import.meta.env.VITE_FCDAUM_API_KEY as string;
-const SECRET_KEY = import.meta.env.VITE_FCDAUM_SECRET_KEY as string;
-
-function getHeaders() {
-  return {
-    'accept': 'application/json',
-    'Content-Type': 'application/json',
-    'x-access-key': ACCESS_KEY,
-    'x-secret-key': SECRET_KEY,
-  };
-}
+// API 키는 Vercel 환경 변수에서 관리 (FCDAUM_API_KEY, FCDAUM_SECRET_KEY)
+// 브라우저는 /api/fcdaum 프록시를 통해 호출 — CORS 우회
 
 async function apiFetch(path: string, params?: Record<string, string>) {
-  const url = new URL(`${FCDAUM_BASE_URL}/api/v2/open/${path}`);
+  const url = new URL('/api/fcdaum', window.location.origin);
+  url.searchParams.set('path', path);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { method: 'GET', headers: getHeaders() });
+  const res = await fetch(url.toString());
   if (res.status === 401) throw new Error('FC다움 인증키 또는 비밀키가 올바르지 않습니다.');
   if (!res.ok) throw new Error(`FC다움 API 오류: ${res.status}`);
   return res.json();

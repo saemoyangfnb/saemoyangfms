@@ -37,6 +37,7 @@ const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m
 const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
 const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ default: m.FactoryView })));
 const StoreListView = lazy(() => import('./components/store/StoreListView').then(m => ({ default: m.StoreListView })));
+const FcdaumStoreView = lazy(() => import('./components/admin/FcdaumStoreView').then(m => ({ default: m.FcdaumStoreView })));
 const StoreMindmapView = lazy(() => import('./components/StoreMindmapView').then(m => ({ default: m.StoreMindmapView })));
 const MyWorkspaceView = lazy(() => import('./components/MyWorkspaceView').then(m => ({ default: m.MyWorkspaceView })));
 const QuickInputPalette = lazy(() => import('./components/QuickInputPalette').then(m => ({ default: m.QuickInputPalette })));
@@ -73,12 +74,12 @@ enum OperationType {
 const SECTION_GROUP: Record<string, string> = {
   notice: 'comm', meetings: 'comm', daily: 'comm', reports: 'comm',
   projects: 'work', okr: 'work', workmap: 'work', sop: 'work', factory: 'work',
-  calendar: 'sch', employees: 'sch', stores: 'sch', storeforms: 'sch',
+  calendar: 'sch', employees: 'sch', stores: 'sch', storeforms: 'sch', fcdaum: 'sch',
   database: 'mgmt', history: 'mgmt', admin: 'mgmt', agents: 'mgmt',
 };
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'stores' | 'storeforms' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'stores' | 'storeforms' | 'fcdaum' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1551,8 +1552,9 @@ export default function App() {
             {
               id: 'mgmt2', label: '관리', icon: <Users size={13} />,
               items: [
-                { section: 'employees' as SidebarSection, icon: <Users size={13} />,  label: '팀/부서',   badge: null },
-                { section: 'stores'    as SidebarSection, icon: <Store size={13} />,  label: '매장 관리', badge: null },
+                { section: 'employees' as SidebarSection, icon: <Users size={13} />,        label: '팀/부서',   badge: null },
+                { section: 'stores'    as SidebarSection, icon: <Store size={13} />,        label: '매장 관리', badge: null },
+                { section: 'fcdaum'    as SidebarSection, icon: <Building2 size={13} />,    label: 'FC다움',    badge: null },
               ],
             },
             {
@@ -1948,6 +1950,11 @@ export default function App() {
           {/* 매장 폼 관리 */}
           {sidebar.section === 'storeforms' && (
             <StoreMindmapView currentUser={currentUser} />
+          )}
+
+          {/* FC다움 가맹점 관리 */}
+          {sidebar.section === 'fcdaum' && (
+            <FcdaumStoreView />
           )}
 
           {/* 업무 규정 */}

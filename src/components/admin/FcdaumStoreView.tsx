@@ -6,7 +6,7 @@ import {
   fetchAllStores, fetchOperationInfos, fetchHelpdeskSummary, fetchQscReports,
   FcdaumStore, FcdaumOperationInfo, FcdaumHelpdeskSummary, FcdaumQscReport,
 } from '../../fcdaum';
-import { BrandId, Store, FranchiseSchedule } from '../../types';
+import { Store, FranchiseSchedule } from '../../types';
 import { useToast } from '../Toast';
 import { FcdaumScheduleCreateModal } from './FcdaumScheduleCreateModal';
 
@@ -35,7 +35,7 @@ function ComingSoon() {
   );
 }
 
-export function FcdaumStoreView({ brandId }: { brandId: BrandId }) {
+export function FcdaumStoreView() {
   const toast = useToast();
   const [stores, setStores] = useState<FcdaumStore[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -406,7 +406,6 @@ export function FcdaumStoreView({ brandId }: { brandId: BrandId }) {
       {showCreateModal && selected && (
         <FcdaumScheduleCreateModal
           store={selected}
-          brandId={brandId}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setShowCreateModal(false);
