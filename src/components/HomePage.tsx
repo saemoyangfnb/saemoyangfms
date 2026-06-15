@@ -319,6 +319,69 @@ export function HomePage({
         </div>
       )}
 
+      {/* ── 가맹 점검 현황 위젯 ── */}
+      {on('inspection') && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 dark:border-stone-800">
+            <div className="flex items-center gap-2">
+              <Building2 size={15} className="text-indigo-500" />
+              <p className="text-sm font-black text-stone-700 dark:text-stone-300">가맹 점검 현황</p>
+              {inspectionItems.filter(i => i.level === 1).length > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-black bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
+                  긴급 {inspectionItems.filter(i => i.level === 1).length}개
+                </span>
+              )}
+            </div>
+            <button onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+              className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
+              전체 보기 <ChevronRight size={11} />
+            </button>
+          </div>
+          {inspectionLoading ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-stone-400">
+              <div className="w-4 h-4 border-2 border-stone-300 border-t-indigo-500 rounded-full animate-spin" />
+              <span className="text-xs">FC다움 데이터 불러오는 중...</span>
+            </div>
+          ) : inspectionItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-stone-300 dark:text-stone-700 gap-1">
+              <Building2 size={24} />
+              <p className="text-xs">데이터를 불러오지 못했습니다.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-stone-50 dark:divide-stone-800/50">
+              {inspectionItems.map(item => {
+                const DOT  = ['bg-stone-400', 'bg-red-500', 'bg-orange-500', 'bg-amber-400', 'bg-emerald-500'] as const;
+                const LBL  = ['미확인', '긴급', '주의', '관리필요', '양호'] as const;
+                const BADGE = [
+                  'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
+                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                ] as const;
+                return (
+                  <button key={item.storeId} onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+                    className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors text-left group">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${DOT[item.level]}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-stone-800 dark:text-stone-200 group-hover:text-stone-900 dark:group-hover:text-stone-100">{item.name}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE[item.level]}`}>{LBL[item.level]}</span>
+                      {item.days !== null
+                        ? <span className="text-xs font-bold text-stone-400 w-14 text-right">{item.days}일 경과</span>
+                        : <span className="text-xs text-stone-300 w-14 text-right">기록 없음</span>
+                      }
+                      <ChevronRight size={12} className="text-stone-300 group-hover:text-stone-500" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── 경영진 파이프라인 섹션 ── */}
       {isExec && (
         <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
@@ -421,60 +484,6 @@ export function HomePage({
                   ))}
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── 가맹 점검 현황 위젯 ── */}
-      {on('inspection') && (
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Building2 size={14} className="text-indigo-500" />
-              <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">가맹 점검 현황</p>
-            </div>
-            <button onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
-              className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
-              전체 <ChevronRight size={11} />
-            </button>
-          </div>
-          {inspectionLoading ? (
-            <div className="flex items-center justify-center py-8 gap-2 text-stone-400">
-              <div className="w-4 h-4 border-2 border-stone-300 border-t-indigo-500 rounded-full animate-spin" />
-              <span className="text-xs">불러오는 중...</span>
-            </div>
-          ) : inspectionItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-stone-300 dark:text-stone-700 gap-1">
-              <Building2 size={20} />
-              <p className="text-xs">데이터를 불러오지 못했습니다.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {inspectionItems.map(item => {
-                const DOT = ['bg-stone-400', 'bg-red-500', 'bg-orange-500', 'bg-amber-400', 'bg-emerald-500'] as const;
-                const LBL = ['미확인', '긴급', '주의', '관리필요', '양호'] as const;
-                const BADGE = [
-                  'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
-                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-                ] as const;
-                return (
-                  <button key={item.storeId} onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
-                    className="flex items-start gap-2 p-3 rounded-xl border border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-left">
-                    <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${DOT[item.level]}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-stone-900 dark:text-stone-100 truncate">{item.name}</p>
-                      <div className="flex items-center gap-1 mt-1">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${BADGE[item.level]}`}>{LBL[item.level]}</span>
-                        {item.days !== null && <span className="text-[9px] text-stone-400">{item.days}일</span>}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
             </div>
           )}
         </div>

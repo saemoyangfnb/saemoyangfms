@@ -196,24 +196,30 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     try {
       const storeList = await fetchAllStores();
       setStores(storeList);
-      // QSC: 모든 storeId 전달 + pageSize 충분히 크게
       const ids = storeList.map(s => s.storeId);
-      const [qscList, metaSnap, schSnap, formSnap] = await Promise.all([
+
+      // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리
+      const [qscList, schSnap, formSnap] = await Promise.all([
         fetchQscReports(ids, 500),
-        getDocs(collection(salesDb, 'store_meta')),
         getDocs(collection(salesDb, 'franchise_schedules')),
         getDocs(collection(salesDb, 'store_forms')),
       ]);
       setQscReports(qscList);
-      const sv: Record<string, string> = {};
-      metaSnap.forEach(d => { sv[d.id] = (d.data() as { sv?: string }).sv ?? ''; });
-      setSvMap(sv);
       setLinkedIds(new Set(schSnap.docs.map(d => d.data().storeId as string).filter(Boolean)));
       setForms(
         formSnap.docs.map(d => ({ id: d.id, ...d.data() } as StoreForm))
           .filter(f => !f.isArchived)
           .sort((a, b) => a.title.localeCompare(b.title))
       );
+
+      // store_meta — 신규 컬렉션, 권한 규칙 미설정 시 무시
+      try {
+        const metaSnap = await getDocs(collection(salesDb, 'store_meta'));
+        const sv: Record<string, string> = {};
+        metaSnap.forEach(d => { sv[d.id] = (d.data() as { sv?: string }).sv ?? ''; });
+        setSvMap(sv);
+      } catch { /* Firestore 규칙 미설정 시 SV 빈 값으로 시작 */ }
+
     } catch (e: unknown) {
       setStoresError(e instanceof Error ? e.message : 'FC다움 데이터를 불러오지 못했습니다.');
     } finally {
