@@ -109,33 +109,32 @@ export function HomePage({
   const [execSchedules,   setExecSchedules]   = useState<FranchiseSchedule[]>([]);
 
   // QSC 점검 우선순위 위젯
-  interface InspectionItem { name: string; days: number | null; level: 0|1|2|3|4; storeId: string; }
-  const [inspectionItems, setInspectionItems] = useState<InspectionItem[]>([]);
+  interface InspectionCounts { total: number; unknown: number; needsVisit: number; ok: number; }
+  const [inspectionCounts, setInspectionCounts] = useState<InspectionCounts | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled.has('inspection')) return;
-    const CACHE_KEY = 'inspection_widget_cache';
+    const CACHE_KEY = 'inspection_widget_cache_v2';
     const CACHE_TTL = 3600000; // 1 hour
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
-    if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionItems(cached.data); return; }
+    if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }
     setInspectionLoading(true);
     Promise.all([fetchAllStores(), fetchQscReports(undefined, 500)])
       .then(([storeList, qscList]: [FcdaumStore[], FcdaumQscReport[]]) => {
         const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86400000);
-        const priLevel = (d: number | null): 0|1|2|3|4 => d === null ? 0 : d >= 60 ? 1 : d >= 45 ? 2 : d >= 30 ? 3 : 4;
-        const items = storeList
-          .filter(s => s.storeStatus === 'O')
-          .map(s => {
-            const reps = qscList.filter(r => r.storeId === s.storeId);
-            const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
-            const days = latest ? daysSince(latest.visitDate) : null;
-            return { name: s.storeNm, days, level: priLevel(days), storeId: s.storeId };
-          })
-          .sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity))
-          .slice(0, 8);
-        setInspectionItems(items);
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: items, ts: Date.now() })); } catch {}
+        const operating = storeList.filter(s => s.storeStatus === 'O');
+        let unknown = 0, needsVisit = 0, ok = 0;
+        operating.forEach(s => {
+          const reps = qscList.filter(r => r.storeId === s.storeId);
+          const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
+          if (!latest) { unknown++; return; }
+          const days = daysSince(latest.visitDate);
+          if (days >= 30) needsVisit++; else ok++;
+        });
+        const data = { total: operating.length, unknown, needsVisit, ok };
+        setInspectionCounts(data);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
       })
       .catch(() => {})
       .finally(() => setInspectionLoading(false));
@@ -322,61 +321,70 @@ export function HomePage({
       {/* ── 가맹 점검 현황 위젯 ── */}
       {on('inspection') && (
         <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 dark:border-stone-800">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-100 dark:border-stone-800">
             <div className="flex items-center gap-2">
-              <Building2 size={15} className="text-indigo-500" />
-              <p className="text-sm font-black text-stone-700 dark:text-stone-300">가맹 점검 현황</p>
-              {inspectionItems.filter(i => i.level === 1).length > 0 && (
-                <span className="px-2 py-0.5 text-[10px] font-black bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
-                  긴급 {inspectionItems.filter(i => i.level === 1).length}개
+              <Building2 size={14} className="text-indigo-500" />
+              <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">가맹 점검 현황</p>
+              {inspectionCounts && inspectionCounts.needsVisit > 0 && (
+                <span className="px-2 py-0.5 text-[9px] font-black bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
+                  방문필요 {inspectionCounts.needsVisit}개
                 </span>
               )}
             </div>
             <button onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
               className="text-[11px] font-bold text-stone-400 hover:text-stone-700 dark:hover:text-stone-300 flex items-center gap-0.5">
-              전체 보기 <ChevronRight size={11} />
+              매장 관리 <ChevronRight size={11} />
             </button>
           </div>
           {inspectionLoading ? (
-            <div className="flex items-center justify-center py-10 gap-2 text-stone-400">
+            <div className="flex items-center justify-center py-8 gap-2 text-stone-400">
               <div className="w-4 h-4 border-2 border-stone-300 border-t-indigo-500 rounded-full animate-spin" />
               <span className="text-xs">FC다움 데이터 불러오는 중...</span>
             </div>
-          ) : inspectionItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-stone-300 dark:text-stone-700 gap-1">
-              <Building2 size={24} />
+          ) : !inspectionCounts ? (
+            <div className="flex flex-col items-center justify-center py-6 text-stone-300 dark:text-stone-700 gap-1">
+              <Building2 size={22} />
               <p className="text-xs">데이터를 불러오지 못했습니다.</p>
             </div>
           ) : (
-            <div className="divide-y divide-stone-50 dark:divide-stone-800/50">
-              {inspectionItems.map(item => {
-                const DOT  = ['bg-stone-400', 'bg-red-500', 'bg-orange-500', 'bg-amber-400', 'bg-emerald-500'] as const;
-                const LBL  = ['미확인', '긴급', '주의', '관리필요', '양호'] as const;
-                const BADGE = [
-                  'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
-                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-                ] as const;
-                return (
-                  <button key={item.storeId} onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
-                    className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors text-left group">
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${DOT[item.level]}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-stone-800 dark:text-stone-200 group-hover:text-stone-900 dark:group-hover:text-stone-100">{item.name}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${BADGE[item.level]}`}>{LBL[item.level]}</span>
-                      {item.days !== null
-                        ? <span className="text-xs font-bold text-stone-400 w-14 text-right">{item.days}일 경과</span>
-                        : <span className="text-xs text-stone-300 w-14 text-right">기록 없음</span>
-                      }
-                      <ChevronRight size={12} className="text-stone-300 group-hover:text-stone-500" />
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="grid grid-cols-3 divide-x divide-stone-100 dark:divide-stone-800">
+              {[
+                {
+                  label: '미확인',
+                  sub: 'QSC 기록 없음',
+                  count: inspectionCounts.unknown,
+                  dot: 'bg-stone-400',
+                  cls: 'text-stone-600 dark:text-stone-400',
+                  tab: 'unknown',
+                },
+                {
+                  label: '방문임박',
+                  sub: '30일 이상 경과',
+                  count: inspectionCounts.needsVisit,
+                  dot: 'bg-red-500',
+                  cls: inspectionCounts.needsVisit > 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-400',
+                  tab: 'urgent',
+                },
+                {
+                  label: '양호',
+                  sub: '30일 이내 방문',
+                  count: inspectionCounts.ok,
+                  dot: 'bg-emerald-500',
+                  cls: 'text-emerald-600 dark:text-emerald-400',
+                  tab: 'ok',
+                },
+              ].map(item => (
+                <button key={item.label}
+                  onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+                  className="flex flex-col items-center py-5 px-2 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors gap-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className={`w-2 h-2 rounded-full ${item.dot}`} />
+                    <span className="text-[10px] font-black text-stone-400 uppercase tracking-wider">{item.label}</span>
+                  </div>
+                  <span className={`text-3xl font-black ${item.cls}`}>{item.count}</span>
+                  <span className="text-[9px] text-stone-400">{item.sub}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>

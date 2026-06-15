@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { salesDb } from '../../firebase';
 import {
   collection, getDocs, addDoc, setDoc, doc, query, where, deleteDoc,
@@ -160,7 +160,9 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // UI 상태
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
   const [tab, setTab] = useState<'info' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
+  const [filterTab, setFilterTab] = useState<'all' | 'urgent' | 'caution' | 'ok' | 'unknown'>('all');
   const [search, setSearch] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -239,6 +241,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const loadFormEntries = async (storeId: string) => {
     try {
       const snap = await getDocs(query(collection(salesDb, 'store_form_entries'), where('storeId', '==', storeId)));
+      if (activeStoreRef.current !== storeId) return; // 스토어 전환 후 도착한 응답 무시
       setFormEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry)));
     } catch {}
   };
@@ -247,8 +250,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setLogsLoading(true);
     try {
       const snap = await getDocs(query(collection(salesDb, 'store_logs'), where('storeId', '==', storeId)));
+      if (activeStoreRef.current !== storeId) return; // 스토어 전환 후 도착한 응답 무시
       setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreLog)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-    } catch {} finally { setLogsLoading(false); }
+    } catch {} finally {
+      if (activeStoreRef.current === storeId) setLogsLoading(false);
+    }
   };
 
   const loadHelpdesk = async (storeId: string) => {
@@ -278,13 +284,32 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       });
   }, [stores, qscReports]);
 
+  // 분류 탭별 카운트
+  const counts = useMemo(() => ({
+    all:     storeList.length,
+    urgent:  storeList.filter(s => s.level === 1).length,
+    caution: storeList.filter(s => s.level === 2 || s.level === 3).length,
+    ok:      storeList.filter(s => s.level === 4).length,
+    unknown: storeList.filter(s => s.level === 0).length,
+  }), [storeList]);
+
+  const filteredByCategory = useMemo(() => {
+    switch (filterTab) {
+      case 'urgent':  return storeList.filter(s => s.level === 1);
+      case 'caution': return storeList.filter(s => s.level === 2 || s.level === 3);
+      case 'ok':      return storeList.filter(s => s.level === 4);
+      case 'unknown': return storeList.filter(s => s.level === 0);
+      default:        return storeList;
+    }
+  }, [storeList, filterTab]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return storeList;
+    if (!search.trim()) return filteredByCategory;
     const q = search.toLowerCase();
-    return storeList.filter(({ store: s }) =>
+    return filteredByCategory.filter(({ store: s }) =>
       s.storeNm.toLowerCase().includes(q) || s.address.toLowerCase().includes(q) || s.storeCeo.toLowerCase().includes(q)
     );
-  }, [storeList, search]);
+  }, [filteredByCategory, search]);
 
   const selectedStore = useMemo(() => stores.find(s => s.storeId === selectedId) ?? null, [stores, selectedId]);
   const selectedQsc = useMemo(
@@ -294,12 +319,15 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // ── 핸들러 ────────────────────────────────────────────────
   const handleSelectStore = (id: string) => {
+    activeStoreRef.current = id; // 즉시 갱신 — 이후 도착하는 이전 매장 응답을 차단
     setSelectedId(id);
     setTab('info');
     setEditingSv(false);
     setSvInput(svMap[id] ?? '');
     setHelpdesk(null);
     setHelpdeskLoaded(null);
+    setFormEntries([]);   // 이전 매장 데이터 즉시 클리어
+    setLogs([]);
   };
 
   const handleTabChange = (t: typeof tab) => {
@@ -349,7 +377,15 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   };
 
   // ── 렌더 ─────────────────────────────────────────────────
-  const urgentCount = filtered.filter(s => s.level === 1).length;
+
+  // 분류 탭 정의
+  const FILTER_TABS = [
+    { id: 'all'     as const, label: '전체',   count: counts.all,     dot: 'bg-slate-400' },
+    { id: 'urgent'  as const, label: '긴급',   count: counts.urgent,  dot: 'bg-red-500' },
+    { id: 'caution' as const, label: '주의',   count: counts.caution, dot: 'bg-amber-400' },
+    { id: 'ok'      as const, label: '양호',   count: counts.ok,      dot: 'bg-emerald-500' },
+    { id: 'unknown' as const, label: '미확인', count: counts.unknown, dot: 'bg-stone-400' },
+  ];
 
   return (
     <div className="flex h-full bg-white dark:bg-slate-900 overflow-hidden">
@@ -357,7 +393,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       {/* ── 좌측 매장 목록 ── */}
       <div className="w-60 shrink-0 border-r border-slate-200 dark:border-slate-700 flex flex-col">
         {/* 헤더 */}
-        <div className="px-3 py-3 border-b border-slate-200 dark:border-slate-700 space-y-2">
+        <div className="px-3 pt-3 pb-0 border-b border-slate-200 dark:border-slate-700 space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
               <Building2 size={14} className="text-indigo-500" /> 매장 관리
@@ -370,13 +406,23 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="매장 검색..." className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500" />
           </div>
-          {/* 범례 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {([1, 2, 3, 4, 0] as const).map(lv => (
-              <div key={lv} className="flex items-center gap-1">
-                <div className={`w-1.5 h-1.5 rounded-full ${PRI[lv].dot}`} />
-                <span className={`text-[9px] font-bold ${PRI[lv].text}`}>{PRI[lv].label}</span>
-              </div>
+          {/* 분류 탭 */}
+          <div className="flex border-b border-slate-200 dark:border-slate-700 -mx-3 px-1 gap-0 overflow-x-auto">
+            {FILTER_TABS.map(t => (
+              <button key={t.id} onClick={() => setFilterTab(t.id)}
+                className={`flex items-center gap-1 px-2 py-2 text-[10px] font-bold whitespace-nowrap border-b-2 transition-colors shrink-0 ${
+                  filterTab === t.id
+                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
+                {t.label}
+                {t.count > 0 && (
+                  <span className={`text-[9px] font-black rounded-full px-1 ${
+                    filterTab === t.id ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}>{t.count}</span>
+                )}
+              </button>
             ))}
           </div>
         </div>
@@ -422,7 +468,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
         {/* 하단 통계 */}
         {!storesLoading && !storesError && (
           <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400">
-            총 {filtered.length}개 운영 · <span className="text-red-500 dark:text-red-400">긴급 {urgentCount}개</span>
+            {filtered.length}/{counts.all}개 표시 · <span className="text-red-500 dark:text-red-400">긴급 {counts.urgent}개</span>
           </div>
         )}
       </div>
