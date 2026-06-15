@@ -95,11 +95,29 @@ export interface FcdaumQscReport {
   regDate: number;      // Unix timestamp
 }
 
+// ── 세션 캐시 (TTL 10분, 동시 호출 중복 방지) ─────────────────
+let storesCache: { data: FcdaumStore[]; at: number } | null = null;
+let storesFetch: Promise<FcdaumStore[]> | null = null;
+const CACHE_TTL = 10 * 60 * 1000;
+
 // ── API 호출 ──────────────────────────────────────
 
 export async function fetchAllStores(): Promise<FcdaumStore[]> {
-  const data = await apiFetch('store-and-user');
-  return data.stores ?? [];
+  const now = Date.now();
+  if (storesCache && now - storesCache.at < CACHE_TTL) return storesCache.data;
+  if (storesFetch) return storesFetch;
+  storesFetch = apiFetch('store-and-user')
+    .then(data => {
+      const stores: FcdaumStore[] = data.stores ?? [];
+      storesCache = { data: stores, at: Date.now() };
+      return stores;
+    })
+    .finally(() => { storesFetch = null; });
+  return storesFetch;
+}
+
+export function invalidateStoresCache() {
+  storesCache = null;
 }
 
 export async function fetchOperationInfos(storeIds?: string[]): Promise<FcdaumOperationInfo[]> {
