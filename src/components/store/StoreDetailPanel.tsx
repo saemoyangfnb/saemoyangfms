@@ -5,6 +5,7 @@ import {
   FranchiseSchedule, Store, Employee, Department, DepartmentTask,
 } from '../../types';
 import { ProcessSettings } from '../franchise/ProcessMasterModal';
+import { fetchAllStores, mapFcdaumStore } from '../../fcdaum';
 import {
   X, ChevronRight, MapPin, User, Phone, Building2,
   CheckCircle2, Clock, AlertCircle, CalendarDays, History,
@@ -52,17 +53,49 @@ export function StoreDetailPanel({
     let cancelled = false;
     setLoadingStore(true);
 
-    const loadStore = schedule.storeId
-      ? getDoc(doc(salesDb, 'stores', schedule.storeId)).then(snap => {
-          if (cancelled || !snap.exists()) return;
+    const loadStore = async () => {
+      // 1단계: Firestore stores 조회 (storeId 있을 때)
+      if (schedule.storeId) {
+        const snap = await getDoc(doc(salesDb, 'stores', schedule.storeId));
+        if (!cancelled && snap.exists()) {
           const data = { id: snap.id, ...snap.data() } as Store;
-          // 이름 불일치 안전장치: FC다움 storeId와 Excel 관리번호 충돌 시 잘못된 매장 표시 방지
           const schName = (schedule.storeName ?? '').trim();
           const stoName = (data.name ?? '').trim();
-          if (schName && stoName && !schName.includes(stoName) && !stoName.includes(schName)) return;
-          setStore(data);
-        })
-      : Promise.resolve();
+          if (!schName || !stoName || schName.includes(stoName) || stoName.includes(schName)) {
+            setStore(data);
+            return; // Firestore 데이터로 성공
+          }
+        }
+      }
+      // 2단계: FC다움 API 폴백 (fcdaumStoreId 있을 때)
+      if (schedule.fcdaumStoreId && !cancelled) {
+        try {
+          const all = await fetchAllStores();
+          if (cancelled) return;
+          const found = all.find(s => s.storeId === schedule.fcdaumStoreId);
+          if (found) {
+            const mapped = mapFcdaumStore(found);
+            setStore({
+              id: found.storeId,
+              name: found.storeNm,
+              status: mapped.status,
+              franchiseType: mapped.franchiseType,
+              contractStatus: mapped.contractStatus,
+              region: mapped.region,
+              address: mapped.address,
+              ceoName: mapped.ceoName,
+              operatorName: mapped.operatorName,
+              phone: mapped.phone,
+              mobile: mapped.mobile,
+              email: mapped.email,
+              storeCode: mapped.storeCode,
+              openDate: mapped.openDate,
+              registeredAt: mapped.registeredAt,
+            } as Store);
+          }
+        } catch { /* 폴백 실패 시 null 유지 */ }
+      }
+    };
 
     const loadTasks = getDocs(
       query(collection(salesDb, 'department_tasks'), where('scheduleId', '==', schedule.id))
@@ -70,9 +103,9 @@ export function StoreDetailPanel({
       if (!cancelled) setDeptTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as DepartmentTask)));
     });
 
-    Promise.all([loadStore, loadTasks]).finally(() => { if (!cancelled) setLoadingStore(false); });
+    Promise.all([loadStore(), loadTasks]).finally(() => { if (!cancelled) setLoadingStore(false); });
     return () => { cancelled = true; };
-  }, [schedule.id, schedule.storeId]);
+  }, [schedule.id, schedule.storeId, schedule.fcdaumStoreId]);
 
   // SV 표시
   const svEmp = schedule.supervisorId ? employees.find(e => e.id === schedule.supervisorId) : null;
@@ -234,45 +267,35 @@ export function StoreDetailPanel({
           )}
 
           {/* 오픈 이력 */}
-          {(history.length > 0 || !schedule.storeId) && (
+          {history.length > 0 && (
             <div>
               <h3 className="text-[11px] font-black text-stone-400 dark:text-stone-500 tracking-widest mb-2 flex items-center gap-1.5">
                 <History size={12} /> 오픈 이력
               </h3>
-              {!schedule.storeId ? (
-                <p className="text-xs text-stone-400 font-bold bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
-                  매장 마스터 미연결 — 데이터 관리에서 연결하세요
-                </p>
-              ) : history.length === 0 ? (
-                <p className="text-xs text-stone-400 font-bold bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
-                  이전 오픈 이력 없음
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {history.map(h => (
-                    <div key={h.id} className="flex items-center justify-between bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 px-3 py-2">
-                      <div>
-                        <span className="text-xs font-black text-stone-700 dark:text-stone-300">{h.openDate || '-'}</span>
-                        <span className="text-[10px] text-stone-400 font-bold ml-2">{h.storeNumber || ''}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">완료</span>
+              <div className="space-y-1.5">
+                {history.map(h => (
+                  <div key={h.id} className="flex items-center justify-between bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 px-3 py-2">
+                    <div>
+                      <span className="text-xs font-black text-stone-700 dark:text-stone-300">{h.openDate || '-'}</span>
+                      <span className="text-[10px] text-stone-400 font-bold ml-2">{h.storeNumber || ''}</span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">완료</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* 매장 마스터 (CRM) */}
+          {/* 매장 정보 */}
           <div>
             <h3 className="text-[11px] font-black text-stone-400 dark:text-stone-500 tracking-widest mb-2 flex items-center gap-1.5">
-              <Building2 size={12} /> 매장 정보 (CRM)
+              <Building2 size={12} /> 매장 정보
             </h3>
             {loadingStore ? (
               <div className="text-xs text-stone-400 font-bold px-3 py-2">불러오는 중...</div>
             ) : !store ? (
               <p className="text-xs text-stone-400 font-bold bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-sm px-3 py-2">
-                {schedule.storeId ? '매장 마스터 데이터 없음' : '매장 마스터 미연결'}
+                매장 정보 없음
               </p>
             ) : (
               <div className="bg-white dark:bg-stone-900 rounded-sm border border-stone-200 dark:border-stone-700 px-4 py-2">
