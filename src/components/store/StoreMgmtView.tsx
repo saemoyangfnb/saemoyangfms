@@ -162,7 +162,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
   const [tab, setTab] = useState<'info' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
-  const [filterTab, setFilterTab] = useState<'all' | 'urgent' | 'caution' | 'ok' | 'unknown'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'needsVisit' | 'ok' | 'unknown'>('all');
   const [search, setSearch] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -317,20 +317,18 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 분류 탭별 카운트
   const counts = useMemo(() => ({
-    all:     storeList.length,
-    urgent:  storeList.filter(s => s.level === 1).length,
-    caution: storeList.filter(s => s.level === 2 || s.level === 3).length,
-    ok:      storeList.filter(s => s.level === 4).length,
-    unknown: storeList.filter(s => s.level === 0).length,
+    all:        storeList.length,
+    needsVisit: storeList.filter(s => s.level >= 1 && s.level <= 3).length,
+    ok:         storeList.filter(s => s.level === 4).length,
+    unknown:    storeList.filter(s => s.level === 0).length,
   }), [storeList]);
 
   const filteredByCategory = useMemo(() => {
     switch (filterTab) {
-      case 'urgent':  return storeList.filter(s => s.level === 1);
-      case 'caution': return storeList.filter(s => s.level === 2 || s.level === 3);
-      case 'ok':      return storeList.filter(s => s.level === 4);
-      case 'unknown': return storeList.filter(s => s.level === 0);
-      default:        return storeList;
+      case 'needsVisit': return storeList.filter(s => s.level >= 1 && s.level <= 3);
+      case 'ok':         return storeList.filter(s => s.level === 4);
+      case 'unknown':    return storeList.filter(s => s.level === 0);
+      default:           return storeList;
     }
   }, [storeList, filterTab]);
 
@@ -411,11 +409,10 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 분류 탭 정의
   const FILTER_TABS = [
-    { id: 'all'     as const, label: '전체',   count: counts.all,     dot: 'bg-slate-400' },
-    { id: 'urgent'  as const, label: '긴급',   count: counts.urgent,  dot: 'bg-red-500' },
-    { id: 'caution' as const, label: '주의',   count: counts.caution, dot: 'bg-amber-400' },
-    { id: 'ok'      as const, label: '양호',   count: counts.ok,      dot: 'bg-emerald-500' },
-    { id: 'unknown' as const, label: '미확인', count: counts.unknown, dot: 'bg-stone-400' },
+    { id: 'all'        as const, label: '전체',        count: counts.all,        dot: 'bg-slate-400' },
+    { id: 'needsVisit' as const, label: '방문일정 임박', count: counts.needsVisit, dot: 'bg-red-500' },
+    { id: 'ok'         as const, label: '양호',        count: counts.ok,         dot: 'bg-emerald-500' },
+    { id: 'unknown'    as const, label: '미확인',      count: counts.unknown,    dot: 'bg-stone-400' },
   ];
 
   return (
