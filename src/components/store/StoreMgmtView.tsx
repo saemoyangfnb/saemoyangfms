@@ -160,6 +160,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // UI 상태
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedStoreNo, setSelectedStoreNo] = useState<number | null>(null);
   const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
   const [tab, setTab] = useState<'info' | 'operation' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
   const [filterTab, setFilterTab] = useState<'all' | 'needsVisit' | 'ok' | 'unknown'>('all');
@@ -326,6 +327,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     needsVisit: storeList.filter(s => s.level >= 1 && s.level <= 3).length,
     ok:         storeList.filter(s => s.level === 4).length,
     unknown:    storeList.filter(s => s.level === 0).length,
+    urgent:     storeList.filter(s => s.level === 1).length,
   }), [storeList]);
 
   const filteredByCategory = useMemo(() => {
@@ -345,12 +347,14 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     );
   }, [filteredByCategory, search]);
 
-  const selectedStore = useMemo(() => stores.find(s => s.storeId === selectedId) ?? null, [stores, selectedId]);
+  // storeId는 브랜드별 중복 가능 → 전역 고유값인 storeNo로 찾아야 정확함
+  const selectedStore = useMemo(() => stores.find(s => s.storeNo === selectedStoreNo) ?? null, [stores, selectedStoreNo]);
 
   // ── 핸들러 ────────────────────────────────────────────────
-  const handleSelectStore = (id: string) => {
+  const handleSelectStore = (id: string, storeNo: number) => {
     activeStoreRef.current = id; // 즉시 갱신 — 이후 도착하는 이전 매장 응답을 차단
     setSelectedId(id);
+    setSelectedStoreNo(storeNo);
     setTab('info');
     setEditingSv(false);
     setSvInput(svMap[id] ?? '');
@@ -494,10 +498,10 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             <div className="p-4 text-center text-xs text-slate-400">매장이 없습니다.</div>
           ) : (
             filtered.map(({ store, days, level }) => {
-              const isSelected = selectedId === store.storeId;
+              const isSelected = selectedStoreNo === store.storeNo;
               const sv = svMap[store.storeId];
               return (
-                <button key={store.storeId} onClick={() => handleSelectStore(store.storeId)}
+                <button key={store.storeNo} onClick={() => handleSelectStore(store.storeId, store.storeNo)}
                   className={`w-full px-3 py-2.5 text-left border-b border-slate-100 dark:border-slate-800 transition-colors border-l-2 ${
                     isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-indigo-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-l-transparent'
                   }`}>
