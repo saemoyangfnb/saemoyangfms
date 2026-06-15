@@ -3,9 +3,10 @@ import * as XLSX from 'xlsx';
 import { salesDb } from '../../firebase';
 import { collection, getDocs, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { Store, FranchiseSchedule } from '../../types';
-import { Upload, CheckCircle2, AlertCircle, Info, Eye } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, Info, Eye, RefreshCw } from 'lucide-react';
 import { useToast } from '../Toast';
 import { StoreMappingModal } from './StoreMappingModal';
+import { fetchAllStores, mapFcdaumStore } from '../../fcdaum';
 
 interface ParsedRow {
   id: string;
@@ -79,6 +80,40 @@ export function StoreImportPanel() {
   const [unmappedStores, setUnmappedStores] = useState<Store[]>([]);
   const [schedules, setSchedules] = useState<FranchiseSchedule[]>([]);
   const [skippedMerged, setSkippedMerged] = useState(0);
+  const [fcdaumLoading, setFcdaumLoading] = useState(false);
+
+  const handleFcdaumSync = async () => {
+    setFcdaumLoading(true);
+    try {
+      const fcdaumStores = await fetchAllStores();
+      const parsed = fcdaumStores.map(mapFcdaumStore);
+
+      const [existingSnap, mergedSnap] = await Promise.all([
+        getDocs(collection(salesDb, 'stores')),
+        getDoc(doc(salesDb, 'store_settings', 'merged_ids')),
+      ]);
+      const existingMap = new Map<string, Store>();
+      existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
+      const mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
+
+      const skipped = parsed.filter(p => mergedIds.has(p.id));
+      setSkippedMerged(skipped.length);
+
+      const rows: PreviewRow[] = parsed.filter(p => !mergedIds.has(p.id)).map(p => {
+        const existing = existingMap.get(p.id);
+        if (!existing) return { state: 'new' as const, parsed: p };
+        const changed = existing.name !== p.name || existing.status !== p.status || existing.address !== p.address;
+        return { state: changed ? 'changed' as const : 'unchanged' as const, parsed: p, existing };
+      });
+      setPreview(rows);
+      toast.success(`FC다움에서 ${parsed.length}개 매장 불러옴`);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'FC다움 API 오류');
+    } finally {
+      setFcdaumLoading(false);
+    }
+  };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,9 +194,25 @@ export function StoreImportPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-sm p-3 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-400 font-medium">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-sm p-3 flex items-start gap-2 text-xs text-blue-800 dark:text-blue-400 font-medium">
         <Info size={14} className="shrink-0 mt-0.5" />
-        임포트 전 Firestore 콘솔에서 stores 컬렉션을 내보내기(백업)하는 것을 권장합니다. 저장 버튼 클릭 전까지 실제 데이터에 영향을 주지 않습니다.
+        FC다움 API와 매장 코드(storeId)가 동일합니다. <strong>위의 "FC다움에서 불러오기" 버튼</strong>을 사용하면 엑셀 없이 바로 동기화할 수 있습니다.
+      </div>
+
+      {/* FC다움 동기화 */}
+      <button
+        onClick={handleFcdaumSync}
+        disabled={fcdaumLoading}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-bold rounded-sm transition-colors"
+      >
+        <RefreshCw size={15} className={fcdaumLoading ? 'animate-spin' : ''} />
+        {fcdaumLoading ? 'FC다움에서 불러오는 중...' : 'FC다움에서 매장 목록 불러오기'}
+      </button>
+
+      <div className="flex items-center gap-2 text-xs text-stone-400">
+        <div className="flex-1 h-px bg-stone-200 dark:bg-stone-700" />
+        또는 엑셀 파일로 직접 업로드
+        <div className="flex-1 h-px bg-stone-200 dark:bg-stone-700" />
       </div>
 
       {/* 파일 드롭존 */}
