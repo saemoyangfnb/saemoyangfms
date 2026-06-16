@@ -32,7 +32,9 @@ export function buildStoreItems(stores: FcdaumStore[], qscReports: FcdaumQscRepo
   return stores
     .filter(s => s.storeStatus === 'O')
     .map(s => {
-      const reps = qscReports.filter(r => r.storeId === s.storeId);
+      // storeId는 브랜드별 중복 가능 + 일부 QSC 리포트엔 storeId가 비어 있음.
+      // 전역 고유값 storeNo로 매칭해야 미확인 오분류가 안 생긴다.
+      const reps = qscReports.filter(r => r.storeNo === s.storeNo);
       const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
       const days = latest ? getDaysSince(latest.visitDate) : null;
       return { store: s, days, level: priorityLevel(days) };
