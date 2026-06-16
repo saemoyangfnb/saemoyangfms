@@ -116,17 +116,19 @@ export function HomePage({
 
   useEffect(() => {
     if (!enabled.has('inspection')) return;
-    const CACHE_KEY = 'inspection_widget_cache_v3'; // 4단계 구조 변경으로 키 갱신
-    const CACHE_TTL = 3600000; // 1 hour
+    const CACHE_KEY = 'inspection_widget_cache_v4'; // 가맹관리와 동일 호출(ids 전달)로 통일 → 키 갱신
+    const CACHE_TTL = 600000; // 10분 — 가맹관리와 시점차 최소화
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
     if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }
     setInspectionLoading(true);
-    Promise.all([fetchAllStores(), fetchQscReports(undefined, 500)])
-      .then(([stores, qscList]) => {
-        const data = countByLevel(buildStoreItems(stores, qscList));
-        setInspectionCounts(data);
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
-      })
+    // 가맹관리(StoreMgmtView)와 동일하게 전체 매장 ID를 넘겨 QSC를 받아야 집계가 일치한다.
+    fetchAllStores()
+      .then(stores => fetchQscReports(stores.map(s => s.storeId), 500)
+        .then(qscList => {
+          const data = countByLevel(buildStoreItems(stores, qscList));
+          setInspectionCounts(data);
+          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
+        }))
       .catch(() => {})
       .finally(() => setInspectionLoading(false));
   }, [enabled]);
