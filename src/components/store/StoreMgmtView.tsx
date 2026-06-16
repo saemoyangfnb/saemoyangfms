@@ -448,7 +448,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   ];
 
   return (
-    <div className="flex h-full bg-white dark:bg-slate-900 overflow-hidden">
+    <div className="flex h-[calc(100vh-6rem)] min-h-[480px] bg-white dark:bg-slate-900 overflow-hidden">
 
       {/* ── 좌측 매장 목록 ── */}
       <div className="w-60 shrink-0 border-r border-slate-200 dark:border-slate-700 flex flex-col">

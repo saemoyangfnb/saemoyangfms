@@ -166,7 +166,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
   ];
 
   return (
-    <div className="flex flex-col h-full min-h-[600px] bg-white dark:bg-slate-900">
+    <div className="flex flex-col h-full bg-white dark:bg-slate-900">
 
       {/* 현황 카드 */}
       <div className="px-6 py-4 shrink-0 border-b border-slate-100 dark:border-slate-800">
@@ -201,7 +201,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
 
         {/* SVG 지도 */}
         <div
-          style={{ background: BG_LIGHT }}
+          style={{ background: BG_LIGHT, minHeight: 360 }}
           className={`relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selected ? 'w-1/2' : 'w-full'}`}
         >
 
