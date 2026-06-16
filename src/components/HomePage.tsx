@@ -368,17 +368,15 @@ export function HomePage({
                   </div>
                 </div>
                 {/* 범례 (클릭 시 매장 관리로 이동) */}
-                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-3">
                   {pie.map(d => (
                     <button key={d.name}
                       onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
-                      className="flex items-center gap-2 group">
+                      title={d.sub}
+                      className="flex items-center gap-1.5 group text-left">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="text-[11px] font-bold text-stone-600 dark:text-stone-300 leading-none truncate group-hover:text-stone-900 dark:group-hover:text-white">{d.name}</p>
-                        <p className="text-[9px] text-stone-400 mt-0.5">{d.sub}</p>
-                      </div>
-                      <span className="text-lg font-black leading-none" style={{ color: d.value > 0 ? d.color : '#a8a29e' }}>{d.value}</span>
+                      <span className="text-xl font-black tabular-nums leading-none shrink-0" style={{ color: d.value > 0 ? d.color : '#a8a29e' }}>{d.value}</span>
+                      <span className="text-[11px] font-bold text-stone-600 dark:text-stone-300 truncate group-hover:text-stone-900 dark:group-hover:text-white">{d.name}</span>
                     </button>
                   ))}
                 </div>
