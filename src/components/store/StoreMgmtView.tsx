@@ -344,7 +344,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     if (!search.trim()) return filteredByCategory;
     const q = search.toLowerCase();
     return filteredByCategory.filter(({ store: s }) =>
-      s.storeNm.toLowerCase().includes(q) || s.address.toLowerCase().includes(q) || s.storeCeo.toLowerCase().includes(q)
+      (s.storeNm ?? '').toLowerCase().includes(q) || (s.address ?? '').toLowerCase().includes(q) || (s.storeCeo ?? '').toLowerCase().includes(q)
     );
   }, [filteredByCategory, search]);
 
@@ -517,7 +517,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                       <span className={`text-[10px] font-bold shrink-0 ${PRI[level].text}`}>{days}일</span>
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-400 ml-3.5 truncate mt-0.5">{store.address.split(' ').slice(0, 2).join(' ')}</p>
+                  <p className="text-[10px] text-slate-400 ml-3.5 truncate mt-0.5">{(store.address ?? '').split(' ').slice(0, 2).join(' ')}</p>
                   {sv && <p className="text-[10px] text-indigo-500 dark:text-indigo-400 ml-3.5 mt-0.5">SV: {sv}</p>}
                 </button>
               );
