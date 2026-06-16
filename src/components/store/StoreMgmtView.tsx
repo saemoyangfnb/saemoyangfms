@@ -349,7 +349,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   }, [filteredByCategory, search]);
 
   // storeId는 브랜드별 중복 가능 → 전역 고유값인 storeNo로 찾아야 정확함
-  const selectedStore = useMemo(() => stores.find(s => s.storeNo === selectedStoreNo) ?? null, [stores, selectedStoreNo]);
+  // selectedStoreNo가 null이면 무조건 null 반환 (null === s.storeNo 매칭 방지)
+  const selectedStore = useMemo(
+    () => selectedStoreNo !== null ? (stores.find(s => s.storeNo === selectedStoreNo) ?? null) : null,
+    [stores, selectedStoreNo],
+  );
 
   // ── 핸들러 ────────────────────────────────────────────────
   const handleSelectStore = (id: string, storeNo: number) => {
