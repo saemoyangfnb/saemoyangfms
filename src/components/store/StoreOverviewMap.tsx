@@ -7,14 +7,28 @@ import type { FcdaumStore } from '../../fcdaum';
 
 const GEO_URL = '/korea-provinces.json';
 
-const ADDR_TO_SIDO: Record<string, string> = {
-  서울: '서울특별시', 부산: '부산광역시', 대구: '대구광역시',
-  인천: '인천광역시', 광주: '광주광역시', 대전: '대전광역시',
-  울산: '울산광역시', 세종: '세종특별자치시', 경기: '경기도',
-  강원: '강원특별자치도', 충북: '충청북도', 충남: '충청남도',
-  전북: '전라북도',   전남: '전라남도',   경북: '경상북도',
-  경남: '경상남도',   제주: '제주특별자치도',
-};
+// 주소 첫 토큰 → geojson의 정확한 도(道) 이름으로 매핑.
+// FC다움 주소는 '서울특별시'/'서울', '강원특별자치도'/'강원도' 등 표기가 섞일 수 있어
+// 정규식 prefix 매칭으로 모든 변형을 흡수한다. (값은 geojson name과 정확히 일치해야 함)
+const SIDO_MATCHERS: [RegExp, string][] = [
+  [/^서울/, '서울특별시'],
+  [/^부산/, '부산광역시'],
+  [/^대구/, '대구광역시'],
+  [/^인천/, '인천광역시'],
+  [/^광주/, '광주광역시'],
+  [/^대전/, '대전광역시'],
+  [/^울산/, '울산광역시'],
+  [/^세종/, '세종특별자치시'],
+  [/^경기/, '경기도'],
+  [/^강원/, '강원도'],
+  [/^충청?북|^충북/, '충청북도'],
+  [/^충청?남|^충남/, '충청남도'],
+  [/^전라?북|^전북/, '전라북도'],
+  [/^전라?남|^전남/, '전라남도'],
+  [/^경상?북|^경북/, '경상북도'],
+  [/^경상?남|^경남/, '경상남도'],
+  [/^제주/, '제주특별자치도'],
+];
 
 // viewBox 800×900 기준 projection
 const OVERVIEW = { center: [127.5, 36.2] as [number, number], scale: 6000 };
@@ -29,7 +43,7 @@ const SIDO_PROJ: Record<string, { center: [number, number]; scale: number }> = {
   '울산광역시':    { center: [129.31, 35.54], scale: 58000 },
   '세종특별자치시': { center: [127.29, 36.48], scale: 100000 },
   '경기도':        { center: [127.20, 37.45], scale: 26000 },
-  '강원특별자치도': { center: [128.30, 37.65], scale: 20000 },
+  '강원도':        { center: [128.30, 37.65], scale: 20000 },
   '충청북도':      { center: [127.73, 36.63], scale: 32000 },
   '충청남도':      { center: [126.90, 36.55], scale: 32000 },
   '전라북도':      { center: [127.15, 35.71], scale: 32000 },
@@ -42,13 +56,15 @@ const SIDO_PROJ: Record<string, { center: [number, number]; scale: number }> = {
 const VW = 800;
 const VH = 900;
 
+// 지도 배경(아래 BG_LIGHT)과 확실히 대비되는 채도/명도로 설정 — 흰색-on-흰색 방지
+const BG_LIGHT = '#e7edf3'; // 지도 패널 배경 (연한 블루그레이, 테마 무관 고정)
 const REGION_COLOR: Record<string, { base: string; hover: string; stroke: string }> = {
-  none: { base: '#f8fafc', hover: '#f1f5f9', stroke: '#e2e8f0' },
-  '0':  { base: '#f1f5f9', hover: '#e2e8f0', stroke: '#cbd5e1' },
-  '1':  { base: '#fee2e2', hover: '#fecaca', stroke: '#fca5a5' },
-  '2':  { base: '#ffedd5', hover: '#fed7aa', stroke: '#fdba74' },
-  '3':  { base: '#fefce8', hover: '#fef9c3', stroke: '#fde047' },
-  '4':  { base: '#dcfce7', hover: '#bbf7d0', stroke: '#86efac' },
+  none: { base: '#ffffff', hover: '#f1f5f9', stroke: '#94a3b8' }, // 매장 없음: 흰 도형 + 진한 테두리
+  '0':  { base: '#e2e8f0', hover: '#cbd5e1', stroke: '#64748b' }, // 미확인
+  '1':  { base: '#fca5a5', hover: '#f87171', stroke: '#dc2626' }, // 긴급
+  '2':  { base: '#fdba74', hover: '#fb923c', stroke: '#ea580c' }, // 주의
+  '3':  { base: '#fcd34d', hover: '#fbbf24', stroke: '#d97706' }, // 관리필요
+  '4':  { base: '#86efac', hover: '#4ade80', stroke: '#16a34a' }, // 양호
 };
 
 const LEVEL_HEX: Record<number, string> = {
@@ -70,7 +86,9 @@ type GeoFeature = Feature<Geometry, { name?: string; [k: string]: unknown }>;
 
 function getSido(address: string | null | undefined) {
   if (!address) return '';
-  return ADDR_TO_SIDO[address.split(' ')[0]] ?? '';
+  const first = address.split(' ')[0];
+  for (const [re, name] of SIDO_MATCHERS) if (re.test(first)) return name;
+  return '';
 }
 
 function buildPathGen(center: [number, number], scale: number) {
@@ -148,7 +166,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-900">
+    <div className="flex flex-col h-full min-h-[600px] bg-white dark:bg-slate-900">
 
       {/* 현황 카드 */}
       <div className="px-6 py-4 shrink-0 border-b border-slate-100 dark:border-slate-800">
@@ -182,7 +200,10 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
       <div className="flex-1 flex min-h-0 overflow-hidden">
 
         {/* SVG 지도 */}
-        <div className={`relative flex items-center justify-center bg-slate-50 dark:bg-slate-950 overflow-hidden transition-all duration-300 ${selected ? 'w-1/2' : 'w-full'}`}>
+        <div
+          style={{ background: BG_LIGHT }}
+          className={`relative flex items-center justify-center overflow-hidden transition-all duration-300 ${selected ? 'w-1/2' : 'w-full'}`}
+        >
 
           {geoError ? (
             <p className="text-xs text-slate-400">지도 데이터를 불러올 수 없습니다.</p>
