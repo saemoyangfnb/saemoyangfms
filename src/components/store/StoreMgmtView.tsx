@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
 import StoreOverviewMap from './StoreOverviewMap';
+import { buildStoreItems, countByLevel, getDaysSince, priorityLevel } from './storePriority';
 
 // ── 로컬 타입 ──────────────────────────────────────────────────
 interface StoreLog {
@@ -29,21 +30,7 @@ interface StoreLog {
   createdBy: string;
 }
 
-// ── QSC 우선순위 ───────────────────────────────────────────────
-function getDaysSince(ms: number) { return Math.floor((Date.now() - ms) / 86400000); }
-
-// 관리 알림 4단계 — 리포트(QSC 점검) 생성일 기준
-//  0 미확인  : 리포트 없음 (최근 오픈 매장이거나 방문 시급)
-//  1 기한 초과: 리포트 생성 후 60일 초과
-//  2 기한 임박: 리포트 생성 후 45일 이상 (45~59일)
-//  3 양호     : 리포트 생성 45일 이내
-function priorityLevel(days: number | null): 0 | 1 | 2 | 3 {
-  if (days === null) return 0;
-  if (days >= 60) return 1;
-  if (days >= 45) return 2;
-  return 3;
-}
-
+// ── QSC 우선순위 (4단계 분류는 ./storePriority 공통 모듈에서 정의) ──────────────
 const PRI = {
   0: { label: '미확인',   dot: 'bg-stone-400',   text: 'text-stone-500 dark:text-stone-400',     badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400' },
   1: { label: '기한 초과', dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
@@ -60,7 +47,8 @@ const STORE_STATUS_KO: Record<string, string> = {
   h: '휴점', hold: '휴점',
 };
 const HELPDESK_STATUS_KO: Record<string, string> = {
-  unconfirmed: '미확인', unread: '미확인', new: '신규', open: '접수', received: '접수',
+  unconfirmed: '미확인', unread: '미확인', new: '신규',
+  requested: '접수', request: '접수', open: '접수', received: '접수',
   waiting: '대기', wait: '대기', pending: '보류',
   in_progress: '진행중', inprogress: '진행중', progress: '진행중', processing: '처리중', ongoing: '진행중',
   completed: '완료', complete: '완료', done: '완료', resolved: '완료', closed: '완료',
@@ -68,7 +56,15 @@ const HELPDESK_STATUS_KO: Record<string, string> = {
 };
 const koStatus = (v: string | undefined | null, map: Record<string, string>) => {
   if (!v) return '-';
-  return map[String(v).toLowerCase().replace(/[\s-]+/g, '_')] ?? map[String(v).toLowerCase()] ?? v;
+  const key = String(v).toLowerCase().replace(/[\s-]+/g, '_');
+  if (key === 'empty' || key === 'none') return '-';
+  return map[key] ?? map[String(v).toLowerCase()] ?? v;
+};
+
+// 운영정보 빈 값 정규화 — FC다움이 'EMPTY'/'NONE' 문자열로 빈 값을 보냄 → 카드 숨김
+const opVal = (v?: string | null) => {
+  const t = (v ?? '').trim();
+  return (!t || t.toUpperCase() === 'EMPTY' || t.toUpperCase() === 'NONE') ? '' : t;
 };
 
 const LOG_LABEL: Record<StoreLog['type'], string> = {
@@ -330,29 +326,13 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   };
 
   // ── QSC 우선순위 목록 ─────────────────────────────────────
-  const storeList = useMemo(() => {
-    return stores
-      .filter(s => s.storeStatus === 'O')
-      .map(s => {
-        const reps = qscReports.filter(r => r.storeId === s.storeId);
-        const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
-        const days = latest ? getDaysSince(latest.visitDate) : null;
-        return { store: s, days, level: priorityLevel(days) };
-      })
-      .sort((a, b) => {
-        const ad = a.days ?? Infinity, bd = b.days ?? Infinity;
-        return bd - ad;
-      });
-  }, [stores, qscReports]);
+  const storeList = useMemo(
+    () => buildStoreItems(stores, qscReports).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity)),
+    [stores, qscReports],
+  );
 
-  // 분류 탭별 카운트 (4단계)
-  const counts = useMemo(() => ({
-    all:     storeList.length,
-    unknown: storeList.filter(s => s.level === 0).length, // 미확인
-    overdue: storeList.filter(s => s.level === 1).length, // 기한 초과
-    soon:    storeList.filter(s => s.level === 2).length, // 기한 임박
-    ok:      storeList.filter(s => s.level === 3).length, // 양호
-  }), [storeList]);
+  // 분류 탭별 카운트 (4단계 — 홈 위젯과 동일한 countByLevel 사용)
+  const counts = useMemo(() => countByLevel(storeList), [storeList]);
 
   const filteredByCategory = useMemo(() => {
     switch (filterTab) {
@@ -715,12 +695,12 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                             { label: '운영형태',   value: opInfo.type },
                             { label: '상권',       value: opInfo.bizDist },
                             { label: '세대수',     value: opInfo.household },
-                          ].map(f => f.value ? (
+                          ].map(f => { const v = opVal(f.value); return v ? (
                             <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
                               <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
-                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{v}</p>
                             </div>
-                          ) : null)}
+                          ) : null; })}
                         </div>
                       </div>
                       <div>
@@ -733,12 +713,12 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                             { label: '인건비',     value: opInfo.laborCost },
                             { label: '배달대행비', value: opInfo.deliveryFee },
                             { label: '배달지역',   value: opInfo.deliveryArea },
-                          ].map(f => f.value ? (
+                          ].map(f => { const v = opVal(f.value); return v ? (
                             <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
                               <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
-                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{v}</p>
                             </div>
-                          ) : null)}
+                          ) : null; })}
                         </div>
                       </div>
                       <div>
@@ -749,24 +729,24 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                             { label: '주방',     value: opInfo.kitchenStaff },
                             { label: '풀타임',   value: opInfo.fullTimeStaff },
                             { label: '파트타임', value: opInfo.partTimeStaff },
-                          ].map(f => f.value ? (
+                          ].map(f => { const v = opVal(f.value); return v ? (
                             <div key={f.label} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5">
                               <p className="text-[10px] text-slate-400 mb-0.5">{f.label}</p>
-                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{f.value}</p>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{v}</p>
                             </div>
-                          ) : null)}
+                          ) : null; })}
                         </div>
                       </div>
-                      {opInfo.profile && (
+                      {opVal(opInfo.profile) && (
                         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
                           <p className="text-[10px] text-slate-400 mb-1">프로파일</p>
-                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opInfo.profile}</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opVal(opInfo.profile)}</p>
                         </div>
                       )}
-                      {opInfo.note && (
+                      {opVal(opInfo.note) && (
                         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                           <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-1 font-bold">특이사항</p>
-                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opInfo.note}</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{opVal(opInfo.note)}</p>
                         </div>
                       )}
                     </div>

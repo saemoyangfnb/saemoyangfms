@@ -10,7 +10,9 @@ import {
   Users, ChevronRight, Pin, Settings, FolderKanban,
   AlertCircle, CheckSquare, Building2,
 } from 'lucide-react';
-import { fetchAllStores, fetchQscReports, FcdaumStore, FcdaumQscReport } from '../fcdaum';
+import { fetchAllStores, fetchQscReports } from '../fcdaum';
+import { buildStoreItems, countByLevel, LEVEL_HEX, type StoreCounts } from './store/storePriority';
+import { PieChart, Pie, Cell } from 'recharts';
 
 function calcDday(openDate: string): number | null {
   if (!openDate) return null;
@@ -108,31 +110,20 @@ export function HomePage({
   const [mySchedules,     setMySchedules]     = useState<FranchiseSchedule[]>([]);
   const [execSchedules,   setExecSchedules]   = useState<FranchiseSchedule[]>([]);
 
-  // QSC 점검 우선순위 위젯
-  interface InspectionCounts { total: number; unknown: number; needsVisit: number; ok: number; }
-  const [inspectionCounts, setInspectionCounts] = useState<InspectionCounts | null>(null);
+  // 가맹 점검 현황 위젯 — 가맹관리와 동일한 4단계 기준(countByLevel) 사용
+  const [inspectionCounts, setInspectionCounts] = useState<StoreCounts | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled.has('inspection')) return;
-    const CACHE_KEY = 'inspection_widget_cache_v2';
+    const CACHE_KEY = 'inspection_widget_cache_v3'; // 4단계 구조 변경으로 키 갱신
     const CACHE_TTL = 3600000; // 1 hour
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
     if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }
     setInspectionLoading(true);
     Promise.all([fetchAllStores(), fetchQscReports(undefined, 500)])
-      .then(([storeList, qscList]: [FcdaumStore[], FcdaumQscReport[]]) => {
-        const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86400000);
-        const operating = storeList.filter(s => s.storeStatus === 'O');
-        let unknown = 0, needsVisit = 0, ok = 0;
-        operating.forEach(s => {
-          const reps = qscList.filter(r => r.storeId === s.storeId);
-          const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
-          if (!latest) { unknown++; return; }
-          const days = daysSince(latest.visitDate);
-          if (days >= 30) needsVisit++; else ok++;
-        });
-        const data = { total: operating.length, unknown, needsVisit, ok };
+      .then(([stores, qscList]) => {
+        const data = countByLevel(buildStoreItems(stores, qscList));
         setInspectionCounts(data);
         try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
       })
@@ -325,9 +316,9 @@ export function HomePage({
             <div className="flex items-center gap-2">
               <Building2 size={14} className="text-indigo-500" />
               <p className="text-[10px] font-black text-stone-400 tracking-widest uppercase">가맹 점검 현황</p>
-              {inspectionCounts && inspectionCounts.needsVisit > 0 && (
+              {inspectionCounts && (inspectionCounts.overdue + inspectionCounts.soon) > 0 && (
                 <span className="px-2 py-0.5 text-[9px] font-black bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
-                  방문필요 {inspectionCounts.needsVisit}개
+                  방문필요 {inspectionCounts.overdue + inspectionCounts.soon}개
                 </span>
               )}
             </div>
@@ -346,47 +337,52 @@ export function HomePage({
               <Building2 size={22} />
               <p className="text-xs">데이터를 불러오지 못했습니다.</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-3 divide-x divide-stone-100 dark:divide-stone-800">
-              {[
-                {
-                  label: '미확인',
-                  sub: 'QSC 기록 없음',
-                  count: inspectionCounts.unknown,
-                  dot: 'bg-stone-400',
-                  cls: 'text-stone-600 dark:text-stone-400',
-                  tab: 'unknown',
-                },
-                {
-                  label: '방문임박',
-                  sub: '30일 이상 경과',
-                  count: inspectionCounts.needsVisit,
-                  dot: 'bg-red-500',
-                  cls: inspectionCounts.needsVisit > 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-400',
-                  tab: 'urgent',
-                },
-                {
-                  label: '양호',
-                  sub: '30일 이내 방문',
-                  count: inspectionCounts.ok,
-                  dot: 'bg-emerald-500',
-                  cls: 'text-emerald-600 dark:text-emerald-400',
-                  tab: 'ok',
-                },
-              ].map(item => (
-                <button key={item.label}
-                  onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
-                  className="flex flex-col items-center py-5 px-2 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors gap-1">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className={`w-2 h-2 rounded-full ${item.dot}`} />
-                    <span className="text-[10px] font-black text-stone-400 uppercase tracking-wider">{item.label}</span>
+          ) : (() => {
+            const pie = [
+              { name: '미확인',   sub: '리포트 없음',   value: inspectionCounts.unknown, color: LEVEL_HEX[0] },
+              { name: '기한 초과', sub: '60일 초과',     value: inspectionCounts.overdue, color: LEVEL_HEX[1] },
+              { name: '기한 임박', sub: '45일 이상',     value: inspectionCounts.soon,    color: LEVEL_HEX[2] },
+              { name: '양호',     sub: '45일 이내',     value: inspectionCounts.ok,      color: LEVEL_HEX[3] },
+            ];
+            const hasData = inspectionCounts.all > 0;
+            return (
+              <div className="flex items-center gap-5 px-5 py-5">
+                {/* 도넛 차트 */}
+                <div className="relative shrink-0" style={{ width: 132, height: 132 }}>
+                  <PieChart width={132} height={132}>
+                    <Pie
+                      data={hasData ? pie.filter(d => d.value > 0) : [{ name: '없음', value: 1, color: '#e7e5e4' }]}
+                      dataKey="value" cx="50%" cy="50%" innerRadius={44} outerRadius={62}
+                      paddingAngle={hasData ? 2 : 0} stroke="none" startAngle={90} endAngle={-270}
+                    >
+                      {(hasData ? pie.filter(d => d.value > 0) : [{ color: '#e7e5e4' }]).map((d, i) => (
+                        <Cell key={i} fill={d.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl font-black text-stone-800 dark:text-white leading-none">{inspectionCounts.all}</span>
+                    <span className="text-[9px] text-stone-400 mt-0.5">전체 매장</span>
                   </div>
-                  <span className={`text-3xl font-black ${item.cls}`}>{item.count}</span>
-                  <span className="text-[9px] text-stone-400">{item.sub}</span>
-                </button>
-              ))}
-            </div>
-          )}
+                </div>
+                {/* 범례 (클릭 시 매장 관리로 이동) */}
+                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  {pie.map(d => (
+                    <button key={d.name}
+                      onClick={() => onNavigate(null, 'store_mgmt' as SidebarSection)}
+                      className="flex items-center gap-2 group">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-[11px] font-bold text-stone-600 dark:text-stone-300 leading-none truncate group-hover:text-stone-900 dark:group-hover:text-white">{d.name}</p>
+                        <p className="text-[9px] text-stone-400 mt-0.5">{d.sub}</p>
+                      </div>
+                      <span className="text-lg font-black leading-none" style={{ color: d.value > 0 ? d.color : '#a8a29e' }}>{d.value}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

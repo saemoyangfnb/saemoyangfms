@@ -4,6 +4,7 @@ import { feature } from 'topojson-client';
 import type { Topology } from 'topojson-specification';
 import type { Feature, Geometry } from 'geojson';
 import type { FcdaumStore } from '../../fcdaum';
+import { LEVEL_HEX, LEVEL_LABEL } from './storePriority';
 
 const GEO_URL = '/korea-provinces.json';
 
@@ -64,13 +65,6 @@ const REGION_COLOR: Record<string, { base: string; hover: string; stroke: string
   '1':  { base: '#fca5a5', hover: '#f87171', stroke: '#dc2626' }, // 기한 초과
   '2':  { base: '#fcd34d', hover: '#fbbf24', stroke: '#d97706' }, // 기한 임박
   '3':  { base: '#86efac', hover: '#4ade80', stroke: '#16a34a' }, // 양호
-};
-
-const LEVEL_HEX: Record<number, string> = {
-  0: '#94a3b8', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981',
-};
-const LEVEL_LABEL: Record<number, string> = {
-  0: '미확인', 1: '기한 초과', 2: '기한 임박', 3: '양호',
 };
 
 interface StoreItem { store: FcdaumStore; days: number | null; level: number; }
