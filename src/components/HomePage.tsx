@@ -116,7 +116,7 @@ export function HomePage({
 
   useEffect(() => {
     if (!enabled.has('inspection')) return;
-    const CACHE_KEY = 'inspection_widget_cache_v5'; // storeNo 매칭 수정 → 옛 미확인 값 캐시 무효화
+    const CACHE_KEY = 'inspection_widget_cache_v6'; // QSC storeIds 청크 호출로 누락 해결 → 옛 값 무효화
     const CACHE_TTL = 600000; // 10분 — 가맹관리와 시점차 최소화
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
     if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }

@@ -144,7 +144,22 @@ export async function fetchHelpdeskSummary(storeIds?: string[]): Promise<FcdaumH
 
 const toMs = (ts: number) => ts < 10_000_000_000 ? ts * 1000 : ts;
 
+// storeIds를 한꺼번에 많이(또는 무필터로) 넘기면 FC다움 API가 일부 매장 리포트만
+// 반환한다(검증: storeIds=057199 단건은 정상, 86개 일괄/무필터는 누락 발생).
+// 따라서 storeIds가 많으면 작은 청크로 나눠 병렬 호출 후 합친다.
+const QSC_STOREIDS_CHUNK = 10;
+
 export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promise<FcdaumQscReport[]> {
+  if (storeIds && storeIds.length > QSC_STOREIDS_CHUNK) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < storeIds.length; i += QSC_STOREIDS_CHUNK) {
+      chunks.push(storeIds.slice(i, i + QSC_STOREIDS_CHUNK));
+    }
+    const results = await Promise.all(chunks.map(c => fetchQscReports(c, pageSize)));
+    // reportNo 기준 중복 제거 (storeId가 브랜드 간 중복될 때 청크 간 겹침 방지)
+    const seen = new Set<number>();
+    return results.flat().filter(r => (seen.has(r.reportNo) ? false : (seen.add(r.reportNo), true)));
+  }
   const params: Record<string, string> = { pageSize: String(pageSize) };
   if (storeIds?.length) params['storeIds'] = storeIds.join(',');
   const data = await apiFetch('qsc/report', params);
