@@ -61,21 +61,20 @@ const BG_LIGHT = '#e7edf3'; // 지도 패널 배경 (연한 블루그레이, 테
 const REGION_COLOR: Record<string, { base: string; hover: string; stroke: string }> = {
   none: { base: '#ffffff', hover: '#f1f5f9', stroke: '#94a3b8' }, // 매장 없음: 흰 도형 + 진한 테두리
   '0':  { base: '#e2e8f0', hover: '#cbd5e1', stroke: '#64748b' }, // 미확인
-  '1':  { base: '#fca5a5', hover: '#f87171', stroke: '#dc2626' }, // 긴급
-  '2':  { base: '#fdba74', hover: '#fb923c', stroke: '#ea580c' }, // 주의
-  '3':  { base: '#fcd34d', hover: '#fbbf24', stroke: '#d97706' }, // 관리필요
-  '4':  { base: '#86efac', hover: '#4ade80', stroke: '#16a34a' }, // 양호
+  '1':  { base: '#fca5a5', hover: '#f87171', stroke: '#dc2626' }, // 기한 초과
+  '2':  { base: '#fcd34d', hover: '#fbbf24', stroke: '#d97706' }, // 기한 임박
+  '3':  { base: '#86efac', hover: '#4ade80', stroke: '#16a34a' }, // 양호
 };
 
 const LEVEL_HEX: Record<number, string> = {
-  0: '#94a3b8', 1: '#ef4444', 2: '#f97316', 3: '#f59e0b', 4: '#10b981',
+  0: '#94a3b8', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981',
 };
 const LEVEL_LABEL: Record<number, string> = {
-  0: '미확인', 1: '긴급', 2: '주의', 3: '관리필요', 4: '양호',
+  0: '미확인', 1: '기한 초과', 2: '기한 임박', 3: '양호',
 };
 
 interface StoreItem { store: FcdaumStore; days: number | null; level: number; }
-interface Counts { all: number; urgent: number; needsVisit: number; ok: number; unknown: number; }
+interface Counts { all: number; unknown: number; overdue: number; soon: number; ok: number; }
 interface Props {
   storeList: StoreItem[];
   counts: Counts;
@@ -156,13 +155,12 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
     return m;
   }, [storeList]);
 
-  const warningCount = counts.needsVisit - (counts.urgent ?? 0);
   const statCards = [
-    { label: '전체',      value: counts.all,    border: 'border-l-slate-300 dark:border-l-slate-600', num: 'text-slate-800 dark:text-white' },
-    { label: '긴급',      value: counts.urgent, border: 'border-l-red-400',                           num: 'text-red-600 dark:text-red-400' },
-    { label: '주의/관리', value: warningCount,   border: 'border-l-amber-400',                         num: 'text-amber-600 dark:text-amber-400' },
-    { label: '양호',      value: counts.ok,     border: 'border-l-emerald-400',                       num: 'text-emerald-600 dark:text-emerald-400' },
-    { label: '미확인',    value: counts.unknown,border: 'border-l-stone-300 dark:border-l-stone-600', num: 'text-stone-500 dark:text-stone-400' },
+    { label: '전체',     value: counts.all,     border: 'border-l-slate-300 dark:border-l-slate-600', num: 'text-slate-800 dark:text-white' },
+    { label: '미확인',   value: counts.unknown, border: 'border-l-stone-300 dark:border-l-stone-600', num: 'text-stone-500 dark:text-stone-400' },
+    { label: '기한 초과', value: counts.overdue, border: 'border-l-red-400',                           num: 'text-red-600 dark:text-red-400' },
+    { label: '기한 임박', value: counts.soon,    border: 'border-l-amber-400',                         num: 'text-amber-600 dark:text-amber-400' },
+    { label: '양호',     value: counts.ok,      border: 'border-l-emerald-400',                       num: 'text-emerald-600 dark:text-emerald-400' },
   ];
 
   return (
@@ -260,8 +258,8 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
           {/* 범례 */}
           {!selected && geoFeatures.length > 0 && (
             <div className="absolute bottom-4 left-4 bg-white/95 dark:bg-slate-800/95 rounded-xl shadow-md px-3 py-2.5 pointer-events-none">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">QSC 위험도</p>
-              {(['1','2','3','4'] as const).map(lv => (
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">관리 알림</p>
+              {(['0','1','2','3'] as const).map(lv => (
                 <div key={lv} className="flex items-center gap-1.5 mb-0.5 last:mb-0">
                   <span style={{ width: 10, height: 10, borderRadius: 2, background: REGION_COLOR[lv].base, border: `1px solid ${REGION_COLOR[lv].stroke}`, display: 'inline-block', flexShrink: 0 }} />
                   <span className="text-[10px] text-slate-500 dark:text-slate-400">{LEVEL_LABEL[+lv]}</span>

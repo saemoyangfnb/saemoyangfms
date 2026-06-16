@@ -13,7 +13,7 @@ import { useConfirm } from '../ConfirmModal';
 import {
   Building2, Search, AlertTriangle, Plus, X, ClipboardList,
   History, Check, Trash2, RefreshCw, Loader2, ShieldAlert,
-  MessageSquare, User as UserIcon, ChevronRight, Info,
+  MessageSquare, User as UserIcon, ChevronRight, ChevronLeft, Info,
   StickyNote, Layers,
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
@@ -32,21 +32,44 @@ interface StoreLog {
 // ── QSC 우선순위 ───────────────────────────────────────────────
 function getDaysSince(ms: number) { return Math.floor((Date.now() - ms) / 86400000); }
 
-function priorityLevel(days: number | null): 0 | 1 | 2 | 3 | 4 {
+// 관리 알림 4단계 — 리포트(QSC 점검) 생성일 기준
+//  0 미확인  : 리포트 없음 (최근 오픈 매장이거나 방문 시급)
+//  1 기한 초과: 리포트 생성 후 60일 초과
+//  2 기한 임박: 리포트 생성 후 45일 이상 (45~59일)
+//  3 양호     : 리포트 생성 45일 이내
+function priorityLevel(days: number | null): 0 | 1 | 2 | 3 {
   if (days === null) return 0;
   if (days >= 60) return 1;
   if (days >= 45) return 2;
-  if (days >= 30) return 3;
-  return 4;
+  return 3;
 }
 
 const PRI = {
-  0: { label: '미확인', dot: 'bg-stone-400',   text: 'text-stone-500 dark:text-stone-400',                              badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400' },
-  1: { label: '긴급',   dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',                                  badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  2: { label: '주의',   dot: 'bg-orange-500',  text: 'text-orange-600 dark:text-orange-400',                            badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  3: { label: '관리필요', dot: 'bg-amber-400', text: 'text-amber-700 dark:text-amber-400',                               badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  4: { label: '양호',   dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400',                          badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  0: { label: '미확인',   dot: 'bg-stone-400',   text: 'text-stone-500 dark:text-stone-400',     badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400' },
+  1: { label: '기한 초과', dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  2: { label: '기한 임박', dot: 'bg-amber-500',   text: 'text-amber-700 dark:text-amber-400',     badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  3: { label: '양호',     dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
 } as const;
+
+// FC다움 영어 상태 코드 → 한국어 (알 수 없는 값은 원본 유지)
+const STORE_STATUS_KO: Record<string, string> = {
+  o: '운영중', open: '운영중', operating: '운영중',
+  c: '폐점', close: '폐점', closed: '폐점',
+  p: '준비중', ready: '준비중', pending: '준비중',
+  s: '정지', stop: '정지', suspended: '정지',
+  h: '휴점', hold: '휴점',
+};
+const HELPDESK_STATUS_KO: Record<string, string> = {
+  unconfirmed: '미확인', unread: '미확인', new: '신규', open: '접수', received: '접수',
+  waiting: '대기', wait: '대기', pending: '보류',
+  in_progress: '진행중', inprogress: '진행중', progress: '진행중', processing: '처리중', ongoing: '진행중',
+  completed: '완료', complete: '완료', done: '완료', resolved: '완료', closed: '완료',
+  rejected: '반려', reject: '반려', canceled: '취소', cancelled: '취소', cancel: '취소',
+};
+const koStatus = (v: string | undefined | null, map: Record<string, string>) => {
+  if (!v) return '-';
+  return map[String(v).toLowerCase().replace(/[\s-]+/g, '_')] ?? map[String(v).toLowerCase()] ?? v;
+};
 
 const LOG_LABEL: Record<StoreLog['type'], string> = {
   memo: '메모', visit: '방문', call: '통화', warning: '주의', other: '기타',
@@ -164,7 +187,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [selectedStoreNo, setSelectedStoreNo] = useState<number | null>(null);
   const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
   const [tab, setTab] = useState<'info' | 'operation' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
-  const [filterTab, setFilterTab] = useState<'all' | 'needsVisit' | 'ok' | 'unknown'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'overdue' | 'soon' | 'ok' | 'unknown'>('all');
   const [search, setSearch] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -322,21 +345,22 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       });
   }, [stores, qscReports]);
 
-  // 분류 탭별 카운트
+  // 분류 탭별 카운트 (4단계)
   const counts = useMemo(() => ({
-    all:        storeList.length,
-    needsVisit: storeList.filter(s => s.level >= 1 && s.level <= 3).length,
-    ok:         storeList.filter(s => s.level === 4).length,
-    unknown:    storeList.filter(s => s.level === 0).length,
-    urgent:     storeList.filter(s => s.level === 1).length,
+    all:     storeList.length,
+    unknown: storeList.filter(s => s.level === 0).length, // 미확인
+    overdue: storeList.filter(s => s.level === 1).length, // 기한 초과
+    soon:    storeList.filter(s => s.level === 2).length, // 기한 임박
+    ok:      storeList.filter(s => s.level === 3).length, // 양호
   }), [storeList]);
 
   const filteredByCategory = useMemo(() => {
     switch (filterTab) {
-      case 'needsVisit': return storeList.filter(s => s.level >= 1 && s.level <= 3);
-      case 'ok':         return storeList.filter(s => s.level === 4);
-      case 'unknown':    return storeList.filter(s => s.level === 0);
-      default:           return storeList;
+      case 'overdue': return storeList.filter(s => s.level === 1);
+      case 'soon':    return storeList.filter(s => s.level === 2);
+      case 'ok':      return storeList.filter(s => s.level === 3);
+      case 'unknown': return storeList.filter(s => s.level === 0);
+      default:        return storeList;
     }
   }, [storeList, filterTab]);
 
@@ -373,6 +397,13 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
     loadQscForStore(id);         // 매장별 QSC 개별 fetch
+  };
+
+  // 매장 상세 → 지도(현황) 화면으로 복귀
+  const handleBackToMap = () => {
+    activeStoreRef.current = null;
+    setSelectedId(null);
+    setSelectedStoreNo(null);
   };
 
   const loadOpInfo = async (storeId: string) => {
@@ -441,10 +472,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 분류 탭 정의
   const FILTER_TABS = [
-    { id: 'all'        as const, label: '전체',        count: counts.all,        dot: 'bg-slate-400' },
-    { id: 'needsVisit' as const, label: '방문일정 임박', count: counts.needsVisit, dot: 'bg-red-500' },
-    { id: 'ok'         as const, label: '양호',        count: counts.ok,         dot: 'bg-emerald-500' },
-    { id: 'unknown'    as const, label: '미확인',      count: counts.unknown,    dot: 'bg-stone-400' },
+    { id: 'all'     as const, label: '전체',     count: counts.all,     dot: 'bg-slate-400' },
+    { id: 'overdue' as const, label: '기한 초과', count: counts.overdue, dot: 'bg-red-500' },
+    { id: 'soon'    as const, label: '기한 임박', count: counts.soon,    dot: 'bg-amber-500' },
+    { id: 'ok'      as const, label: '양호',     count: counts.ok,      dot: 'bg-emerald-500' },
+    { id: 'unknown' as const, label: '미확인',   count: counts.unknown, dot: 'bg-stone-400' },
   ];
 
   return (
@@ -513,7 +545,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                   <div className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${PRI[level].dot}`} />
                     <span className="text-xs font-bold text-slate-900 dark:text-white truncate flex-1">{store.storeNm}</span>
-                    {days !== null && days >= 30 && (
+                    {days !== null && days >= 45 && (
                       <span className={`text-[10px] font-bold shrink-0 ${PRI[level].text}`}>{days}일</span>
                     )}
                   </div>
@@ -528,7 +560,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
         {/* 하단 통계 */}
         {!storesLoading && !storesError && (
           <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400">
-            {filtered.length}/{counts.all}개 표시 · <span className="text-red-500 dark:text-red-400">긴급 {counts.urgent}개</span>
+            {filtered.length}/{counts.all}개 표시 · <span className="text-red-500 dark:text-red-400">기한 초과 {counts.overdue}개</span>
           </div>
         )}
       </div>
@@ -547,6 +579,10 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shrink-0">
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
+                  <button onClick={handleBackToMap}
+                    className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-1.5 transition-colors">
+                    <ChevronLeft size={13} /> 지도로 돌아가기
+                  </button>
                   <h3 className="text-base font-black text-slate-900 dark:text-white">{selectedStore.storeNm}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{selectedStore.address}</p>
                 </div>
@@ -612,9 +648,9 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                       { label: '매장코드',  value: selectedStore.storeId },
                       { label: '대표자',   value: selectedStore.storeCeo },
                       { label: '전화',     value: selectedStore.phone || selectedStore.mobile || '-' },
-                      { label: '상태',     value: selectedStore.storeStatus === 'O' ? '운영중' : selectedStore.storeStatus },
+                      { label: '상태',     value: koStatus(selectedStore.storeStatus, STORE_STATUS_KO) },
                       { label: '매장유형', value: selectedStore.storeType === 'F' ? '가맹' : (selectedStore.storeType || '-') },
-                      { label: '계약상태', value: selectedStore.storeSubStatus || '-' },
+                      { label: '계약상태', value: koStatus(selectedStore.storeSubStatus, STORE_STATUS_KO) },
                     ].map(({ label, value }) => (
                       <div key={label} className="bg-slate-50 dark:bg-slate-800 rounded-lg px-4 py-3">
                         <p className="text-[10px] font-bold text-slate-400 mb-1">{label}</p>
@@ -844,7 +880,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                       </div>
                       {Object.entries(helpdesk.statusCounts).map(([status, count]) => (
                         <div key={status} className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                          <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">{status}</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">{koStatus(status, HELPDESK_STATUS_KO)}</span>
                           <span className="text-sm font-bold text-slate-900 dark:text-white">{count}건</span>
                         </div>
                       ))}
