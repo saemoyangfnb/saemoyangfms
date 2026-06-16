@@ -5,8 +5,7 @@ import type { Topology } from 'topojson-specification';
 import type { Feature, Geometry } from 'geojson';
 import type { FcdaumStore } from '../../fcdaum';
 
-const GEO_URL =
-  'https://cdn.jsdelivr.net/gh/southkorea/southkorea-maps@master/kostat/2018/json/skorea-provinces-2018-topo-simple.json';
+const GEO_URL = '/korea-provinces.json';
 
 const ADDR_TO_SIDO: Record<string, string> = {
   서울: '서울특별시', 부산: '부산광역시', 대구: '대구광역시',
@@ -91,10 +90,14 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
       .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((topo: Topology) => {
         if (cancelled) return;
-        const objName = Object.keys(topo.objects)[0];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fc = feature(topo, topo.objects[objName] as any);
-        setGeoFeatures((fc as { features: GeoFeature[] }).features);
+        try {
+          const objName = Object.keys(topo.objects)[0];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fc = feature(topo, topo.objects[objName] as any);
+          const features = (fc as { features?: GeoFeature[] }).features ?? [];
+          if (features.length === 0) { setGeoError(true); return; }
+          setGeoFeatures(features);
+        } catch { setGeoError(true); }
       })
       .catch(() => { if (!cancelled) setGeoError(true); });
     return () => { cancelled = true; };
@@ -108,7 +111,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
 
   // path 문자열 캐시
   const paths = useMemo(
-    () => geoFeatures.map(f => ({ name: (f.properties?.name as string) ?? '', d: pathGen(f) ?? '' })),
+    () => geoFeatures.map((f, i) => ({ name: (f.properties?.name as string) ?? '', d: pathGen(f) ?? '', idx: i })),
     [geoFeatures, pathGen],
   );
 
@@ -199,7 +202,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
                 </filter>
               </defs>
 
-              {paths.map(({ name, d }) => {
+              {paths.map(({ name, d, idx }) => {
                 if (!d) return null;
                 const level  = sidoLevel[name];
                 const hasSt  = level !== undefined;
@@ -210,7 +213,7 @@ export default function StoreOverviewMap({ storeList, counts, onSelect }: Props)
 
                 return (
                   <path
-                    key={name}
+                    key={idx}
                     d={d}
                     fill={isSel ? '#e0e7ff' : isHov && hasSt ? colors.hover : colors.base}
                     stroke={isSel ? '#818cf8' : isHov && hasSt ? '#94a3b8' : colors.stroke}
