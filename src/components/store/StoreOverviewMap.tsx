@@ -68,7 +68,8 @@ interface Props {
 
 type GeoFeature = Feature<Geometry, { name?: string; [k: string]: unknown }>;
 
-function getSido(address: string) {
+function getSido(address: string | null | undefined) {
+  if (!address) return '';
   return ADDR_TO_SIDO[address.split(' ')[0]] ?? '';
 }
 
