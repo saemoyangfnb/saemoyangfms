@@ -144,9 +144,11 @@ export async function fetchHelpdeskSummary(storeIds?: string[]): Promise<FcdaumH
 
 const toMs = (ts: number) => ts < 10_000_000_000 ? ts * 1000 : ts;
 
-// storeIds를 한꺼번에 많이(또는 무필터로) 넘기면 FC다움 API가 일부 매장 리포트만
-// 반환한다(검증: storeIds=057199 단건은 정상, 86개 일괄/무필터는 누락 발생).
-// 따라서 storeIds가 많으면 작은 청크로 나눠 병렬 호출 후 합친다.
+// ⚠️ qsc/report 엔드포인트는 storeIds를 여러 개 주면 응답을 "최신 ~10건"으로 잘라
+// 반환하고 pageSize·page 등 페이징 파라미터를 전부 무시한다(직접 호출로 검증).
+// → 청크를 줄여도 오래된 리포트를 가진 매장이 통째로 누락된다. 매장별 최신 리포트를
+// 보장하려면 storeId 1개씩 조회해야 한다(아래 fetchQscReportsPerStore).
+// 이 상수는 단건 외 직접 호출 시의 하위호환 청크 분할용으로만 남겨둔다.
 const QSC_STOREIDS_CHUNK = 10;
 
 export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promise<FcdaumQscReport[]> {
@@ -168,6 +170,36 @@ export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promi
     visitDate: toMs(r.visitDate),
     regDate:   toMs(r.regDate),
   }));
+}
+
+export interface QscPerStoreResult {
+  reports: FcdaumQscReport[];
+  failedStoreIds: string[]; // 재시도 후에도 조회 실패한 storeId — 호출측에서 '미확인'과 구분
+}
+
+// 매장별 단건 조회로 QSC 리포트를 모은다. 다건 조회의 응답 cap(~10건) 누락을 피하는
+// 유일한 신뢰 경로. 동시성을 제한(기본 8)해 프록시 부하·레이트리밋을 줄이고, 각 매장은
+// 1회 재시도한다. 실패한 storeId는 따로 모아 반환 — 실패를 '리포트 없음(미확인)'으로
+// 오분류하지 않게 하는 것이 이 함수의 핵심.
+export async function fetchQscReportsPerStore(
+  storeIds: string[], concurrency = 8,
+): Promise<QscPerStoreResult> {
+  const ids = storeIds.filter((id): id is string => !!id);
+  const reports: FcdaumQscReport[] = [];
+  const failedStoreIds: string[] = [];
+  const fetchOne = async (id: string) => {
+    try { return await fetchQscReports([id]); }
+    catch { return await fetchQscReports([id]); } // 1회 재시도
+  };
+  for (let i = 0; i < ids.length; i += concurrency) {
+    const batch = ids.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(fetchOne));
+    settled.forEach((r, idx) => {
+      if (r.status === 'fulfilled') reports.push(...r.value);
+      else failedStoreIds.push(batch[idx]);
+    });
+  }
+  return { reports, failedStoreIds };
 }
 
 // FC다움 → 내부 Store 포맷 변환

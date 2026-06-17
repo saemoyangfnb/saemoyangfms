@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
-  fetchAllStores, fetchQscReports, fetchHelpdeskSummary, fetchOperationInfos,
+  fetchAllStores, fetchQscReports, fetchQscReportsPerStore, fetchHelpdeskSummary, fetchOperationInfos,
   FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
 import { useToast } from '../Toast';
@@ -36,6 +36,7 @@ const PRI = {
   1: { label: '기한 초과', dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400',         badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
   2: { label: '기한 임박', dot: 'bg-amber-500',   text: 'text-amber-700 dark:text-amber-400',     badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   3: { label: '양호',     dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  4: { label: '조회 실패', dot: 'bg-violet-500',  text: 'text-violet-700 dark:text-violet-400',   badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
 } as const;
 
 // FC다움 영어 상태 코드 → 한국어 (알 수 없는 값은 원본 유지)
@@ -172,6 +173,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   // FC다움 데이터
   const [stores, setStores] = useState<FcdaumStore[]>([]);
   const [qscReports, setQscReports] = useState<FcdaumQscReport[]>([]);
+  const [failedStoreIds, setFailedStoreIds] = useState<Set<string>>(new Set());
   const [storesLoading, setStoresLoading] = useState(true);
   const [storesError, setStoresError] = useState<string | null>(null);
 
@@ -183,7 +185,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [selectedStoreNo, setSelectedStoreNo] = useState<number | null>(null);
   const activeStoreRef = useRef<string | null>(null); // 비동기 콜백 race condition 방지
   const [tab, setTab] = useState<'info' | 'operation' | 'forms' | 'qsc' | 'helpdesk' | 'logs'>('info');
-  const [filterTab, setFilterTab] = useState<'all' | 'overdue' | 'soon' | 'ok' | 'unknown'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'overdue' | 'soon' | 'ok' | 'unknown' | 'failed'>('all');
   const [search, setSearch] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
@@ -230,12 +232,14 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       setStores(storeList);
       const ids = storeList.map(s => s.storeId);
 
-      // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리
-      const [qscList, formSnap] = await Promise.all([
-        fetchQscReports(ids, 500),
+      // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리.
+      // QSC는 매장별 단건 조회(다건 조회의 ~10건 cap 누락 회피). 실패 storeId는 따로 추적.
+      const [qsc, formSnap] = await Promise.all([
+        fetchQscReportsPerStore(ids),
         getDocs(collection(salesDb, 'store_forms')),
       ]);
-      setQscReports(qscList);
+      setQscReports(qsc.reports);
+      setFailedStoreIds(new Set(qsc.failedStoreIds));
       setForms(
         formSnap.docs.map(d => ({ id: d.id, ...d.data() } as StoreForm))
           .filter(f => !f.isArchived)
@@ -327,8 +331,8 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // ── QSC 우선순위 목록 ─────────────────────────────────────
   const storeList = useMemo(
-    () => buildStoreItems(stores, qscReports).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity)),
-    [stores, qscReports],
+    () => buildStoreItems(stores, qscReports, failedStoreIds).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity)),
+    [stores, qscReports, failedStoreIds],
   );
 
   // 분류 탭별 카운트 (4단계 — 홈 위젯과 동일한 countByLevel 사용)
@@ -340,6 +344,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       case 'soon':    return storeList.filter(s => s.level === 2);
       case 'ok':      return storeList.filter(s => s.level === 3);
       case 'unknown': return storeList.filter(s => s.level === 0);
+      case 'failed':  return storeList.filter(s => s.level === 4);
       default:        return storeList;
     }
   }, [storeList, filterTab]);
@@ -457,6 +462,10 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     { id: 'soon'    as const, label: '기한 임박', count: counts.soon,    dot: 'bg-amber-500' },
     { id: 'ok'      as const, label: '양호',     count: counts.ok,      dot: 'bg-emerald-500' },
     { id: 'unknown' as const, label: '미확인',   count: counts.unknown, dot: 'bg-stone-400' },
+    // 조회 실패 매장이 있을 때만 칩 노출 (일시적 API 실패 — 미확인과 구분)
+    ...(counts.failed > 0
+      ? [{ id: 'failed' as const, label: '조회 실패', count: counts.failed, dot: 'bg-violet-500' }]
+      : []),
   ];
 
   return (

@@ -17,18 +17,24 @@ export function priorityLevel(days: number | null): 0 | 1 | 2 | 3 {
   return 3;
 }
 
+// level 4 '조회 실패' — 리포트가 없어서가 아니라 API 단건 조회가 실패한 경우.
+// '미확인'(리포트 진짜 없음)과 반드시 구분해야 거짓 미확인이 재발하지 않는다.
 export const LEVEL_LABEL: Record<number, string> = {
-  0: '미확인', 1: '기한 초과', 2: '기한 임박', 3: '양호',
+  0: '미확인', 1: '기한 초과', 2: '기한 임박', 3: '양호', 4: '조회 실패',
 };
 export const LEVEL_HEX: Record<number, string> = {
-  0: '#94a3b8', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981',
+  0: '#94a3b8', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981', 4: '#8b5cf6',
 };
 
 export interface StoreItem { store: FcdaumStore; days: number | null; level: number; }
 
 // 운영중(storeStatus 'O') 매장 + 최근 QSC 방문일 기준으로 매장별 레벨/경과일 산출.
 // 정렬은 호출측에서 필요에 맞게 (가맹관리는 경과일 내림차순).
-export function buildStoreItems(stores: FcdaumStore[], qscReports: FcdaumQscReport[]): StoreItem[] {
+// failedStoreIds: 단건 조회가 실패한 storeId 집합 — 넘기면 리포트 없는 매장을
+// '미확인'(0) 대신 '조회 실패'(4)로 분류해 일시적 실패를 거짓 미확인과 구분한다.
+export function buildStoreItems(
+  stores: FcdaumStore[], qscReports: FcdaumQscReport[], failedStoreIds?: Set<string>,
+): StoreItem[] {
   return stores
     .filter(s => s.storeStatus === 'O')
     .map(s => {
@@ -36,12 +42,16 @@ export function buildStoreItems(stores: FcdaumStore[], qscReports: FcdaumQscRepo
       // 전역 고유값 storeNo로 매칭해야 미확인 오분류가 안 생긴다.
       const reps = qscReports.filter(r => r.storeNo === s.storeNo);
       const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
-      const days = latest ? getDaysSince(latest.visitDate) : null;
-      return { store: s, days, level: priorityLevel(days) };
+      if (latest) {
+        const days = getDaysSince(latest.visitDate);
+        return { store: s, days, level: priorityLevel(days) };
+      }
+      // 리포트 없음 — 단건 조회 실패 매장이면 '조회 실패'(4), 아니면 진짜 '미확인'(0)
+      return { store: s, days: null, level: failedStoreIds?.has(s.storeId) ? 4 : 0 };
     });
 }
 
-export interface StoreCounts { all: number; unknown: number; overdue: number; soon: number; ok: number; }
+export interface StoreCounts { all: number; unknown: number; overdue: number; soon: number; ok: number; failed: number; }
 
 export function countByLevel(items: StoreItem[]): StoreCounts {
   return {
@@ -50,5 +60,6 @@ export function countByLevel(items: StoreItem[]): StoreCounts {
     overdue: items.filter(i => i.level === 1).length, // 기한 초과
     soon:    items.filter(i => i.level === 2).length, // 기한 임박
     ok:      items.filter(i => i.level === 3).length, // 양호
+    failed:  items.filter(i => i.level === 4).length, // 조회 실패
   };
 }

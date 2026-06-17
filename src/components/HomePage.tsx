@@ -10,7 +10,7 @@ import {
   Users, ChevronRight, Pin, Settings, FolderKanban,
   AlertCircle, CheckSquare, Building2,
 } from 'lucide-react';
-import { fetchAllStores, fetchQscReports } from '../fcdaum';
+import { fetchAllStores, fetchQscReportsPerStore } from '../fcdaum';
 import { buildStoreItems, countByLevel, LEVEL_HEX, type StoreCounts } from './store/storePriority';
 import { PieChart, Pie, Cell } from 'recharts';
 
@@ -116,16 +116,17 @@ export function HomePage({
 
   useEffect(() => {
     if (!enabled.has('inspection')) return;
-    const CACHE_KEY = 'inspection_widget_cache_v6'; // QSC storeIds 청크 호출로 누락 해결 → 옛 값 무효화
+    const CACHE_KEY = 'inspection_widget_cache_v7'; // QSC 매장별 단건 조회로 cap 누락 해결 → 옛 값 무효화
     const CACHE_TTL = 600000; // 10분 — 가맹관리와 시점차 최소화
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
     if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }
     setInspectionLoading(true);
-    // 가맹관리(StoreMgmtView)와 동일하게 전체 매장 ID를 넘겨 QSC를 받아야 집계가 일치한다.
+    // 가맹관리(StoreMgmtView)와 동일하게 매장별 단건 조회 → 집계 일치. 실패 storeId는
+    // '조회 실패'로 분류해 거짓 미확인을 방지(buildStoreItems에 failedStoreIds 전달).
     fetchAllStores()
-      .then(stores => fetchQscReports(stores.map(s => s.storeId), 500)
-        .then(qscList => {
-          const data = countByLevel(buildStoreItems(stores, qscList));
+      .then(stores => fetchQscReportsPerStore(stores.map(s => s.storeId))
+        .then(qsc => {
+          const data = countByLevel(buildStoreItems(stores, qsc.reports, new Set(qsc.failedStoreIds)));
           setInspectionCounts(data);
           try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
         }))
@@ -345,6 +346,10 @@ export function HomePage({
               { name: '기한 초과', sub: '60일 초과',     value: inspectionCounts.overdue, color: LEVEL_HEX[1] },
               { name: '기한 임박', sub: '45일 이상',     value: inspectionCounts.soon,    color: LEVEL_HEX[2] },
               { name: '양호',     sub: '45일 이내',     value: inspectionCounts.ok,      color: LEVEL_HEX[3] },
+              // 조회 실패는 있을 때만 세그먼트로 표시 (합계가 전체와 맞도록)
+              ...(inspectionCounts.failed > 0
+                ? [{ name: '조회 실패', sub: 'API 조회 실패', value: inspectionCounts.failed, color: LEVEL_HEX[4] }]
+                : []),
             ];
             const hasData = inspectionCounts.all > 0;
             return (

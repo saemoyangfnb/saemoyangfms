@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-06-17 — Claude Code
+
+### QSC "미확인" 오분류 진짜 원인 규명 + 매장별 단건 조회로 수정
+
+- **진단(실API 검증)**: storeNo 매칭은 정상(057199 매장·리포트 둘 다 storeNo 105324 일치). 진짜 원인은 **FC다움 `qsc/report`가 storeIds 다건 조회 시 응답을 "최신 ~10건"으로 cap하고 pageSize·page를 전부 무시**. → 청크(10개)에서도 오래된 리포트 가진 매장이 통째 누락 → 미확인 오분류. 운영84개 중 청크 미확인 35.
+- **수정**: `fetchQscReportsPerStore`(매장별 단건, 동시성8 + 1회 재시도 + 실패 storeId 추적) 신설. StoreMgmtView·HomePage 위젯 모두 이 경로로 전환. `buildStoreItems`에 `failedStoreIds` 추가 → 조회 실패를 '미확인' 아닌 **level 4 '조회 실패'(보라)**로 구분(거짓 미확인 재발 방지). 필터칩·도넛 세그먼트는 실패>0일 때만 노출.
+- **검증**: 단건 방식 미확인 35→30(5개 회복, 057199 포함). 남은 30 = storeId 있고 리포트 진짜 0건(totalCount=0) 20 + **storeId 자체 없는 운영매장 10**(storeId 경로로는 조회 불가, 별도 과제).
+- 빌드 성공. 캐시키 v6→v7. ⚠️ 미배포 — 로컬 확인 대기. [[project_fcdaum_storeno_matching]] 갱신.
+
+---
+
+## 2026-06-16 — Claude Code
+
+### 가맹관리 지도·현황 디버깅 + 홈 위젯 통합 + 조직 진단
+
+- **지도 안 보임(다단계 추적)**: 진짜 원인은 레이아웃 — StoreMgmtView `h-full`이 부모 auto 높이라 미해소, 지도가 화면 밖으로 밀림. `h-[calc(100vh-6rem)]`로 수정. (지도 색/이름 매칭도 함께 정리)
+- **관리 알림 4단계 재정의**(미확인/기한 초과/기한 임박/양호) + 상태 한국어화(REQUESTED·EMPTY 등) + 매장 상세→지도 복귀 버튼.
+- **홈 위젯↔가맹관리 기준 통합**: 공통 모듈 `storePriority.ts` 신설, 홈 위젯 도넛 차트화, 범례 시인성 개선.
+- **미확인 오분류 해결**: QSC 매칭을 storeId→storeNo로, `fetchQscReports`에 storeIds 청크(10개) 분할 호출 추가(대량 ID 시 API 누락 회피). 프록시 직접 조회로 검증.
+- **조직 구조·병목 진단** 메모화([[project_org_structure_and_pains]]): 비동기 조직인데 동기 도구 의존, 카톡 이중보고가 채택 실패 핵심.
+- **PLAN_test_record_form.md 등록**: 신메뉴 테스트 기록폼(=프로젝트와 거의 동일, 공들였으나 미사용) 채택 개선 플랜. 구현 전 플랜만. 미착수.
+
+---
+
 ## 2026-06-13 (3) — Claude Code
 
 ### WorkMapView 프로젝트/업무 생성·수정 Firestore 저장 실패 수정
