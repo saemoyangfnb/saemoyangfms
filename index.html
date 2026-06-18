@@ -2,6 +2,14 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // 옛 주소(dalbitgo-calculator)로 들어오면 새 본사 주소로 자동 안내
+      (function () {
+        if (location.hostname === 'dalbitgo-calculator.vercel.app') {
+          location.replace('https://saemoyangfms.vercel.app' + location.pathname + location.search + location.hash);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SAEMOYANG F&B | 가맹관리시스템</title>
 

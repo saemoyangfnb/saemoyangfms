@@ -5,6 +5,7 @@ const storage = new Storage({ projectId: 'gen-lang-client-0562618804' });
 const corsConfig = [
   {
     origin: [
+      'https://saemoyangfms.vercel.app',
       'https://dalbitgo-calculator.vercel.app',
       'http://localhost:3000',
       'http://localhost:5173',
