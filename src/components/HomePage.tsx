@@ -126,7 +126,8 @@ export function HomePage({
     // '조회 실패'로 분류해 거짓 미확인을 방지(buildStoreItems에 failedStoreIds 전달).
     Promise.all([fetchAllStores(), loadHiddenStoreIds()])
       .then(([allStores, hiddenIds]) => {
-        const stores = allStores.filter(s => !hiddenIds.has(s.storeId));
+        // 운영중(O) + 숨김 제외만 QSC 조회 — 비운영 매장은 QSC 불필요
+        const stores = allStores.filter(s => s.storeStatus === 'O' && !hiddenIds.has(s.storeId));
         return fetchQscReportsPerStore(stores.map(s => s.storeId))
           .then(qsc => {
             const data = countByLevel(buildStoreItems(stores, qsc.reports, new Set(qsc.failedStoreIds)));

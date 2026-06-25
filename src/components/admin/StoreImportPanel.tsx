@@ -88,13 +88,16 @@ export function StoreImportPanel() {
       const fcdaumStores = await fetchAllStores();
       const parsed = fcdaumStores.map(mapFcdaumStore);
 
-      const [existingSnap, mergedSnap] = await Promise.all([
-        getDocs(collection(salesDb, 'stores')),
-        getDoc(doc(salesDb, 'store_settings', 'merged_ids')),
-      ]);
+      const existingSnap = await getDocs(collection(salesDb, 'stores'));
       const existingMap = new Map<string, Store>();
       existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
-      const mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
+
+      // store_settings 규칙 미배포 시 빈 Set으로 진행
+      let mergedIds = new Set<string>();
+      try {
+        const mergedSnap = await getDoc(doc(salesDb, 'store_settings', 'merged_ids'));
+        mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
+      } catch { /* 규칙 미설정 시 무시 */ }
 
       const skipped = parsed.filter(p => mergedIds.has(p.id));
       setSkippedMerged(skipped.length);
@@ -124,13 +127,14 @@ export function StoreImportPanel() {
     const parsed = parseRows(ws);
 
     // 기존 stores + 합치기 blocklist 로드
-    const [existingSnap, mergedSnap] = await Promise.all([
-      getDocs(collection(salesDb, 'stores')),
-      getDoc(doc(salesDb, 'store_settings', 'merged_ids')),
-    ]);
+    const existingSnap = await getDocs(collection(salesDb, 'stores'));
     const existingMap = new Map<string, Store>();
     existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
-    const mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
+    let mergedIds = new Set<string>();
+    try {
+      const mergedSnap = await getDoc(doc(salesDb, 'store_settings', 'merged_ids'));
+      mergedIds = new Set<string>((mergedSnap.data()?.ids as string[] | undefined) ?? []);
+    } catch { /* 규칙 미설정 시 무시 */ }
 
     const skipped = parsed.filter(p => mergedIds.has(p.id));
     setSkippedMerged(skipped.length);

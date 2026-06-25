@@ -40,7 +40,8 @@ export function buildStoreItems(
     .map(s => {
       // storeId는 브랜드별 중복 가능 + 일부 QSC 리포트엔 storeId가 비어 있음.
       // 전역 고유값 storeNo로 매칭해야 미확인 오분류가 안 생긴다.
-      const reps = qscReports.filter(r => r.storeNo === s.storeNo && r.status === 'd');
+      // 작성중('r') 초안만 제외, 그 외(완료·검토 등)는 유효한 방문으로 간주
+      const reps = qscReports.filter(r => r.storeNo === s.storeNo && (r.status ?? '').toLowerCase() !== 'r');
       const latest = reps.sort((a, b) => b.visitDate - a.visitDate)[0];
       if (latest) {
         const days = getDaysSince(latest.visitDate);

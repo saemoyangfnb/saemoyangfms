@@ -236,7 +236,8 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     try {
       const storeList = await fetchAllStores();
       setStores(storeList);
-      const ids = storeList.map(s => s.storeId);
+      // QSC는 운영중(O) 매장만 조회 — 준비중·폐점 포함 시 불필요한 API 요청 증가
+      const ids = storeList.filter(s => s.storeStatus === 'O').map(s => s.storeId);
 
       // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리.
       // QSC는 매장별 단건 조회(다건 조회의 ~10건 cap 누락 회피). 실패 storeId는 따로 추적.
