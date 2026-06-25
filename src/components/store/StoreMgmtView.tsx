@@ -6,6 +6,7 @@ import {
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
   fetchAllStores, fetchQscReports, fetchQscReportsPerStore, fetchHelpdeskSummary, fetchOperationInfos,
+  invalidateStoresCache,
   FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
 import { useToast } from '../Toast';
@@ -479,7 +480,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
               <Building2 size={14} className="text-indigo-500" /> 매장 관리
             </h2>
-            <button onClick={loadData} title="새로고침" className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded">
+            <button onClick={() => { invalidateStoresCache(); loadData(); }} title="새로고침" className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded">
               <RefreshCw size={13} />
             </button>
           </div>
