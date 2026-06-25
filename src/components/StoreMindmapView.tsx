@@ -5,6 +5,7 @@ import {
   doc, setDoc, query, where,
 } from 'firebase/firestore';
 import { Store, User, StoreForm, StoreFormField, StoreFormEntry } from '../types';
+import { fetchAllStores, mapFcdaumStore } from '../fcdaum';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
@@ -853,15 +854,15 @@ export function StoreMindmapView({ currentUser }: Props) {
   useEffect(() => {
     Promise.all([
       getDocs(collection(salesDb, 'store_forms')),
-      getDocs(collection(salesDb, 'stores')),
-    ]).then(([formSnap, storeSnap]) => {
+      fetchAllStores(),
+    ]).then(([formSnap, fcdaumStores]) => {
       const fs = formSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as StoreForm))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setAllForms(fs);
       setStores(
-        storeSnap.docs
-          .map(d => ({ id: d.id, ...d.data() } as Store))
+        fcdaumStores
+          .map(s => ({ ...mapFcdaumStore(s), importedAt: '' } as Store))
           .filter(s => s.status !== '폐점')
           .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
       );
