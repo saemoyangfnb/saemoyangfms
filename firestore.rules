@@ -131,10 +131,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 공지: 읽기 = 인증, 쓰기 = 관리자
+    // 공지: 읽기 = 인증, 생성/삭제 = 관리자, 읽음 처리(readBy만) = 승인된 직원
     match /notices/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (isApprovedUser() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
     }
 
     // 일정

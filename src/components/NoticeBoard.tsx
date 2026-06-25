@@ -86,14 +86,19 @@ export function NoticeBoard({ currentUser }: Props) {
   /* 읽음 처리 — 공지 열 때 자동으로 읽음 기록 */
   const markRead = useCallback(async (notice: Notice) => {
     if (notice.readBy?.[currentUser.uid]) return; // 이미 읽음
-    await updateDoc(doc(salesDb, 'notices', notice.id), {
-      [`readBy.${currentUser.uid}`]: { name: currentUser.name, readAt: new Date().toISOString() },
-    });
-    setNotices(prev => prev.map(n =>
-      n.id === notice.id
-        ? { ...n, readBy: { ...n.readBy, [currentUser.uid]: { name: currentUser.name, readAt: new Date().toISOString() } } }
-        : n
-    ));
+    const readAt = new Date().toISOString();
+    try {
+      await updateDoc(doc(salesDb, 'notices', notice.id), {
+        [`readBy.${currentUser.uid}`]: { name: currentUser.name, readAt },
+      });
+      setNotices(prev => prev.map(n =>
+        n.id === notice.id
+          ? { ...n, readBy: { ...n.readBy, [currentUser.uid]: { name: currentUser.name, readAt } } }
+          : n
+      ));
+    } catch (e) {
+      console.error('markRead error:', e);
+    }
   }, [currentUser.uid, currentUser.name]);
 
   const handleExpand = useCallback((notice: Notice) => {

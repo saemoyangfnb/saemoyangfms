@@ -444,19 +444,25 @@ export function CompanyCalendar({ currentUser }: Props) {
   const saveEvent = async () => {
     if (!eventForm.title.trim()) { toast.error('제목을 입력해주세요'); return; }
     if (eventForm.startDate > eventForm.endDate) { toast.error('종료일이 시작일보다 빠릅니다'); return; }
+    const clean = <T extends object>(o: T) => JSON.parse(JSON.stringify(o)) as T;
     const now = new Date().toISOString();
-    if (editingEvent) {
-      await updateDoc(doc(salesDb, 'calendar_events', editingEvent.id), { ...eventForm, updatedAt: now });
-      toast.success('일정이 수정되었습니다');
-    } else {
-      const id = genId();
-      const evt: CalendarEvent = { id, ...eventForm, employeeId: myEmployee?.id, createdAt: now, updatedAt: now };
-      await setDoc(doc(salesDb, 'calendar_events', id), evt);
-      toast.success('일정이 추가되었습니다');
+    try {
+      if (editingEvent) {
+        await updateDoc(doc(salesDb, 'calendar_events', editingEvent.id), clean({ ...eventForm, updatedAt: now }));
+        toast.success('일정이 수정되었습니다');
+      } else {
+        const id = genId();
+        const evt: CalendarEvent = { id, ...eventForm, ...(myEmployee?.id ? { employeeId: myEmployee.id } : {}), createdAt: now, updatedAt: now };
+        await setDoc(doc(salesDb, 'calendar_events', id), clean(evt));
+        toast.success('일정이 추가되었습니다');
+      }
+      setShowEventModal(false);
+      setEditingEvent(null);
+      fetchData();
+    } catch (e) {
+      console.error('saveEvent error:', e);
+      toast.error('저장에 실패했습니다. 다시 시도해주세요');
     }
-    setShowEventModal(false);
-    setEditingEvent(null);
-    fetchData();
   };
 
   /* 이벤트 삭제 */
