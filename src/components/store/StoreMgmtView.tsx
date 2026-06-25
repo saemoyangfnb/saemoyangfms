@@ -15,9 +15,10 @@ import {
   Building2, Search, AlertTriangle, Plus, X, ClipboardList,
   History, Check, Trash2, RefreshCw, Loader2, ShieldAlert,
   MessageSquare, User as UserIcon, ChevronRight, ChevronLeft, Info,
-  StickyNote, Layers,
+  StickyNote, Layers, EyeOff, Eye,
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
+import { loadHiddenStoreIds, toggleHiddenStoreId } from '../../storeHidden';
 import { buildStoreItems, countByLevel, getDaysSince, priorityLevel } from './storePriority';
 
 // ── 로컬 타입 ──────────────────────────────────────────────────
@@ -216,6 +217,11 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [svInput, setSvInput] = useState('');
   const [savingSv, setSavingSv] = useState(false);
 
+  // 숨김 처리 (양도양수 중복 매장 등)
+  const [hiddenStoreIds, setHiddenStoreIds] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
+  const [savingHidden, setSavingHidden] = useState(false);
+
   // 가맹 일정 연동 여부 (선택된 매장 기준)
   const [isLinked, setIsLinked] = useState<boolean>(false);
 
@@ -253,6 +259,9 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
         metaSnap.forEach(d => { sv[d.id] = (d.data() as { sv?: string }).sv ?? ''; });
         setSvMap(sv);
       } catch { /* Firestore 규칙 미설정 시 SV 빈 값으로 시작 */ }
+
+      // 숨김 목록 (비차단 — 실패해도 빈 Set으로 계속)
+      loadHiddenStoreIds().then(setHiddenStoreIds).catch(() => {});
 
     } catch (e: unknown) {
       setStoresError(e instanceof Error ? e.message : 'FC다움 데이터를 불러오지 못했습니다.');
@@ -330,9 +339,13 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   };
 
   // ── QSC 우선순위 목록 ─────────────────────────────────────
+  const visibleStores = useMemo(
+    () => showHidden ? stores : stores.filter(s => !hiddenStoreIds.has(s.storeId)),
+    [stores, hiddenStoreIds, showHidden],
+  );
   const storeList = useMemo(
-    () => buildStoreItems(stores, qscReports, failedStoreIds).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity)),
-    [stores, qscReports, failedStoreIds],
+    () => buildStoreItems(visibleStores, qscReports, failedStoreIds).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity)),
+    [visibleStores, qscReports, failedStoreIds],
   );
 
   // 분류 탭별 카운트 (4단계 — 홈 위젯과 동일한 countByLevel 사용)
@@ -384,11 +397,34 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     loadQscForStore(id);         // 매장별 QSC 개별 fetch
   };
 
-  // 매장 상세 → 지도(현황) 화면으로 복귀
+  // 매장 상세 → 현황 화면으로 복귀
   const handleBackToMap = () => {
     activeStoreRef.current = null;
     setSelectedId(null);
     setSelectedStoreNo(null);
+  };
+
+  // 양도양수 등 중복 매장 숨김/해제 (관리자 전용)
+  const handleToggleHidden = async (storeId: string) => {
+    const isHidden = hiddenStoreIds.has(storeId);
+    const ok = await confirm({
+      title: isHidden ? '숨김 해제' : '매장 숨김 처리',
+      message: isHidden
+        ? '이 매장을 다시 목록에 표시하시겠습니까?'
+        : '이 매장을 가맹관리·폼관리·홈 위젯에서 숨기시겠습니까?\n양도양수로 중복된 구 매장 등에 사용하세요.',
+      confirmLabel: isHidden ? '해제' : '숨김',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setSavingHidden(true);
+    try {
+      await toggleHiddenStoreId(storeId, !isHidden);
+      const updated = await loadHiddenStoreIds();
+      setHiddenStoreIds(updated);
+      toast.success(isHidden ? '숨김이 해제됐습니다.' : '매장이 숨겨졌습니다.');
+      if (!isHidden) handleBackToMap();
+    } catch { toast.error('처리 중 오류가 발생했습니다.'); }
+    finally { setSavingHidden(false); }
   };
 
   const loadOpInfo = async (storeId: string) => {
@@ -526,15 +562,17 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             filtered.map(({ store, days, level }) => {
               const isSelected = selectedStoreNo === store.storeNo;
               const sv = svMap[store.storeId];
+              const isHidden = hiddenStoreIds.has(store.storeId);
               return (
                 <button key={store.storeNo} onClick={() => handleSelectStore(store.storeId, store.storeNo)}
                   className={`w-full px-3 py-2.5 text-left border-b border-slate-100 dark:border-slate-800 transition-colors border-l-2 ${
                     isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-indigo-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-l-transparent'
-                  }`}>
+                  } ${isHidden ? 'opacity-50' : ''}`}>
                   <div className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${PRI[level].dot}`} />
                     <span className="text-xs font-bold text-slate-900 dark:text-white truncate flex-1">{store.storeNm}</span>
-                    {days !== null && days >= 45 && (
+                    {isHidden && <span className="text-[9px] text-amber-500 font-bold shrink-0">숨김</span>}
+                    {!isHidden && days !== null && days >= 45 && (
                       <span className={`text-[10px] font-bold shrink-0 ${PRI[level].text}`}>{days}일</span>
                     )}
                   </div>
@@ -546,10 +584,17 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
           )}
         </div>
 
-        {/* 하단 통계 */}
+        {/* 하단 통계 + 숨김 토글 */}
         {!storesLoading && !storesError && (
-          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400">
-            {filtered.length}/{counts.all}개 표시 · <span className="text-red-500 dark:text-red-400">기한 초과 {counts.overdue}개</span>
+          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-400 flex items-center justify-between gap-1">
+            <span>{filtered.length}/{counts.all}개 · <span className="text-red-500 dark:text-red-400">초과 {counts.overdue}</span></span>
+            {hiddenStoreIds.size > 0 && (
+              <button onClick={() => setShowHidden(p => !p)}
+                className={`flex items-center gap-1 transition-colors ${showHidden ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                {showHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                숨김 {hiddenStoreIds.size}개
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -617,6 +662,19 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                     <button onClick={() => setShowScheduleModal(true)}
                       className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
                       <Plus size={12} /> 일정 연동
+                    </button>
+                  )}
+                  {/* 숨김 처리 — 관리자 전용, 양도양수 중복 매장 등 */}
+                  {currentUser.role === 'admin' && selectedId && (
+                    <button onClick={() => handleToggleHidden(selectedId)} disabled={savingHidden}
+                      title={hiddenStoreIds.has(selectedId) ? '이 매장 숨김 해제' : '이 매장 숨김 처리 (양도양수 중복 등)'}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50 ${
+                        hiddenStoreIds.has(selectedId)
+                          ? 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                          : 'text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}>
+                      {hiddenStoreIds.has(selectedId) ? <Eye size={12} /> : <EyeOff size={12} />}
+                      {hiddenStoreIds.has(selectedId) ? '숨김 해제' : '숨김'}
                     </button>
                   )}
                 </div>

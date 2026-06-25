@@ -170,6 +170,8 @@ service cloud.firestore {
 
     // 매장/프랜차이즈
     match /stores/{docId}                  { allow read, write: if isAuthenticated(); }
+    // 매장 설정 (숨김 목록 등) — 읽기: 인증, 쓰기: 관리자
+    match /store_settings/{docId}          { allow read: if isAuthenticated(); allow write: if isAdmin(); }
     match /store_mentions/{docId}          { allow read, write: if isAuthenticated(); }
     match /franchise_schedules/{docId}     { allow read, write: if isAuthenticated(); }
     match /department_tasks/{docId}        { allow read, write: if isAuthenticated(); }

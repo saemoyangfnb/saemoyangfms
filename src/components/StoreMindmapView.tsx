@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { Store, User, StoreForm, StoreFormField, StoreFormEntry } from '../types';
 import { fetchAllStores, mapFcdaumStore } from '../fcdaum';
+import { loadHiddenStoreIds } from '../storeHidden';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
@@ -855,15 +856,16 @@ export function StoreMindmapView({ currentUser }: Props) {
     Promise.all([
       getDocs(collection(salesDb, 'store_forms')),
       fetchAllStores(),
-    ]).then(([formSnap, fcdaumStores]) => {
+      loadHiddenStoreIds(),
+    ]).then(([formSnap, fcdaumStores, hiddenIds]) => {
       const fs = formSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as StoreForm))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setAllForms(fs);
       setStores(
         fcdaumStores
+          .filter(s => s.storeStatus === 'O' && !hiddenIds.has(s.storeId))
           .map(s => ({ ...mapFcdaumStore(s), importedAt: '' } as Store))
-          .filter(s => s.status !== '폐점')
           .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
       );
       const first = fs.find(f => !f.isArchived);

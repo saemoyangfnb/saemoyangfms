@@ -11,6 +11,7 @@ import {
   AlertCircle, CheckSquare, Building2,
 } from 'lucide-react';
 import { fetchAllStores, fetchQscReportsPerStore } from '../fcdaum';
+import { loadHiddenStoreIds } from '../storeHidden';
 import { buildStoreItems, countByLevel, LEVEL_HEX, type StoreCounts } from './store/storePriority';
 import { PieChart, Pie, Cell } from 'recharts';
 
@@ -123,13 +124,16 @@ export function HomePage({
     setInspectionLoading(true);
     // 가맹관리(StoreMgmtView)와 동일하게 매장별 단건 조회 → 집계 일치. 실패 storeId는
     // '조회 실패'로 분류해 거짓 미확인을 방지(buildStoreItems에 failedStoreIds 전달).
-    fetchAllStores()
-      .then(stores => fetchQscReportsPerStore(stores.map(s => s.storeId))
-        .then(qsc => {
-          const data = countByLevel(buildStoreItems(stores, qsc.reports, new Set(qsc.failedStoreIds)));
-          setInspectionCounts(data);
-          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
-        }))
+    Promise.all([fetchAllStores(), loadHiddenStoreIds()])
+      .then(([allStores, hiddenIds]) => {
+        const stores = allStores.filter(s => !hiddenIds.has(s.storeId));
+        return fetchQscReportsPerStore(stores.map(s => s.storeId))
+          .then(qsc => {
+            const data = countByLevel(buildStoreItems(stores, qsc.reports, new Set(qsc.failedStoreIds)));
+            setInspectionCounts(data);
+            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
+          });
+      })
       .catch(() => {})
       .finally(() => setInspectionLoading(false));
   }, [enabled]);
