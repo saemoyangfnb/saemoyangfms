@@ -18,7 +18,6 @@ import {
   StickyNote, Layers,
 } from 'lucide-react';
 import { FcdaumScheduleCreateModal } from '../admin/FcdaumScheduleCreateModal';
-import StoreOverviewMap from './StoreOverviewMap';
 import { buildStoreItems, countByLevel, getDaysSince, priorityLevel } from './storePriority';
 
 // ── 로컬 타입 ──────────────────────────────────────────────────
@@ -558,11 +557,27 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
       {/* ── 우측 패널 ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!selectedStore ? (
-          <StoreOverviewMap
-            storeList={storeList}
-            counts={counts}
-            onSelect={handleSelectStore}
-          />
+          <div className="flex-1 flex flex-col items-center justify-start p-8 bg-slate-50 dark:bg-slate-900 overflow-y-auto">
+            {/* 현황 카드 */}
+            <div className="w-full max-w-lg">
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">가맹점 현황</p>
+              <div className="grid grid-cols-5 gap-3 mb-10">
+                {([
+                  { label: '전체',     value: counts.all,     border: 'border-l-slate-300 dark:border-l-slate-600', num: 'text-slate-800 dark:text-white' },
+                  { label: '미확인',   value: counts.unknown, border: 'border-l-stone-300 dark:border-l-stone-500',  num: 'text-stone-500 dark:text-stone-400' },
+                  { label: '기한 초과', value: counts.overdue, border: 'border-l-red-400',                           num: 'text-red-600 dark:text-red-400' },
+                  { label: '기한 임박', value: counts.soon,    border: 'border-l-amber-400',                         num: 'text-amber-600 dark:text-amber-400' },
+                  { label: '양호',     value: counts.ok,      border: 'border-l-emerald-400',                       num: 'text-emerald-600 dark:text-emerald-400' },
+                ] as const).map(c => (
+                  <div key={c.label} className={`border-l-4 ${c.border} bg-white dark:bg-slate-800 rounded-r-lg px-3 py-3 shadow-sm`}>
+                    <p className={`text-2xl font-black leading-none ${c.num}`}>{c.value}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{c.label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm text-slate-400 dark:text-slate-500 text-center">왼쪽 목록에서 매장을 선택하세요</p>
+            </div>
+          </div>
         ) : (
           <>
             {/* 매장 헤더 */}
@@ -571,7 +586,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
                 <div className="flex-1 min-w-0">
                   <button onClick={handleBackToMap}
                     className="flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 mb-1.5 transition-colors">
-                    <ChevronLeft size={13} /> 지도로 돌아가기
+                    <ChevronLeft size={13} /> 목록으로
                   </button>
                   <h3 className="text-base font-black text-slate-900 dark:text-white">{selectedStore.storeNm}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{selectedStore.address}</p>
