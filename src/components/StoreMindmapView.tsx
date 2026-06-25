@@ -5,7 +5,6 @@ import {
   doc, setDoc, query, where,
 } from 'firebase/firestore';
 import { Store, User, StoreForm, StoreFormField, StoreFormEntry } from '../types';
-import { fetchAllStores, mapFcdaumStore } from '../fcdaum';
 import { loadHiddenStoreIds } from '../storeHidden';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -855,17 +854,17 @@ export function StoreMindmapView({ currentUser }: Props) {
   useEffect(() => {
     Promise.all([
       getDocs(collection(salesDb, 'store_forms')),
-      fetchAllStores(),
+      getDocs(collection(salesDb, 'stores')),
       loadHiddenStoreIds(),
-    ]).then(([formSnap, fcdaumStores, hiddenIds]) => {
+    ]).then(([formSnap, storeSnap, hiddenIds]) => {
       const fs = formSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as StoreForm))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setAllForms(fs);
       setStores(
-        fcdaumStores
-          .filter(s => s.storeStatus === 'O' && !hiddenIds.has(s.storeId))
-          .map(s => ({ ...mapFcdaumStore(s), importedAt: '' } as Store))
+        storeSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as Store))
+          .filter(s => !['폐점', 'C', 'close', 'closed'].includes(s.status || '') && !hiddenIds.has(s.id))
           .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
       );
       const first = fs.find(f => !f.isArchived);
