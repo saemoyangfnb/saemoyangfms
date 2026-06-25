@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-06-25 — Claude Code (3차)
+
+### 매장 폼관리 항목 미표시 버그 수정 + 가맹관리 다수 수정 (배포 완료)
+
+1. **매장 폼관리 항목 미표시 복구** (`StoreMindmapView.tsx`): B안(FC다움 API 전환) 후 `store.id`가 FC다움 `storeId`로 바뀌어 기존 `store_form_entries.storeId`(Excel 관리번호)와 매칭 전부 실패. Firestore `stores` 컬렉션 기반으로 롤백 + 폐점 필터 보강(`'폐점'|'C'|'close'|'closed'`)
+2. **QSC 전부 미확인 수정** (`storePriority.ts`): FC다움 작성중 상태는 `r.status === 'd'` → `(status).toLowerCase() !== 'r'`로 재수정 — 완료·검토 등 유효한 점검 기록도 인정
+3. **가맹관리 지도 제거** (`StoreOverviewMap.tsx` 삭제, `korea-provinces.json` 삭제): SVG 지도 + 214KB TopoJSON 로딩이 느림의 원인, 통계 카드로 대체
+4. **양도양수 매장 숨김** (`storeHidden.ts` 신설, `StoreMgmtView.tsx`): Firestore `store_settings/merged_ids`로 숨길 storeId 목록 관리. 관리자만 숨김/해제 가능
+5. **홈 위젯 로딩 속도 개선** (`HomePage.tsx`): QSC 조회 전 `storeStatus === 'O'` 필터로 운영 매장만 조회
+
+---
+
+## 2026-06-25 — Claude Code (2차)
+
+### 신규 매장 연동 버그 3종 수정 (배포 완료)
+
+1. **QSC 오늘 날짜 오표시 수정** (`storePriority.ts`): `buildStoreItems` 필터에 `r.status === 'd'` 추가 — FC다움이 신규 매장에 자동 생성하는 작성중(r) 초안 리포트가 완료된 점검으로 오분류되던 버그 수정
+2. **홈 위젯 매장 수 즉시 반영** (`HomePage.tsx`): localStorage 캐시 키 `v7→v8` 버전업 — 신규 매장 추가 후 최대 10분간 반영 안 되던 문제 해결 (하드코딩 아님, 캐시 문제였음)
+3. **매장 폼관리 FC다움 자동 연동** (`StoreMindmapView.tsx`): `getDocs(stores)` → `fetchAllStores()` 전환 — FC다움에 매장 추가 시 수동 임포트 없이 즉시 반영
+- 모두 `npm run build` 성공 확인 후 배포 완료
+
+---
+
+## 2026-06-25 — Claude Code
+
+### 캘린더 일정 저장 + 공지 읽음 처리 버그 수정 (배포 완료)
+
+- **캘린더**: `saveEvent`에 try-catch 없어서 Firestore 오류 시 아무 반응 없던 문제 수정. `employeeId: undefined` → Firestore 거부 버그는 조건부 스프레드 + `clean(JSON.parse/stringify)`으로 방어.
+- **공지 읽음**: `notices` write 규칙이 isAdmin 전용이라 일반 직원 `markRead`가 permission-denied로 조용히 실패. 규칙을 분리해 `isApprovedUser`는 `readBy` 필드만 update 허용. `markRead`에도 try-catch 추가.
+- firestore.rules 배포 완료 (Firebase Console, saemoyangfnb@gmail.com, default DB). 코드 커밋 c4eda83, push 완료.
+
+---
+
 ## 2026-06-17 — Claude Code
 
 ### QSC "미확인" 오분류 진짜 원인 규명 + 매장별 단건 조회로 수정
