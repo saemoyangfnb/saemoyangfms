@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-06-29 — Claude Code
+
+### FC다움 API "전사 하루 1회" 호출 제한 (FC다움 요청) — ⚠️ 미배포
+
+- **배경**: FC다움 측 "API 호출량 과다, 하루 1회만 호출" 요청. 주범은 홈 위젯·가맹관리가 화면 열 때마다 운영매장(약 84개) 1개당 1콜씩 QSC 전수 조회(`fetchQscReportsPerStore`) — 사용자·마운트마다 수십 콜.
+- **방식**: Firestore 공유 일일 스냅샷 도입. 신규 `src/fcdaumSnapshot.ts` — `fcdaum_cache/daily`(salesDb)에 매장+QSC 저장. `getDailyStoreData()`가 오늘자 스냅샷 있으면 FC다움 무호출 반환, 없으면 **트랜잭션 원자적 claim**(승자 1명만 스윕, building 5분 타임아웃 재선점, ready 폴링, stale 폴백)으로 전사 하루 1회만 스윕.
+- **경계(확정)**: 자동 스윕만 1회화. 매장 상세 QSC는 스냅샷에서 storeNo 필터(무호출). 헬프데스크·운영정보는 사람 클릭 시 라이브 유지. 새로고침 버튼=스냅샷 재읽기(`loadData(true)`, 무스윕).
+- **변경**: HomePage 위젯·StoreMgmtView `loadData`/`loadQscForStore`/새로고침 → 스냅샷 경유. firestore.rules에 `fcdaum_cache` 규칙 추가(+ 기존 미커밋 `store_meta`/`store_logs`도 포함 — pull로 들어온 코드가 실사용). 빌드 ✓.
+- **doc 1MB 한도 안전성(설계로 보장)**: 스냅샷 stores는 `storeUsers` 제거, QSC는 매장별 최근 20건 캡 → 최악도 수백 KB. `runSweep`가 write 직전 크기를 `console.info`로 찍음(프리뷰 실측 확인용). 캡 안 했으면 size 초과 시 write 실패→재스윕 무한루프로 회귀할 뻔.
+- **⚠️ 배포·검증**: ① firestore.rules의 salesDb(=default DB) 규칙에 `fcdaum_cache` 읽기/쓰기 허용 필요 — `firebase deploy --only firestore:rules`로 배포(salesDb에 Console 전역 규칙이 이미 있으면 자동 충족). ② 코드는 Vercel push. ③ `/api/fcdaum`은 서버리스라 vite dev에선 안 뜸 → **프리뷰 배포에서 앱 1회 열고 Firestore `fcdaum_cache/daily` 문서 생성·`status:ready`·크기 확인 후 프로덕션**.
+
+---
+
 ## 2026-06-25 — Claude Code (3차)
 
 ### 매장 폼관리 항목 미표시 버그 수정 + 가맹관리 다수 수정 (배포 완료)

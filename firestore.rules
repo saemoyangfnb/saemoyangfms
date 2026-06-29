@@ -172,6 +172,10 @@ service cloud.firestore {
     match /stores/{docId}                  { allow read, write: if isAuthenticated(); }
     // 매장 설정 (숨김 목록 등) — 읽기: 인증, 쓰기: 관리자
     match /store_settings/{docId}          { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /store_meta/{docId}              { allow read, write: if isAuthenticated(); }
+    match /store_logs/{docId}              { allow read, write: if isAuthenticated(); }
+    // FC다움 일일 스냅샷 (전사 하루 1회 호출 캐시) — 인증 사용자가 읽고 갱신
+    match /fcdaum_cache/{docId}            { allow read, write: if isAuthenticated(); }
     match /store_mentions/{docId}          { allow read, write: if isAuthenticated(); }
     match /franchise_schedules/{docId}     { allow read, write: if isAuthenticated(); }
     match /department_tasks/{docId}        { allow read, write: if isAuthenticated(); }

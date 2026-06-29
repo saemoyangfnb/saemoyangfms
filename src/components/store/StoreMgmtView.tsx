@@ -5,10 +5,10 @@ import {
 } from 'firebase/firestore';
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
-  fetchAllStores, fetchQscReports, fetchQscReportsPerStore, fetchHelpdeskSummary, fetchOperationInfos,
-  invalidateStoresCache,
+  fetchHelpdeskSummary, fetchOperationInfos,
   FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
+import { getDailyStoreData } from '../../fcdaumSnapshot';
 import { useToast } from '../Toast';
 import { useConfirm } from '../ConfirmModal';
 import {
@@ -230,23 +230,20 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   const [qscDetailLoading, setQscDetailLoading] = useState(false);
 
   // ── 초기 로드 ────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force = false) => {
     setStoresLoading(true);
     setStoresError(null);
     try {
-      const storeList = await fetchAllStores();
-      setStores(storeList);
-      // QSC는 운영중(O) 매장만 조회 — 준비중·폐점 포함 시 불필요한 API 요청 증가
-      const ids = storeList.filter(s => s.storeStatus === 'O').map(s => s.storeId);
-
-      // 핵심 데이터 — 기존 컬렉션이므로 실패 시 전체 에러 처리.
-      // QSC는 매장별 단건 조회(다건 조회의 ~10건 cap 누락 회피). 실패 storeId는 따로 추적.
-      const [qsc, formSnap] = await Promise.all([
-        fetchQscReportsPerStore(ids),
+      // FC다움 호출은 전사 하루 1회(getDailyStoreData) — 매장 목록·QSC 모두 공유 스냅샷에서.
+      // force=true(새로고침 버튼)는 메모리 캐시만 건너뛰고 스냅샷을 다시 읽을 뿐,
+      // 오늘자 스냅샷이 있으면 FC다움은 호출하지 않는다.
+      const [daily, formSnap] = await Promise.all([
+        getDailyStoreData(force),
         getDocs(collection(salesDb, 'store_forms')),
       ]);
-      setQscReports(qsc.reports);
-      setFailedStoreIds(new Set(qsc.failedStoreIds));
+      setStores(daily.stores);
+      setQscReports(daily.qscReports);
+      setFailedStoreIds(new Set(daily.failedStoreIds));
       setForms(
         formSnap.docs.map(d => ({ id: d.id, ...d.data() } as StoreForm))
           .filter(f => !f.isArchived)
@@ -314,18 +311,13 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     }
   };
 
-  // 선택된 매장의 QSC 보고서 — per-store fetch (bulk 500건 한도 및 storeId 매칭 오류 방지)
-  const loadQscForStore = async (storeId: string) => {
-    setQscDetailLoading(true);
-    try {
-      const reports = await fetchQscReports([storeId]);
-      if (activeStoreRef.current !== storeId) return;
-      setSelectedQscReports(reports.sort((a, b) => b.visitDate - a.visitDate));
-    } catch {
-      if (activeStoreRef.current === storeId) setSelectedQscReports([]);
-    } finally {
-      if (activeStoreRef.current === storeId) setQscDetailLoading(false);
-    }
+  // 선택된 매장의 QSC 보고서 — 일일 스냅샷(qscReports)에서 storeNo로 필터(FC다움 무호출).
+  // 스윕이 운영매장 전수 QSC를 이미 받아오므로 상세도 추가 호출 없이 서빙된다.
+  const loadQscForStore = (storeNo: number) => {
+    setQscDetailLoading(false); // 동기 서빙 — 로딩 스피너 불필요
+    setSelectedQscReports(
+      qscReports.filter(r => r.storeNo === storeNo).sort((a, b) => b.visitDate - a.visitDate),
+    );
   };
 
   const loadHelpdesk = async (storeId: string) => {
@@ -395,7 +387,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setIsLinked(false);          // 연동 여부 초기화
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
-    loadQscForStore(id);         // 매장별 QSC 개별 fetch
+    loadQscForStore(storeNo);    // 매장 QSC — 일일 스냅샷에서 필터(무호출)
   };
 
   // 매장 상세 → 현황 화면으로 복귀
@@ -516,7 +508,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
             <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
               <Building2 size={14} className="text-indigo-500" /> 매장 관리
             </h2>
-            <button onClick={() => { invalidateStoresCache(); loadData(); }} title="새로고침" className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded">
+            <button onClick={() => loadData(true)} title="새로고침 (오늘자 스냅샷 다시 읽기)" className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded">
               <RefreshCw size={13} />
             </button>
           </div>

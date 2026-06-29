@@ -10,7 +10,7 @@ import {
   Users, ChevronRight, Pin, Settings, FolderKanban,
   AlertCircle, CheckSquare, Building2,
 } from 'lucide-react';
-import { fetchAllStores, fetchQscReportsPerStore } from '../fcdaum';
+import { getDailyStoreData } from '../fcdaumSnapshot';
 import { loadHiddenStoreIds } from '../storeHidden';
 import { buildStoreItems, countByLevel, LEVEL_HEX, type StoreCounts } from './store/storePriority';
 import { PieChart, Pie, Cell } from 'recharts';
@@ -122,18 +122,15 @@ export function HomePage({
     const cached = (() => { try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch { return null; } })();
     if (cached && Date.now() - cached.ts < CACHE_TTL) { setInspectionCounts(cached.data); return; }
     setInspectionLoading(true);
-    // 가맹관리(StoreMgmtView)와 동일하게 매장별 단건 조회 → 집계 일치. 실패 storeId는
-    // '조회 실패'로 분류해 거짓 미확인을 방지(buildStoreItems에 failedStoreIds 전달).
-    Promise.all([fetchAllStores(), loadHiddenStoreIds()])
-      .then(([allStores, hiddenIds]) => {
-        // 운영중(O) + 숨김 제외만 QSC 조회 — 비운영 매장은 QSC 불필요
-        const stores = allStores.filter(s => s.storeStatus === 'O' && !hiddenIds.has(s.storeId));
-        return fetchQscReportsPerStore(stores.map(s => s.storeId))
-          .then(qsc => {
-            const data = countByLevel(buildStoreItems(stores, qsc.reports, new Set(qsc.failedStoreIds)));
-            setInspectionCounts(data);
-            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
-          });
+    // FC다움 호출은 전사 하루 1회(getDailyStoreData) — 나머지는 공유 스냅샷을 읽는다.
+    // 가맹관리(StoreMgmtView)와 같은 스냅샷·동일 기준(buildStoreItems)이라 집계가 일치한다.
+    Promise.all([getDailyStoreData(), loadHiddenStoreIds()])
+      .then(([daily, hiddenIds]) => {
+        // 운영중(O) + 숨김 제외만 집계 — 비운영 매장은 QSC 불필요
+        const stores = daily.stores.filter(s => s.storeStatus === 'O' && !hiddenIds.has(s.storeId));
+        const data = countByLevel(buildStoreItems(stores, daily.qscReports, new Set(daily.failedStoreIds)));
+        setInspectionCounts(data);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
       })
       .catch(() => {})
       .finally(() => setInspectionLoading(false));
