@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
-  fetchHelpdeskSummary, fetchOperationInfos, fetchQscReports,
+  fetchHelpdeskSummary, fetchOperationInfos,
   FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
 import { getDailyStoreData } from '../../fcdaumSnapshot';
@@ -320,20 +320,17 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 선택된 매장의 QSC 보고서 — 일일 스냅샷(qscReports)에서 storeNo로 필터(FC다움 무호출).
   // 스윕이 운영매장 전수 QSC를 이미 받아오므로 상세도 추가 호출 없이 서빙된다.
-  // 🔧 임시 진단 — 우리가 가진 식별자 vs 스냅샷 매칭 vs 매장코드 직접조회 결과를 한 줄로.
-  const runQscDebug = async (storeId: string, storeNo: number) => {
-    const byNo = qscReports.filter(r => r.storeNo === storeNo);
-    const byId = qscReports.filter(r => r.storeId === storeId);
-    setQscDebug(`storeId=${storeId}(${typeof storeId}) storeNo=${storeNo}(${typeof storeNo}) | 스냅샷매칭 storeNo:${byNo.length}건 storeId:${byId.length}건 | 라이브조회중…`);
-    try {
-      const reps = await fetchQscReports([storeId]);
-      const desc = reps.length
-        ? reps.slice(0, 5).map(r => `#${r.reportNo}(no:${r.storeNo}/id:${r.storeId})`).join(' ')
-        : '0건';
-      setQscDebug(`storeId=${storeId} storeNo=${storeNo}(${typeof storeNo}) | 스냅샷 storeNo:${byNo.length} storeId:${byId.length} | 라이브(${storeId}) ${reps.length}건: ${desc}`);
-    } catch (e) {
-      setQscDebug(`storeId=${storeId} storeNo=${storeNo} | 스냅샷 storeNo:${byNo.length} storeId:${byId.length} | 라이브조회 실패: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  // 🔧 임시 진단 — 매장 원본 데이터(API가 준 모든 필드)를 통째로 보여준다.
+  // storeId가 비었어도 매장코드(caqslbtr 등)가 다른 필드에 숨어있는지 확인용.
+  const runQscDebug = (storeNo: number) => {
+    const store = stores.find(s => s.storeNo === storeNo) as Record<string, unknown> | undefined;
+    if (!store) { setQscDebug(`storeNo=${storeNo}: store 객체 못 찾음`); return; }
+    const fields = Object.entries(store)
+      .filter(([k]) => k !== 'storeUsers') // 사용자 배열은 길어서 제외
+      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+      .join('  ');
+    const byNo = qscReports.filter(r => r.storeNo === storeNo).length;
+    setQscDebug(`[원본필드] ${fields}  ||  스냅샷 storeNo매칭:${byNo}건`);
   };
 
   const loadQscForStore = (storeId: string, storeNo: number) => {
@@ -416,7 +413,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
     loadQscForStore(id, storeNo); // 매장 QSC — 일일 스냅샷에서 필터(무호출)
-    if (currentUser.role === 'admin') { setQscDebug(''); runQscDebug(id, storeNo); } // 🔧 임시 진단
+    if (currentUser.role === 'admin') { setQscDebug(''); runQscDebug(storeNo); } // 🔧 임시 진단
   };
 
   // 매장 상세 → 현황 화면으로 복귀
