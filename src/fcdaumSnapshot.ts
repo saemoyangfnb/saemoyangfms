@@ -17,7 +17,7 @@
 import { doc, getDoc, runTransaction, setDoc } from 'firebase/firestore';
 import { salesDb } from './firebase';
 import {
-  fetchAllStores, fetchQscReportsPerStore, fetchQscReports,
+  fetchAllStores, fetchQscReportsPerStore,
   type FcdaumStore, type FcdaumQscReport,
 } from './fcdaum';
 
@@ -32,7 +32,7 @@ const POLL_MAX = 20; // 최대 ~30초
 
 // 스윕 로직 버전 — 이 값이 바뀌면 오늘자 스냅샷이라도 무효로 보고 재스윕한다.
 // (예: 전역 조회 병합 추가처럼 데이터 수집 방식이 바뀔 때 즉시 반영)
-const SNAP_VERSION = 2;
+const SNAP_VERSION = 3;
 
 export interface DailyStoreData {
   dateKey: string;
@@ -138,19 +138,14 @@ async function runSweep(key: string): Promise<DailyStoreData> {
   const ids = allStores.filter(s => s.storeStatus === 'O').map(s => s.storeId);
   // storeId(매장코드) 있는 매장은 단건 조회로 완전 수집.
   // ⚠️ 신규오픈 매장(storeSubStatus=GENERAL_NEW)은 store-and-user API가 storeId를 안 줘서
-  // 단건 조회가 불가 → 점검이 통째로 누락(미확인 오분류)됐다. 이를 보완하려고 전역 조회를
-  // 한 번 더 해서, storeId 없이도 리포트의 storeNo로 매칭되게 병합한다(buildStoreItems는
-  // storeNo 기준). 전역 호출 1회는 하루 1회 스윕 안에 포함되므로 호출량 영향 없음.
-  const [qsc, globalReports] = await Promise.all([
-    fetchQscReportsPerStore(ids),
-    fetchQscReports(undefined, 500).catch(() => [] as FcdaumQscReport[]),
-  ]);
-  const seen = new Set(qsc.reports.map(r => r.reportNo));
-  const mergedReports = [...qsc.reports, ...globalReports.filter(r => !seen.has(r.reportNo))];
+  // QSC 조회 자체가 불가 → 점검 누락(미확인). 전역 조회 병합으로 보완을 시도했으나,
+  // 전역 응답 cap(~최근 N건)으로 오래된 신규매장 리포트는 도달 불가 → 효과 없고 부하만 커서
+  // 제거. 근본 해결은 FC다움이 store-and-user 응답에 신규매장 storeId를 채워줘야 한다.
+  const qsc = await fetchQscReportsPerStore(ids);
 
   const stores = allStores.map(slimStore);
   const data: DailyStoreData = {
-    dateKey: key, stores, qscReports: capQscPerStore(mergedReports), failedStoreIds: qsc.failedStoreIds,
+    dateKey: key, stores, qscReports: capQscPerStore(qsc.reports), failedStoreIds: qsc.failedStoreIds,
   };
   const payload = { ...data, status: 'ready' as const, version: SNAP_VERSION, updatedAt: Date.now() };
   // 프리뷰/프로덕션에서 실제 doc 크기 확인용 — 1MB(약 1,048,576B)에 여유 있는지 점검.
