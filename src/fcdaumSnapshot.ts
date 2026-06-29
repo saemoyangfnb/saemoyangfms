@@ -32,7 +32,7 @@ const POLL_MAX = 20; // 최대 ~30초
 
 // 스윕 로직 버전 — 이 값이 바뀌면 오늘자 스냅샷이라도 무효로 보고 재스윕한다.
 // (예: 전역 조회 병합 추가처럼 데이터 수집 방식이 바뀔 때 즉시 반영)
-const SNAP_VERSION = 3;
+const SNAP_VERSION = 4; // 신규매장 고객사식별정보(storeId) 등록 반영 — 강제 재스윕
 
 export interface DailyStoreData {
   dateKey: string;
