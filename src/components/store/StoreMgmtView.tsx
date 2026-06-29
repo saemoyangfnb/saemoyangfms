@@ -313,10 +313,15 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 선택된 매장의 QSC 보고서 — 일일 스냅샷(qscReports)에서 storeNo로 필터(FC다움 무호출).
   // 스윕이 운영매장 전수 QSC를 이미 받아오므로 상세도 추가 호출 없이 서빙된다.
-  const loadQscForStore = (storeNo: number) => {
+  const loadQscForStore = (storeId: string, storeNo: number) => {
     setQscDetailLoading(false); // 동기 서빙 — 로딩 스피너 불필요
+    // storeNo(전역 고유, 정확) 우선 + storeId(어제까지의 직접 조회 경로) 둘 다 매칭해 스냅샷에서 서빙.
+    // 오늘 캐싱 전환이 storeNo 단독으로 바뀌며 일부 매장 상세가 비던 회귀를 복원.
+    // ⚠️ storeId 중복으로 인한 오매칭(남의 리포트 표시)은 식별자 통합 과제에서 별도 해결.
     setSelectedQscReports(
-      qscReports.filter(r => r.storeNo === storeNo).sort((a, b) => b.visitDate - a.visitDate),
+      qscReports
+        .filter(r => r.storeNo === storeNo || (!!storeId && r.storeId === storeId))
+        .sort((a, b) => b.visitDate - a.visitDate),
     );
   };
 
@@ -387,7 +392,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setIsLinked(false);          // 연동 여부 초기화
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
-    loadQscForStore(storeNo);    // 매장 QSC — 일일 스냅샷에서 필터(무호출)
+    loadQscForStore(id, storeNo); // 매장 QSC — 일일 스냅샷에서 필터(무호출)
   };
 
   // 매장 상세 → 현황 화면으로 복귀
