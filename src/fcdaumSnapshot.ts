@@ -17,7 +17,7 @@
 import { doc, getDoc, runTransaction, setDoc } from 'firebase/firestore';
 import { salesDb } from './firebase';
 import {
-  fetchAllStores, fetchQscReportsPerStore,
+  fetchAllStores, fetchQscReportsPerStore, fetchQscReports,
   type FcdaumStore, type FcdaumQscReport,
 } from './fcdaum';
 
@@ -29,6 +29,10 @@ const BUILD_TIMEOUT = 5 * 60 * 1000;
 // 최초 실행 동시접속 시 패자가 성급히 타임아웃→중복 스윕하는 일을 줄인다.
 const POLL_INTERVAL = 1500;
 const POLL_MAX = 20; // 최대 ~30초
+
+// 스윕 로직 버전 — 이 값이 바뀌면 오늘자 스냅샷이라도 무효로 보고 재스윕한다.
+// (예: 전역 조회 병합 추가처럼 데이터 수집 방식이 바뀔 때 즉시 반영)
+const SNAP_VERSION = 2;
 
 export interface DailyStoreData {
   dateKey: string;
@@ -74,11 +78,17 @@ function capQscPerStore(reports: FcdaumQscReport[]): FcdaumQscReport[] {
 interface SnapshotDoc {
   dateKey?: string;
   status?: 'building' | 'ready';
+  version?: number;
   claimedAt?: number;
   updatedAt?: number;
   stores?: FcdaumStore[];
   qscReports?: FcdaumQscReport[];
   failedStoreIds?: string[];
+}
+
+// 오늘자 + 완성 + 현재 스윕버전이어야 "그대로 써도 되는" 스냅샷
+function isUsable(d: SnapshotDoc, key: string): boolean {
+  return d.dateKey === key && d.status === 'ready' && d.version === SNAP_VERSION;
 }
 
 function extract(d: SnapshotDoc): DailyStoreData {
@@ -100,7 +110,7 @@ async function tryClaim(key: string): Promise<boolean> {
     return await runTransaction(salesDb, async tx => {
       const s = await tx.get(SNAP_REF);
       const d = (s.data() as SnapshotDoc) ?? {};
-      if (d.dateKey === key && d.status === 'ready') return false;
+      if (isUsable(d, key)) return false;
       const fresh = d.status === 'building' && !!d.claimedAt && Date.now() - d.claimedAt < BUILD_TIMEOUT;
       if (fresh) return false;
       tx.set(SNAP_REF, { dateKey: key, status: 'building', claimedAt: Date.now() }, { merge: true });
@@ -117,7 +127,7 @@ async function pollForReady(key: string): Promise<DailyStoreData | null> {
     await sleep(POLL_INTERVAL);
     const s = await getDoc(SNAP_REF);
     const d = (s.data() as SnapshotDoc) ?? {};
-    if (d.dateKey === key && d.status === 'ready') return extract(d);
+    if (isUsable(d, key)) return extract(d);
   }
   return null;
 }
@@ -126,13 +136,23 @@ async function pollForReady(key: string): Promise<DailyStoreData | null> {
 async function runSweep(key: string): Promise<DailyStoreData> {
   const allStores = await fetchAllStores();
   const ids = allStores.filter(s => s.storeStatus === 'O').map(s => s.storeId);
-  const qsc = await fetchQscReportsPerStore(ids);
+  // storeId(매장코드) 있는 매장은 단건 조회로 완전 수집.
+  // ⚠️ 신규오픈 매장(storeSubStatus=GENERAL_NEW)은 store-and-user API가 storeId를 안 줘서
+  // 단건 조회가 불가 → 점검이 통째로 누락(미확인 오분류)됐다. 이를 보완하려고 전역 조회를
+  // 한 번 더 해서, storeId 없이도 리포트의 storeNo로 매칭되게 병합한다(buildStoreItems는
+  // storeNo 기준). 전역 호출 1회는 하루 1회 스윕 안에 포함되므로 호출량 영향 없음.
+  const [qsc, globalReports] = await Promise.all([
+    fetchQscReportsPerStore(ids),
+    fetchQscReports(undefined, 500).catch(() => [] as FcdaumQscReport[]),
+  ]);
+  const seen = new Set(qsc.reports.map(r => r.reportNo));
+  const mergedReports = [...qsc.reports, ...globalReports.filter(r => !seen.has(r.reportNo))];
 
   const stores = allStores.map(slimStore);
   const data: DailyStoreData = {
-    dateKey: key, stores, qscReports: capQscPerStore(qsc.reports), failedStoreIds: qsc.failedStoreIds,
+    dateKey: key, stores, qscReports: capQscPerStore(mergedReports), failedStoreIds: qsc.failedStoreIds,
   };
-  const payload = { ...data, status: 'ready' as const, updatedAt: Date.now() };
+  const payload = { ...data, status: 'ready' as const, version: SNAP_VERSION, updatedAt: Date.now() };
   // 프리뷰/프로덕션에서 실제 doc 크기 확인용 — 1MB(약 1,048,576B)에 여유 있는지 점검.
   try {
     const bytes = JSON.stringify(payload).length;
@@ -163,8 +183,8 @@ export async function getDailyStoreData(force = false): Promise<DailyStoreData> 
       const snap = await getDoc(SNAP_REF);
       const cur = (snap.data() as SnapshotDoc) ?? {};
 
-      // 1) 오늘자 완성본 — FC다움 무호출
-      if (cur.dateKey === key && cur.status === 'ready') {
+      // 1) 오늘자 완성본(현재 스윕버전) — FC다움 무호출
+      if (isUsable(cur, key)) {
         const data = extract(cur);
         memo = { data, at: Date.now() };
         return data;
