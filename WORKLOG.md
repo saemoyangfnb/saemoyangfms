@@ -11,8 +11,9 @@
 
 - **복원**: 1차에서 매장 상세 QSC를 storeNo 단독 필터로 바꾸며 일부 매장(창원명곡·광명철산 등) 상세가 비던 회귀 → `loadQscForStore`를 **storeNo OR storeId** 둘 다 매칭(스냅샷, 무호출)으로 복원. 빌드 ✓.
 - **버그 1 진단(QSC 오매칭)**: FC다움 `storeId`가 전역 고유가 아님(중복). `qsc/report`는 storeIds로만 질의 → 중복 storeId 질의 시 남의 매장 리포트가 섞여옴(어제 "일치 안 함"). storeNo로 거르면 정작 자기 리포트는 storeNo 어긋남/미수집으로 빔. **API 구조상 storeId 중복이 안 풀리면 in-app 완전 해결 불가** → FC다움에 ①storeNo 기반 QSC 질의 가능 여부 ②중복 storeId 정리 문의 필요.
-- **버그 2 진단(폼 내용 미연동)**: 매장폼관리(StoreMindmapView)는 엔트리를 `store_form_entries.storeId = Firestore stores doc id = 관리번호`(types.ts:450)로 저장. 가맹관리(StoreMgmtView)는 `FC다움 storeId`로 조회 → **관리번호 ≠ storeId** 매칭 0건. FC다움 store ↔ 엑셀 store 간 깔끔한 조인키 없음(매장코드·사업자번호·storeNo 어느 것도 양쪽에 공통 부재). **식별자 통합(마이그레이션) 필요 — 백업·승인 후 진행**.
-- **다음**: 두 화면 식별자 통합 방향 사용자 결정 대기. 미배포(복원분 push 필요).
+- **버그 2 진단·수정(폼 내용 미연동)**: 매장폼관리(StoreMindmapView)는 엔트리를 `store_form_entries.storeId = Firestore stores doc id = 관리번호`로 저장. 가맹관리는 `FC다움 storeId`(매장코드)로 조회 → 매칭 0건. **사용자 실데이터 확인(광명철산점): FC다움 매장 "관리번호" = storeNo = 107471, 엑셀 관리번호와 동일**. 즉 조인키 = storeNo. → `loadFormEntries`를 `where('storeId','in',[storeId, String(storeNo)])` **두 키 union 조회**로 수정(읽기만, 추가적·무위험). 빌드 ✓. (편집 저장 경로는 미변경 — 폼은 주로 폼관리에서 입력)
+- **버그 1 잔존(QSC)**: 6/11 리포트(reportNo 777614, 작성완료·서명완료) 정상 점검인데 미확인 → 우리 시스템이 그 리포트를 **미수신**. QSC는 storeId(매장코드 caqslbtr)로만 조회되는데 그 조회가 777614를 안 줌. **FC다움이 storeNo 조회 지원/리포트-매장코드 정합성 정리해야 해결** (사용자가 FC다움에 문의 예정).
+- **다음**: 미배포 — QSC 상세 복원은 push됨(538758b). 폼 union 수정은 미push. FC다움 답 대기.
 
 ---
 

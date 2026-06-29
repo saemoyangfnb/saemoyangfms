@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { User, StoreForm, StoreFormEntry } from '../../types';
 import {
-  fetchHelpdeskSummary, fetchOperationInfos,
+  fetchHelpdeskSummary, fetchOperationInfos, fetchQscReports,
   FcdaumStore, FcdaumQscReport, FcdaumHelpdeskSummary, FcdaumOperationInfo,
 } from '../../fcdaum';
 import { getDailyStoreData } from '../../fcdaumSnapshot';
@@ -228,6 +228,8 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   // 매장별 QSC 상세 (per-store fetch — bulk 매칭 오류 방지)
   const [selectedQscReports, setSelectedQscReports] = useState<FcdaumQscReport[]>([]);
   const [qscDetailLoading, setQscDetailLoading] = useState(false);
+  // 🔧 임시 진단 (관리자 전용) — QSC 미수신 원인 규명용. 확인 후 제거 예정.
+  const [qscDebug, setQscDebug] = useState<string>('');
 
   // ── 초기 로드 ────────────────────────────────────────────────
   const loadData = useCallback(async (force = false) => {
@@ -273,13 +275,18 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   // ── 매장 선택 시 탭별 데이터 로드 ──────────────────────────
   useEffect(() => {
     if (!selectedId) return;
-    loadFormEntries(selectedId);
+    loadFormEntries(selectedId, selectedStoreNo);
     loadLogs(selectedId);
-  }, [selectedId]);
+  }, [selectedId, selectedStoreNo]);
 
-  const loadFormEntries = async (storeId: string) => {
+  // 폼 내용은 매장폼관리(마인드맵)에서 '관리번호'(=FC다움 storeNo) 키로 저장되는데,
+  // 가맹관리는 FC다움 storeId(매장코드)로 조회해 와서 매칭 0건이었다(버그). 두 키
+  // (storeId=매장코드 / String(storeNo)=관리번호) 모두로 조회해 폼 내용을 연결한다.
+  const loadFormEntries = async (storeId: string, storeNo?: number | null) => {
     try {
-      const snap = await getDocs(query(collection(salesDb, 'store_form_entries'), where('storeId', '==', storeId)));
+      const keys = [storeId, storeNo != null ? String(storeNo) : '']
+        .filter((v, i, arr) => v && arr.indexOf(v) === i);
+      const snap = await getDocs(query(collection(salesDb, 'store_form_entries'), where('storeId', 'in', keys)));
       if (activeStoreRef.current !== storeId) return; // 스토어 전환 후 도착한 응답 무시
       setFormEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreFormEntry)));
     } catch {}
@@ -313,6 +320,22 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 선택된 매장의 QSC 보고서 — 일일 스냅샷(qscReports)에서 storeNo로 필터(FC다움 무호출).
   // 스윕이 운영매장 전수 QSC를 이미 받아오므로 상세도 추가 호출 없이 서빙된다.
+  // 🔧 임시 진단 — 우리가 가진 식별자 vs 스냅샷 매칭 vs 매장코드 직접조회 결과를 한 줄로.
+  const runQscDebug = async (storeId: string, storeNo: number) => {
+    const byNo = qscReports.filter(r => r.storeNo === storeNo);
+    const byId = qscReports.filter(r => r.storeId === storeId);
+    setQscDebug(`storeId=${storeId}(${typeof storeId}) storeNo=${storeNo}(${typeof storeNo}) | 스냅샷매칭 storeNo:${byNo.length}건 storeId:${byId.length}건 | 라이브조회중…`);
+    try {
+      const reps = await fetchQscReports([storeId]);
+      const desc = reps.length
+        ? reps.slice(0, 5).map(r => `#${r.reportNo}(no:${r.storeNo}/id:${r.storeId})`).join(' ')
+        : '0건';
+      setQscDebug(`storeId=${storeId} storeNo=${storeNo}(${typeof storeNo}) | 스냅샷 storeNo:${byNo.length} storeId:${byId.length} | 라이브(${storeId}) ${reps.length}건: ${desc}`);
+    } catch (e) {
+      setQscDebug(`storeId=${storeId} storeNo=${storeNo} | 스냅샷 storeNo:${byNo.length} storeId:${byId.length} | 라이브조회 실패: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const loadQscForStore = (storeId: string, storeNo: number) => {
     setQscDetailLoading(false); // 동기 서빙 — 로딩 스피너 불필요
     // storeNo(전역 고유, 정확) 우선 + storeId(어제까지의 직접 조회 경로) 둘 다 매칭해 스냅샷에서 서빙.
@@ -393,6 +416,7 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
     loadQscForStore(id, storeNo); // 매장 QSC — 일일 스냅샷에서 필터(무호출)
+    if (currentUser.role === 'admin') { setQscDebug(''); runQscDebug(id, storeNo); } // 🔧 임시 진단
   };
 
   // 매장 상세 → 현황 화면으로 복귀
@@ -700,6 +724,13 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
             {/* 탭 콘텐츠 */}
             <div className="flex-1 overflow-y-auto">
+
+              {/* 🔧 임시 진단 (관리자 전용) — QSC 미수신 원인 규명용 */}
+              {currentUser.role === 'admin' && qscDebug && (
+                <div className="m-3 p-2 rounded bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-[10px] font-mono leading-snug text-amber-900 dark:text-amber-200 break-all">
+                  🔧 {qscDebug}
+                </div>
+              )}
 
               {/* 기본정보 */}
               {tab === 'info' && (
