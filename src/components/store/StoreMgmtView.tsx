@@ -47,6 +47,7 @@ const STORE_STATUS_KO: Record<string, string> = {
   p: '준비중', ready: '준비중', pending: '준비중',
   s: '정지', stop: '정지', suspended: '정지',
   h: '휴점', hold: '휴점',
+  general_new: '일반신규', transfer_new: '양수신규',
 };
 const HELPDESK_STATUS_KO: Record<string, string> = {
   unconfirmed: '미확인', unread: '미확인', new: '신규',
@@ -228,8 +229,6 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
   // 매장별 QSC 상세 (per-store fetch — bulk 매칭 오류 방지)
   const [selectedQscReports, setSelectedQscReports] = useState<FcdaumQscReport[]>([]);
   const [qscDetailLoading, setQscDetailLoading] = useState(false);
-  // 🔧 임시 진단 (관리자 전용) — QSC 미수신 원인 규명용. 확인 후 제거 예정.
-  const [qscDebug, setQscDebug] = useState<string>('');
 
   // ── 초기 로드 ────────────────────────────────────────────────
   const loadData = useCallback(async (force = false) => {
@@ -320,19 +319,6 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
   // 선택된 매장의 QSC 보고서 — 일일 스냅샷(qscReports)에서 storeNo로 필터(FC다움 무호출).
   // 스윕이 운영매장 전수 QSC를 이미 받아오므로 상세도 추가 호출 없이 서빙된다.
-  // 🔧 임시 진단 — 매장 원본 데이터(API가 준 모든 필드)를 통째로 보여준다.
-  // storeId가 비었어도 매장코드(caqslbtr 등)가 다른 필드에 숨어있는지 확인용.
-  const runQscDebug = (storeNo: number) => {
-    const store = stores.find(s => s.storeNo === storeNo) as Record<string, unknown> | undefined;
-    if (!store) { setQscDebug(`storeNo=${storeNo}: store 객체 못 찾음`); return; }
-    const fields = Object.entries(store)
-      .filter(([k]) => k !== 'storeUsers') // 사용자 배열은 길어서 제외
-      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-      .join('  ');
-    const byNo = qscReports.filter(r => r.storeNo === storeNo).length;
-    setQscDebug(`[원본필드] ${fields}  ||  스냅샷 storeNo매칭:${byNo}건`);
-  };
-
   const loadQscForStore = (storeId: string, storeNo: number) => {
     setQscDetailLoading(false); // 동기 서빙 — 로딩 스피너 불필요
     // storeNo(전역 고유, 정확) 우선 + storeId(어제까지의 직접 조회 경로) 둘 다 매칭해 스냅샷에서 서빙.
@@ -413,7 +399,6 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
     setSelectedQscReports([]);  // 이전 매장 QSC 즉시 클리어
     checkLinked(id);             // 매장별 연동 여부 비동기 확인
     loadQscForStore(id, storeNo); // 매장 QSC — 일일 스냅샷에서 필터(무호출)
-    if (currentUser.role === 'admin') { setQscDebug(''); runQscDebug(storeNo); } // 🔧 임시 진단
   };
 
   // 매장 상세 → 현황 화면으로 복귀
@@ -721,13 +706,6 @@ export function StoreMgmtView({ currentUser }: { currentUser: User }) {
 
             {/* 탭 콘텐츠 */}
             <div className="flex-1 overflow-y-auto">
-
-              {/* 🔧 임시 진단 (관리자 전용) — QSC 미수신 원인 규명용 */}
-              {currentUser.role === 'admin' && qscDebug && (
-                <div className="m-3 p-2 rounded bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-[10px] font-mono leading-snug text-amber-900 dark:text-amber-200 break-all">
-                  🔧 {qscDebug}
-                </div>
-              )}
 
               {/* 기본정보 */}
               {tab === 'info' && (
