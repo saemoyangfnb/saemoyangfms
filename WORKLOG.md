@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-06-30 — Claude Code
+
+### 폼관리 인쇄 레이아웃 통일
+
+- **문제**: 매장 폼관리(StoreMindmapView) 인쇄 시 권역마다 표 열 너비가 제각각이라 읽기 불편. 원인 = 각 권역이 독립 `<table>`인데 항목(form.fields) 열에 고정 너비가 없어 권역별 내용 길이에 따라 자동 폭 조정됨.
+- **수정**: `PrintView` 표를 `table-fixed` + `<colgroup>`(매장명 9rem / 항목열 균등분할 / 완료 3rem / 완료일 5rem / 담당자 4.5rem)로 변경 → 모든 권역 표 열 너비 동일. 셀에 `align-top break-words whitespace-pre-wrap`로 긴 내용 줄바꿈 처리.
+- 빌드 ✓.
+
+---
+
 ## 2026-06-29 — Claude Code (3차)
 
 ### 신규매장 QSC 미수신 해결(데이터) + 진단 제거 + 계약상태 번역

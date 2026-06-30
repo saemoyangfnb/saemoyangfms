@@ -476,16 +476,25 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
                 <h2 className="text-sm font-black">{region}</h2>
                 <span className="text-xs text-stone-500">{regionDone}/{storeList.length} 완료</span>
               </div>
-              <table className="w-full text-xs border-collapse">
+              {/* table-fixed + colgroup: 모든 권역 표의 열 너비를 동일하게 고정해 레이아웃 통일.
+                  항목(form.fields) 열은 남는 너비를 균등 분할 → 권역 간 정렬 일치. */}
+              <table className="w-full text-xs border-collapse table-fixed">
+                <colgroup>
+                  <col style={{ width: '9rem' }} />
+                  {form.fields.map(f => <col key={f.id} />)}
+                  <col style={{ width: '3rem' }} />
+                  <col style={{ width: '5rem' }} />
+                  <col style={{ width: '4.5rem' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-stone-100">
-                    <th className="border border-stone-300 px-2 py-1 text-left font-bold w-36">매장명</th>
+                    <th className="border border-stone-300 px-2 py-1 text-left font-bold align-top">매장명</th>
                     {form.fields.map(f => (
-                      <th key={f.id} className="border border-stone-300 px-2 py-1 text-left font-bold">{f.label}</th>
+                      <th key={f.id} className="border border-stone-300 px-2 py-1 text-left font-bold align-top break-words">{f.label}</th>
                     ))}
-                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-12">완료</th>
-                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-20">완료일</th>
-                    <th className="border border-stone-300 px-2 py-1 text-center font-bold w-16">담당자</th>
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold align-top">완료</th>
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold align-top">완료일</th>
+                    <th className="border border-stone-300 px-2 py-1 text-center font-bold align-top">담당자</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -493,15 +502,15 @@ function PrintView({ form, regionGroups, entryMap, onClose }: {
                     const entry = entryMap.get(store.id);
                     return (
                       <tr key={store.id} className={entry?.isDone ? 'bg-emerald-50' : ''}>
-                        <td className="border border-stone-200 px-2 py-1 font-medium">{store.name}</td>
+                        <td className="border border-stone-200 px-2 py-1 font-medium align-top break-words">{store.name}</td>
                         {form.fields.map(f => (
-                          <td key={f.id} className="border border-stone-200 px-2 py-1">
+                          <td key={f.id} className="border border-stone-200 px-2 py-1 align-top break-words whitespace-pre-wrap">
                             {entry ? (f.type === 'checkbox' ? (entry.data[f.id] ? '✓' : '') : String(entry.data[f.id] ?? '')) : ''}
                           </td>
                         ))}
-                        <td className="border border-stone-200 px-2 py-1 text-center">{entry?.isDone ? '✓' : ''}</td>
-                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">{entry?.completedAt?.slice(0, 10) ?? ''}</td>
-                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px]">{entry?.updatedBy ?? ''}</td>
+                        <td className="border border-stone-200 px-2 py-1 text-center align-top">{entry?.isDone ? '✓' : ''}</td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px] align-top">{entry?.completedAt?.slice(0, 10) ?? ''}</td>
+                        <td className="border border-stone-200 px-2 py-1 text-center text-[10px] align-top break-words">{entry?.updatedBy ?? ''}</td>
                       </tr>
                     );
                   })}
