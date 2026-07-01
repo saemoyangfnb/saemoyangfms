@@ -7,7 +7,10 @@
 
 ## 2026-07-01 — Claude Code
 
-### FC다움 QSC 80콜 → 브랜드 1회 (phase 1, 배포 진행) + 서버 크론(phase 2, 보류)
+### FC다움 QSC 80콜 → 브랜드 1회 (phase 1, ✅배포 완료) + 서버 크론(phase 2, 보류)
+
+> **배포 확인(2026-07-01)**: 커밋 `6622ba5` saemoyangfms/main 푸시 → **saemoyangfms.vercel.app 자동 배포 Ready**(사장님 대시보드 확인). git-integration 정상. ⚠️ 이 PC의 `.vercel` 링크는 **엉뚱한 옛 프로젝트(dalbitgo-calculat/prj_IxtI)**를 가리켜, MCP로 배포 조회 시 "미배포"로 오판됨 — 실제 프로덕션은 saemoyangfms.vercel.app(MCP 조회 불가 계정). 배포 확인은 대시보드 또는 `curl saemoyangfms.vercel.app | grep index-*.js` 번들 해시로 할 것. [[project_deploy_topology_vercel]]
+
 
 - **배경**: FC다움 개발팀 ①"매장 1개씩 총 80회 반복 호출 → 동일값 반복이라 외부공격 의심. storeIds 없이 1회 호출하면 브랜드 전체가 온다" ②"실시간 연동 금지, 별도 배치 스케쥴러로 주기 동기화하라".
 - **✅ phase 1 (배포함/예정)**: `fetchQscReportsAll()`(storeIds 없이 조회, 서버 페이지당 cap 대비 `page`+`reportNo` 중복제거, 새 리포트 0건 시 종료) 신설. `runSweep`을 매장별 단건(약 84콜) → 1~수 콜로 전환. `failedStoreIds=[]`. `SNAP_VERSION` 4→5 강제 재스윕. 부수효과: storeId 없던 신규매장 리포트도 storeNo로 잡힘. **스냅샷 갱신은 기존처럼 브라우저(하루 1회 claim 스윕) 유지 — 호출 방식만 80→1**. 빌드 ✓. `fetchQscReportsPerStore`는 검증 대조용으로 보존.
