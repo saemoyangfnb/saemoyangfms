@@ -17,7 +17,7 @@
 import { doc, getDoc, runTransaction, setDoc } from 'firebase/firestore';
 import { salesDb } from './firebase';
 import {
-  fetchAllStores, fetchQscReportsPerStore,
+  fetchAllStores, fetchQscReportsAll,
   type FcdaumStore, type FcdaumQscReport,
 } from './fcdaum';
 
@@ -32,7 +32,7 @@ const POLL_MAX = 20; // 최대 ~30초
 
 // 스윕 로직 버전 — 이 값이 바뀌면 오늘자 스냅샷이라도 무효로 보고 재스윕한다.
 // (예: 전역 조회 병합 추가처럼 데이터 수집 방식이 바뀔 때 즉시 반영)
-const SNAP_VERSION = 4; // 신규매장 고객사식별정보(storeId) 등록 반영 — 강제 재스윕
+const SNAP_VERSION = 5; // QSC를 storeIds 없이 브랜드 1회(fetchQscReportsAll)로 전환 — 강제 재스윕
 
 export interface DailyStoreData {
   dateKey: string;
@@ -135,17 +135,16 @@ async function pollForReady(key: string): Promise<DailyStoreData | null> {
 // 실제 FC다움 전수 스윕 1회 + 스냅샷 기록
 async function runSweep(key: string): Promise<DailyStoreData> {
   const allStores = await fetchAllStores();
-  const ids = allStores.filter(s => s.storeStatus === 'O').map(s => s.storeId);
-  // storeId(매장코드) 있는 매장은 단건 조회로 완전 수집.
-  // ⚠️ 신규오픈 매장(storeSubStatus=GENERAL_NEW)은 store-and-user API가 storeId를 안 줘서
-  // QSC 조회 자체가 불가 → 점검 누락(미확인). 전역 조회 병합으로 보완을 시도했으나,
-  // 전역 응답 cap(~최근 N건)으로 오래된 신규매장 리포트는 도달 불가 → 효과 없고 부하만 커서
-  // 제거. 근본 해결은 FC다움이 store-and-user 응답에 신규매장 storeId를 채워줘야 한다.
-  const qsc = await fetchQscReportsPerStore(ids);
+  // FC다움 권고(2026-07): 품질관리 리포트는 storeIds 없이 1회(필요 시 페이징) 조회로
+  // 브랜드 전체를 받는다. 과거 매장별 단건 전수 조회(약 84콜/스윕)는 "동일 호출 반복 →
+  // 공격 의심"을 유발해 폐기. 부수 효과로, storeId 없는 신규오픈 매장의 리포트도 storeNo로
+  // 함께 잡힌다(buildStoreItems가 storeNo 기준이므로 매칭됨).
+  const reports = await fetchQscReportsAll();
 
   const stores = allStores.map(slimStore);
   const data: DailyStoreData = {
-    dateKey: key, stores, qscReports: capQscPerStore(qsc.reports), failedStoreIds: qsc.failedStoreIds,
+    // 단일 조회라 매장별 개별 실패 개념이 없다 → failedStoreIds는 빈 배열.
+    dateKey: key, stores, qscReports: capQscPerStore(reports), failedStoreIds: [],
   };
   const payload = { ...data, status: 'ready' as const, version: SNAP_VERSION, updatedAt: Date.now() };
   // 프리뷰/프로덕션에서 실제 doc 크기 확인용 — 1MB(약 1,048,576B)에 여유 있는지 점검.

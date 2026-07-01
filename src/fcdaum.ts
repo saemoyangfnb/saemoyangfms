@@ -172,6 +172,48 @@ export async function fetchQscReports(storeIds?: string[], pageSize = 50): Promi
   }));
 }
 
+// ── 브랜드 전체 1회 조회 (FC다움 권고, 2026-07) ────────────────────────────────
+// FC다움 개발팀 안내: 품질관리 리포트 목록 API는 storeIds를 "입력하지 않고" 1회 호출하면
+// 브랜드 내 전체 매장 리포트를 한 번에 받는다. 매장별 단건 전수 조회(약 84콜/스윕)는
+// "동일 호출을 계속 반복 → 외부 공격 의심"을 유발하므로 폐기하고 이 경로로 전환한다.
+//
+// 안전 설계: storeIds 없이 조회하되, 혹시 서버가 페이지당 응답 건수를 제한할 경우를 대비해
+// page를 1씩 올리며 reportNo로 중복 제거한다. 새 페이지가 "새 리포트를 0건 추가"하면 종료 —
+//   · 페이징 지원  → 마지막 페이지 다음이 빈 페이지가 되어 전부 수집
+//   · 페이징 미지원 → 매 요청이 같은 결과를 반환 → 2번째 요청에서 added=0 → 안전하게 수렴
+// 따라서 실제 호출은 1~수 콜에 그친다(브랜드 리포트 총량에 비례).
+// ⚠️ page 파라미터명은 FC다움 문서로 확정하지 못했다. 다른 이름이면 첫 페이지 결과만 반복되어
+//    2콜로 수렴하되 서버 cap 밖의 오래된 리포트는 누락될 수 있다 → 프리뷰 배포에서 매장별
+//    최신 리포트 커버리지를 반드시 검증할 것(WORKLOG 참조).
+const QSC_ALL_PAGE_SIZE = 500;
+const QSC_ALL_MAX_PAGES = 30; // 무한 루프 방지 안전장치
+
+export async function fetchQscReportsAll(): Promise<FcdaumQscReport[]> {
+  const seen = new Set<number>();
+  const all: FcdaumQscReport[] = [];
+  for (let page = 1; page <= QSC_ALL_MAX_PAGES; page++) {
+    const data = await apiFetch('qsc/report', {
+      pageSize: String(QSC_ALL_PAGE_SIZE),
+      page: String(page),
+    });
+    const batch: FcdaumQscReport[] = (data.qscReports ?? []).map((r: FcdaumQscReport) => ({
+      ...r,
+      visitDate: toMs(r.visitDate),
+      regDate:   toMs(r.regDate),
+    }));
+    if (batch.length === 0) break;
+    let added = 0;
+    for (const r of batch) {
+      if (!seen.has(r.reportNo)) { seen.add(r.reportNo); all.push(r); added++; }
+    }
+    // added===0 → 빈 페이지이거나(끝) 페이징 미지원으로 같은 결과 반복 → 종료.
+    // batch.length<pageSize로 판단하지 않는다: 서버가 pageSize를 요청값보다 작게 cap하면
+    // 첫 페이지에서 조기 종료되어 뒤 페이지를 통째로 놓칠 수 있기 때문.
+    if (added === 0) break;
+  }
+  return all;
+}
+
 export interface QscPerStoreResult {
   reports: FcdaumQscReport[];
   failedStoreIds: string[]; // 재시도 후에도 조회 실패한 storeId — 호출측에서 '미확인'과 구분
@@ -181,6 +223,9 @@ export interface QscPerStoreResult {
 // 유일한 신뢰 경로. 동시성을 제한(기본 8)해 프록시 부하·레이트리밋을 줄이고, 각 매장은
 // 1회 재시도한다. 실패한 storeId는 따로 모아 반환 — 실패를 '리포트 없음(미확인)'으로
 // 오분류하지 않게 하는 것이 이 함수의 핵심.
+// ⚠️ 2026-07: 스윕 경로는 fetchQscReportsAll(storeIds 없이 1회)로 전환했다. 이 함수는
+//    프리뷰 배포에서 전체조회 커버리지를 대조 검증할 때의 기준값·폴백으로 남겨둔다.
+//    검증 완료 후 다른 참조가 없으면 삭제해도 된다.
 export async function fetchQscReportsPerStore(
   storeIds: string[], concurrency = 8,
 ): Promise<QscPerStoreResult> {

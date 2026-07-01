@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-07-01 — Claude Code
+
+### FC다움 QSC 80콜 → 브랜드 1회 (phase 1, 배포 진행) + 서버 크론(phase 2, 보류)
+
+- **배경**: FC다움 개발팀 ①"매장 1개씩 총 80회 반복 호출 → 동일값 반복이라 외부공격 의심. storeIds 없이 1회 호출하면 브랜드 전체가 온다" ②"실시간 연동 금지, 별도 배치 스케쥴러로 주기 동기화하라".
+- **✅ phase 1 (배포함/예정)**: `fetchQscReportsAll()`(storeIds 없이 조회, 서버 페이지당 cap 대비 `page`+`reportNo` 중복제거, 새 리포트 0건 시 종료) 신설. `runSweep`을 매장별 단건(약 84콜) → 1~수 콜로 전환. `failedStoreIds=[]`. `SNAP_VERSION` 4→5 강제 재스윕. 부수효과: storeId 없던 신규매장 리포트도 storeNo로 잡힘. **스냅샷 갱신은 기존처럼 브라우저(하루 1회 claim 스윕) 유지 — 호출 방식만 80→1**. 빌드 ✓. `fetchQscReportsPerStore`는 검증 대조용으로 보존.
+- **⏸ phase 2 (보류 — 브랜치에 저장)**: 브라우저 대신 **서버 크론**이 하루 1회 조회·기록하는 완전판. 코드 완성됨, **브랜치 `feature/fcdaum-cron` (commit 7409603)** 에 보관. 재개 시 그 브랜치 사용.
+  - 포함: `api/_fcdaumCore.js`, `api/fcdaum-sync.js`(크론 핸들러), `vercel.json`(crons 15:00 UTC=00:00 KST), `firebase-admin` 의존성, `fcdaumSnapshot.ts` 읽기전용+최신스냅샷 서빙, KST dateKey.
+  - **재개 전 게이트**: (1) FC다움에 "no-storeIds 1회로 전체 오는지 / 페이징 파라미터명(`page`?)" 확인. (2) 프리뷰에서 no-storeIds 결과가 운영매장별 최신 리포트를 전부 커버하는지 per-store와 대조(통과 전 프로덕션 크론 금지 — 캡 데이터 매일 기록 위험). (3) **사용자 조치**: Firebase 서비스계정 키 발급 → Vercel env `FIREBASE_SERVICE_ACCOUNT` + `CRON_SECRET` 설정, Vercel 플랜 크론 확인, 배포 후 대시보드에서 크론 1회 수동 실행해 시드.
+  - phase 2 적용 시 phase 1의 브라우저 스윕은 부트스트랩(스냅샷 전무 시 1회)으로 격하됨.
+
+---
+
 ## 2026-06-30 — Claude Code
 
 ### 폼관리 인쇄 레이아웃 통일
