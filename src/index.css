@@ -63,6 +63,17 @@
     print-color-adjust: exact;
   }
 
+  /* R&D 관리대장 인쇄 */
+  #rnd-print-area, #rnd-print-area * { visibility: visible; }
+  #rnd-print-area {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    overflow: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   /* 마인드맵 */
   #_mm_print_wrap_, #_mm_print_wrap_ * { visibility: visible; }
   #_mm_print_wrap_ {

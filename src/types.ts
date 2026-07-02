@@ -938,6 +938,70 @@ export interface FactoryDailyRecord {
 }
 
 // ==========================================
+// R&D 관리대장 (salesDb: rnd_items / rnd_daily / rnd_weekly / rnd_monthly)
+// ==========================================
+export type RndCategory = '소스' | '반찬' | '양념/베이스' | '기타';
+export type RndPriority = '상' | '중' | '하';
+export type RndStatus = '진행중' | '보류' | '완료' | '중단';
+
+export interface RndItem {
+  id: string;
+  name: string;
+  category: RndCategory;
+  assignee?: string;
+  priority: RndPriority;
+  startDate?: string;        // YYYY-MM-DD
+  targetDate?: string;       // YYYY-MM-DD → D-Day 자동 계산
+  stage: number;             // 1~6 (기획→매뉴얼화/출시) → 진행률 자동 계산
+  status: RndStatus;
+  thisWeekNote?: string;     // 금주 진행 내용
+  nextAction?: string;       // 다음 액션
+  note?: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RndDailyLog {
+  id: string;
+  date: string;              // YYYY-MM-DD
+  author: string;
+  itemId: string;
+  workContent: string;       // 금일 작업 내용
+  resultIssue?: string;      // 결과 / 이슈
+  nextPlan?: string;         // 익일 계획
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RndWeeklyReport {
+  id: string;
+  periodStart: string;       // YYYY-MM-DD
+  periodEnd: string;         // YYYY-MM-DD
+  itemId: string;
+  progressNote: string;      // 금주 진행 사항
+  issueRisk?: string;        // 이슈 / 리스크
+  nextWeekPlan?: string;     // 차주 계획
+  supportRequest?: string;   // 지원 요청 사항
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RndMonthlyPlan {
+  id: string;
+  month: string;             // YYYY-MM
+  title: string;             // 품목 / 과제 (자유 입력)
+  assignee?: string;
+  monthGoal?: string;
+  weekPlans: string[];       // W1~W5
+  targetDate?: string;
+  note?: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
 // 태스크 템플릿 (salesDb: task_templates)
 // ==========================================
 export type TaskInputType = 'check' | 'text' | 'number' | 'date';

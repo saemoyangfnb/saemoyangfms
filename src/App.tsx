@@ -36,6 +36,7 @@ const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: 
 const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
 const WorkMapView = lazy(() => import('./components/WorkMapView').then(m => ({ default: m.WorkMapView })));
 const FactoryView = lazy(() => import('./components/FactoryView').then(m => ({ default: m.FactoryView })));
+const RndView = lazy(() => import('./components/RndView').then(m => ({ default: m.RndView })));
 const StoreMgmtView = lazy(() => import('./components/store/StoreMgmtView').then(m => ({ default: m.StoreMgmtView })));
 const StoreMindmapView = lazy(() => import('./components/StoreMindmapView').then(m => ({ default: m.StoreMindmapView })));
 const MyWorkspaceView = lazy(() => import('./components/MyWorkspaceView').then(m => ({ default: m.MyWorkspaceView })));
@@ -51,7 +52,7 @@ import {
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, ArrowLeft, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
-  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search,
+  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search, FlaskConical,
 } from 'lucide-react';
 import { GlobalSearch } from './components/GlobalSearch';
 import { OnboardingTour } from './components/OnboardingTour';
@@ -78,7 +79,7 @@ const SECTION_GROUP: Record<string, string> = {
 };
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'storeforms' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory' | 'store_mgmt';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'storeforms' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory' | 'store_mgmt' | 'rnd';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1537,6 +1538,7 @@ export default function App() {
                 { section: 'meetings' as SidebarSection, icon: <NotebookPen size={13} />,   label: '회의록',      badge: null },
                 { section: 'reports'  as SidebarSection, icon: <ClipboardList size={13} />, label: '결재보고센터', badge: pendingApprovalCount > 0 ? pendingApprovalCount : null },
                 { section: 'factory'  as SidebarSection, icon: <Package size={13} />,       label: '제조실',      badge: null },
+                { section: 'rnd'      as SidebarSection, icon: <FlaskConical size={13} />,  label: 'R&D 관리대장', badge: null },
               ],
             },
             {
@@ -1898,6 +1900,11 @@ export default function App() {
           {/* 제조실 */}
           {sidebar.section === 'factory' && (
             <FactoryView currentUser={currentUser} />
+          )}
+
+          {/* R&D 관리대장 */}
+          {sidebar.section === 'rnd' && (
+            <RndView currentUser={currentUser} />
           )}
 
           {/* OKR & KPI */}
