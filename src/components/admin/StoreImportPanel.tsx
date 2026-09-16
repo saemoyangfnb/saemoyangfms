@@ -6,7 +6,7 @@ import { Store, FranchiseSchedule } from '../../types';
 import { Upload, CheckCircle2, AlertCircle, Info, Eye, RefreshCw } from 'lucide-react';
 import { useToast } from '../Toast';
 import { StoreMappingModal } from './StoreMappingModal';
-import { fetchAllStores, mapFcdaumStore } from '../../fcdaum';
+import { fetchAllStores, mapFcdaumStore, normalizeStoreNo } from '../../fcdaum';
 import { normalizeStoreRegion } from '../../storeRegion';
 
 interface ParsedRow {
@@ -43,7 +43,7 @@ interface PreviewRow {
 function buildStoreNoMap(existingMap: Map<string, Store>): Map<string, Store> {
   const map = new Map<string, Store>();
   existingMap.forEach(store => {
-    const key = store.storeNo || (/^\d+$/.test(store.id) ? store.id : '');
+    const key = normalizeStoreNo(store.storeNo || (/^\d+$/.test(store.id) ? store.id : ''));
     if (key) map.set(key, store);
   });
   return map;
@@ -70,7 +70,7 @@ function parseRows(sheet: XLSX.WorkSheet): ParsedRow[] {
     return {
       id,
       storeCode: String(r['매장코드'] || '').trim(),
-      storeNo: id,
+      storeNo: normalizeStoreNo(id),
       name: String(r['매장명'] || '').trim(),
       region: normalizeStoreRegion(String(r['지역'] || '').trim()),
       address: String(r['주소'] || '').trim(),

@@ -110,7 +110,10 @@ export async function fetchAllStores(): Promise<FcdaumStore[]> {
   if (storesFetch) return storesFetch;
   storesFetch = apiFetch('store-and-user')
     .then(data => {
-      const stores: FcdaumStore[] = data.stores ?? [];
+      const raw: FcdaumStore[] = data.stores ?? [];
+      // storeNo 기준 중복 제거 (qsc/report 등과 동일하게 API 응답 자체에 중복이 섞여 올 수 있음)
+      const seen = new Set<number>();
+      const stores = raw.filter(s => (seen.has(s.storeNo) ? false : (seen.add(s.storeNo), true)));
       storesCache = { data: stores, at: Date.now() };
       return stores;
     })
@@ -254,6 +257,15 @@ export async function fetchQscReportsPerStore(
   return { reports, failedStoreIds };
 }
 
+// storeNo 비교용 정규화 — 엑셀 관리번호가 텍스트 서식이라 앞자리 0이 붙어도
+// ("0107471" vs 107471) 같은 매장으로 매칭되게 숫자 기준으로 통일한다.
+export function normalizeStoreNo(v: string | number): string {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const n = Number(s);
+  return Number.isFinite(n) ? String(n) : s;
+}
+
 // FC다움 → 내부 Store 포맷 변환
 export function mapFcdaumStore(s: FcdaumStore) {
   const owner = (s.storeUsers ?? []).find(u => u.authority === 'owner');
@@ -261,7 +273,7 @@ export function mapFcdaumStore(s: FcdaumStore) {
   return {
     id: s.storeId,
     storeCode: s.storeId,
-    storeNo: String(s.storeNo),
+    storeNo: normalizeStoreNo(s.storeNo),
     name: s.storeNm,
     region,
     address: s.address,

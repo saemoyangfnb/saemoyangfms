@@ -11,6 +11,7 @@ import { WorkMasterManager } from './admin/WorkMasterManager';
 import { TabBar } from './ui/Tabs';
 import { UserPermissionManager } from './admin/UserPermissionManager';
 import { StoreImportPanel } from './admin/StoreImportPanel';
+import { DuplicateStoreFinder } from './admin/DuplicateStoreFinder';
 import { EmployeeImportPanel } from './admin/EmployeeImportPanel';
 
 enum OperationType {
@@ -308,6 +309,13 @@ export const AdminPanel: React.FC<Props> = ({ onFirestoreError, ingredients, cur
               <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">매장 마스터 임포트</h2>
             </div>
             <div className="p-6"><StoreImportPanel /></div>
+          </div>
+          <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
+            <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
+              <AlertCircle className="text-stone-800 dark:text-stone-300" size={20} />
+              <h2 className="text-lg font-black tracking-tight text-stone-900 dark:text-white">중복 매장 후보 찾기</h2>
+            </div>
+            <div className="p-6"><DuplicateStoreFinder /></div>
           </div>
           <div className="bg-[#FDFBF7] dark:bg-stone-900 rounded-sm border border-stone-300 dark:border-stone-800 overflow-hidden">
             <div className="p-4 border-b-2 border-stone-800 dark:border-stone-600 bg-white dark:bg-stone-800/50 flex items-center gap-2">
