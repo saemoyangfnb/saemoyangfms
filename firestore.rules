@@ -216,5 +216,16 @@ service cloud.firestore {
       allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.uid;
       allow create:               if isAuthenticated() && request.resource.data.uid == request.auth.uid;
     }
+
+    // 온보딩 첫 주 체크리스트 진행상태 — 문서ID = uid, 본인 또는 관리자만
+    match /onboarding_progress/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+    }
+
+    // 온보딩 체크리스트 항목 구성 — 읽기: 인증, 편집: 관리자
+    match /onboarding_config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
   }
 }

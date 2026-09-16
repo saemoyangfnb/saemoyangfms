@@ -737,6 +737,7 @@ export interface SopDocument {
   deadlineDays?: number;
   requiredPersonnel?: number;
   steps: SopStep[];
+  content?: string;             // 장문 참고자료용 마크다운 본문 (절차형 steps 대신 사용 가능)
   note?: string;
   authorId: string;
   authorName: string;

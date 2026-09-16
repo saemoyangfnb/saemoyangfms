@@ -31,6 +31,7 @@ const ReportView = lazy(() => import('./components/ReportView').then(m => ({ def
 const NoticeBoard = lazy(() => import('./components/NoticeBoard').then(m => ({ default: m.NoticeBoard })));
 const DailyReportView = lazy(() => import('./components/DailyReportView').then(m => ({ default: m.DailyReportView })));
 const SopView = lazy(() => import('./components/SopView').then(m => ({ default: m.SopView })));
+const OnboardingView = lazy(() => import('./components/OnboardingView').then(m => ({ default: m.OnboardingView })));
 const ProjectsView = lazy(() => import('./components/ProjectsView').then(m => ({ default: m.ProjectsView })));
 const OKRView = lazy(() => import('./components/OKRView').then(m => ({ default: m.OKRView })));
 const CompanyInfoView = lazy(() => import('./components/CompanyInfoView').then(m => ({ default: m.CompanyInfoView })));
@@ -52,7 +53,7 @@ import {
   BarChart2, Edit2, Check, Store, TrendingUp, ShieldAlert,
   ArrowRight, ArrowLeft, Bell, Menu as MenuIcon, TriangleAlert, CalendarDays, ArrowUpRight, Sparkles, LayoutList, Zap, Eye,
   CheckSquare, FileText, History, NotebookPen, Users, Calendar, Megaphone, ClipboardList, BookOpen,
-  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search, FlaskConical,
+  Flag, GitBranch, Building2, Target, FolderKanban, Package, Type, Search, FlaskConical, GraduationCap,
 } from 'lucide-react';
 import { GlobalSearch } from './components/GlobalSearch';
 import { OnboardingTour } from './components/OnboardingTour';
@@ -73,13 +74,13 @@ enum OperationType {
 
 const SECTION_GROUP: Record<string, string> = {
   notice: 'comm', meetings: 'comm', daily: 'comm', reports: 'comm',
-  projects: 'work', okr: 'work', workmap: 'work', sop: 'work', factory: 'work', store_mgmt: 'work',
+  projects: 'work', okr: 'work', workmap: 'work', sop: 'work', factory: 'work', store_mgmt: 'work', onboarding: 'work',
   calendar: 'sch', employees: 'sch', storeforms: 'sch',
   database: 'mgmt', history: 'mgmt', admin: 'mgmt', agents: 'mgmt',
 };
 
 type CostTabType = Region | '전체보기' | '메뉴 관리' | '변동사항';
-type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'storeforms' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory' | 'store_mgmt' | 'rnd';
+type SidebarSection = 'cost' | 'sales' | 'database' | 'admin' | 'review' | 'home' | 'my' | 'agents' | 'storeforms' | 'marketing' | 'franchise' | 'meetings' | 'daily' | 'calendar' | 'notice' | 'reports' | 'employees' | 'sop' | 'history' | 'projects' | 'okr' | 'mvc' | 'brand_history' | 'company_profile' | 'workmap' | 'factory' | 'store_mgmt' | 'rnd' | 'onboarding';
 
 interface SidebarState {
   brandId: BrandId | null;
@@ -1549,6 +1550,7 @@ export default function App() {
                 { section: 'storeforms' as SidebarSection, icon: <ClipboardList size={13} />, label: '매장 폼 관리', badge: null },
                 { section: 'okr'        as SidebarSection, icon: <Target size={13} />,        label: 'OKR & KPI',   badge: null },
                 { section: 'sop'        as SidebarSection, icon: <BookOpen size={13} />,      label: '업무규정',     badge: null },
+                { section: 'onboarding' as SidebarSection, icon: <GraduationCap size={13} />, label: '온보딩',      badge: null },
               ],
             },
             {
@@ -1961,6 +1963,11 @@ export default function App() {
           {/* 업무 규정 */}
           {sidebar.section === 'sop' && (
             <SopView currentUser={currentUser} />
+          )}
+
+          {/* 온보딩 */}
+          {sidebar.section === 'onboarding' && (
+            <OnboardingView currentUser={currentUser} onOpenSop={() => navigateAndCloseMobile(null, 'sop')} />
           )}
 
           {/* 브랜드별 콘텐츠 */}

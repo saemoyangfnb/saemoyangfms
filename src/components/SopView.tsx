@@ -24,7 +24,7 @@ function scrub<T>(v: T): T {
   ) as T;
 }
 
-const DEFAULT_CATEGORIES = ['오픈 준비', '원가 관리', '식재료 발주', '직원 교육', '위생 관리', '고객 응대', '가맹 관리', '인사·채용'];
+const DEFAULT_CATEGORIES = ['오픈 준비', '원가 관리', '식재료 발주', '직원 교육', '위생 관리', '고객 응대', '가맹 관리', '인사·채용', '온보딩'];
 
 /* ── 업무규정 상세 뷰 (풀스크린) ────────────────────────── */
 function SopDetail({
@@ -102,6 +102,12 @@ function SopDetail({
           )}
         </div>
 
+        {sop.content && (
+          <div className="mb-6 pb-6 border-b border-stone-200 dark:border-stone-700">
+            <MarkdownView source={sop.content} className="text-sm text-stone-800 dark:text-stone-200" />
+          </div>
+        )}
+
         {sop.steps.length > 0 && (
           <div className="mb-6">
             <h2 className="text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-3">처리 절차</h2>
@@ -148,6 +154,7 @@ function SopEditor({
   const [deadlineDays, setDeadlineDays] = useState<string>(initial.deadlineDays != null ? String(initial.deadlineDays) : '');
   const [requiredPersonnel, setRequiredPersonnel] = useState<string>(initial.requiredPersonnel != null ? String(initial.requiredPersonnel) : '');
   const [steps, setSteps] = useState<SopStep[]>(initial.steps?.length ? initial.steps : [{ text: '' }]);
+  const [content, setContent] = useState(initial.content ?? '');
   const [note, setNote] = useState(initial.note ?? '');
   const [showCatSuggest, setShowCatSuggest] = useState(false);
 
@@ -173,6 +180,7 @@ function SopEditor({
       deadlineDays: deadlineDays ? parseInt(deadlineDays) : undefined,
       requiredPersonnel: requiredPersonnel ? parseInt(requiredPersonnel) : undefined,
       steps: steps.filter(s => s.text.trim()),
+      content: content.trim() || undefined,
       note: note.trim() || undefined,
     });
   };
@@ -231,6 +239,16 @@ function SopEditor({
             placeholder="필요 인원 (명)"
             inputMode="numeric"
             className="px-3 py-2 text-sm border border-stone-200 dark:border-stone-600 rounded-lg bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 outline-none focus:border-stone-500" />
+        </div>
+
+        <div>
+          <p className="text-xs font-black text-stone-500 dark:text-stone-400 uppercase tracking-widest mb-2">본문 (선택) — 마크다운 지원, 장문 참고자료용</p>
+          <MarkdownEditor
+            value={content}
+            onChange={setContent}
+            placeholder="절차형이 아닌 장문 문서(예: 업무 가이드, 매뉴얼)는 여기에 마크다운으로 작성하세요. 아래 처리 절차와 함께 사용해도 됩니다."
+            rows={10}
+          />
         </div>
 
         <div>
@@ -736,7 +754,7 @@ export function SopView({ currentUser }: Props) {
 
   const filtered = docs.filter(d =>
     (selectedCat === '전체' || d.category === selectedCat) &&
-    (!search || d.title.includes(search) || d.steps.some(s => s.text.includes(search)) || (d.note ?? '').includes(search))
+    (!search || d.title.includes(search) || d.steps.some(s => s.text.includes(search)) || (d.note ?? '').includes(search) || (d.content ?? '').includes(search))
   );
 
   const grouped = filtered.reduce<Record<string, SopDocument[]>>((acc, d) => {
@@ -865,7 +883,12 @@ export function SopView({ currentUser }: Props) {
                                   <Users size={9} /> {sop.requiredPersonnel}명
                                 </span>
                               )}
-                              <span className="text-[10px] text-stone-300 dark:text-stone-600">{sop.steps.length}단계</span>
+                              {sop.steps.length > 0 && (
+                                <span className="text-[10px] text-stone-300 dark:text-stone-600">{sop.steps.length}단계</span>
+                              )}
+                              {sop.steps.length === 0 && sop.content && (
+                                <span className="text-[10px] text-stone-300 dark:text-stone-600">문서</span>
+                              )}
                             </div>
                           </div>
                           <ChevronRight size={14} className="text-stone-300 dark:text-stone-600 shrink-0" />

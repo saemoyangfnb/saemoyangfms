@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-28 — Claude Code
+
+### 신입사원 온보딩 섹션 신설 (배포 완료, ⚠️ rules 콘솔 게시 필요)
+
+- 사용자 제공 온보딩 자료(`온보딩/1. 신입 배포용/`) 중 배포용 매뉴얼 4종을 SOP '온보딩' 카테고리로 이관. `SopDocument`에 `content`(장문 마크다운) 필드 신설, `.md-prose` 표 CSS 추가(표가 줄글로 보이던 버그 수정).
+- 입사 첫 주 체크리스트를 개인별 진행상태 저장 위젯으로 구현(`onboarding_progress/{uid}`), 관리자용 드래그 편집기(`OnboardingChecklistEditor`, dnd-kit) 추가 — 항목 구성 정본은 `onboarding_config/checklist`(Firestore), `onboardingContent.ts`는 seed일 뿐.
+- SOP 가져오기 버그 수정: `note` 필드에 `undefined`를 그대로 넣어 Firestore 쓰기가 조용히 전부 실패하던 문제(관리자 최초 진입 시 자동 재시도로 보완).
+- 신규 컬렉션 2개(`onboarding_progress`, `onboarding_config`) rules 추가 — **콘솔 수동 게시 필요**(CLI 403, 반복 함정). 미게시 시 체크 저장·편집 저장 모두 permission-denied.
+- `2. 관리자 전용`(계정 보안 등) 폴더는 권한 게이팅 없이 전 직원 노출 위험이라 의도적으로 미이관. 원격에 먼저 올라온 커밋(회의록/공지사항 건)과 리베이스 후 푸시(`d656e9f`).
+
+---
+
 ## 2026-07-23 — Claude Code (4차)
 
 ### Vercel 자동배포 지연 진단 (코드 변경 없음)
