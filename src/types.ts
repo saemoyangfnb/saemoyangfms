@@ -449,6 +449,7 @@ export interface Employee {
 export interface Store {
   id: string;              // 관리번호 → string 변환 (doc ID)
   storeCode: string;       // 매장코드 8자리
+  storeNo?: string;        // FC다움 storeNo (엑셀 관리번호와 동일) — 임포트 경로 간 매장 매칭용
   name: string;            // 매장명
   region: string;          // 지역
   address: string;         // 주소

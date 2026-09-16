@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { Store, User, StoreForm, StoreFormField, StoreFormEntry } from '../types';
 import { loadHiddenStoreIds } from '../storeHidden';
+import { normalizeStoreRegion } from '../storeRegion';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import {
@@ -904,7 +905,7 @@ export function StoreMindmapView({ currentUser }: Props) {
   const regionGroups = useMemo(() => {
     const map = new Map<string, Store[]>();
     stores.forEach(s => {
-      const r = s.region || '미분류';
+      const r = normalizeStoreRegion(s.region || '미분류');
       if (!map.has(r)) map.set(r, []);
       map.get(r)!.push(s);
     });

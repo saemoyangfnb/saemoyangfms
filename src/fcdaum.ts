@@ -2,6 +2,8 @@
 // API 키는 Vercel 환경 변수에서 관리 (FCDAUM_API_KEY, FCDAUM_SECRET_KEY)
 // 브라우저는 /api/fcdaum 프록시를 통해 호출 — CORS 우회
 
+import { normalizeStoreRegion } from './storeRegion';
+
 async function apiFetch(path: string, params?: Record<string, string>) {
   const url = new URL('/api/fcdaum', window.location.origin);
   url.searchParams.set('path', path);
@@ -255,10 +257,11 @@ export async function fetchQscReportsPerStore(
 // FC다움 → 내부 Store 포맷 변환
 export function mapFcdaumStore(s: FcdaumStore) {
   const owner = (s.storeUsers ?? []).find(u => u.authority === 'owner');
-  const region = (s.address ?? '').split(' ')[0] ?? '';
+  const region = normalizeStoreRegion((s.address ?? '').split(' ')[0] ?? '');
   return {
     id: s.storeId,
     storeCode: s.storeId,
+    storeNo: String(s.storeNo),
     name: s.storeNm,
     region,
     address: s.address,

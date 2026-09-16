@@ -7,10 +7,12 @@ import { Upload, CheckCircle2, AlertCircle, Info, Eye, RefreshCw } from 'lucide-
 import { useToast } from '../Toast';
 import { StoreMappingModal } from './StoreMappingModal';
 import { fetchAllStores, mapFcdaumStore } from '../../fcdaum';
+import { normalizeStoreRegion } from '../../storeRegion';
 
 interface ParsedRow {
   id: string;
   storeCode: string;
+  storeNo?: string;
   name: string;
   region: string;
   address: string;
@@ -33,6 +35,18 @@ interface PreviewRow {
   state: RowState;
   parsed: ParsedRow;
   existing?: Store;
+  targetId?: string; // storeNo로 매칭된 기존 문서의 실제 id (엑셀↔FC다움 임포트 경로 간 문서ID가 다른 경우)
+}
+
+// 기존 stores 문서들을 storeNo 기준으로도 조회할 수 있게 인덱싱.
+// storeNo 필드가 없는(과거) 문서는 문서 id 자체가 관리번호=storeNo인 경우를 fallback으로 사용.
+function buildStoreNoMap(existingMap: Map<string, Store>): Map<string, Store> {
+  const map = new Map<string, Store>();
+  existingMap.forEach(store => {
+    const key = store.storeNo || (/^\d+$/.test(store.id) ? store.id : '');
+    if (key) map.set(key, store);
+  });
+  return map;
 }
 
 function parseDate(val: unknown): string {
@@ -51,24 +65,28 @@ function parseDate(val: unknown): string {
 
 function parseRows(sheet: XLSX.WorkSheet): ParsedRow[] {
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-  return rows.map(r => ({
-    id: String(r['관리번호'] || '').trim(),
-    storeCode: String(r['매장코드'] || '').trim(),
-    name: String(r['매장명'] || '').trim(),
-    region: String(r['지역'] || '').trim(),
-    address: String(r['주소'] || '').trim(),
-    status: String(r['운영상태'] || '').trim(),
-    franchiseType: String(r['가맹/직영'] || '').trim(),
-    contractStatus: String(r['계약상태'] || '').trim(),
-    ceoName: String(r['대표자명'] || '').trim(),
-    operatorName: String(r['운영자명'] || '').trim(),
-    phone: String(r['전화번호'] || '').trim(),
-    mobile: String(r['휴대전화'] || '').trim(),
-    email: String(r['이메일'] || '').trim(),
-    openDate: parseDate(r['개점일']),
-    seatCount: Number(r['좌석수']) || undefined,
-    registeredAt: parseDate(r['등록일']),
-  })).filter(r => r.id && r.name);
+  return rows.map(r => {
+    const id = String(r['관리번호'] || '').trim();
+    return {
+      id,
+      storeCode: String(r['매장코드'] || '').trim(),
+      storeNo: id,
+      name: String(r['매장명'] || '').trim(),
+      region: normalizeStoreRegion(String(r['지역'] || '').trim()),
+      address: String(r['주소'] || '').trim(),
+      status: String(r['운영상태'] || '').trim(),
+      franchiseType: String(r['가맹/직영'] || '').trim(),
+      contractStatus: String(r['계약상태'] || '').trim(),
+      ceoName: String(r['대표자명'] || '').trim(),
+      operatorName: String(r['운영자명'] || '').trim(),
+      phone: String(r['전화번호'] || '').trim(),
+      mobile: String(r['휴대전화'] || '').trim(),
+      email: String(r['이메일'] || '').trim(),
+      openDate: parseDate(r['개점일']),
+      seatCount: Number(r['좌석수']) || undefined,
+      registeredAt: parseDate(r['등록일']),
+    };
+  }).filter(r => r.id && r.name);
 }
 
 export function StoreImportPanel() {
@@ -97,6 +115,9 @@ export function StoreImportPanel() {
       const existingSnap = await getDocs(collection(salesDb, 'stores'));
       const existingMap = new Map<string, Store>();
       existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
+      // 엑셀(관리번호)로 먼저 등록된 매장은 문서ID가 storeId와 달라 existingMap으로는 못 찾음 →
+      // storeNo(=관리번호)로도 매칭해 같은 매장을 새 문서로 중복 생성하지 않게 함
+      const existingByStoreNo = buildStoreNoMap(existingMap);
 
       // store_settings 규칙 미배포 시 빈 Set으로 진행
       let mergedIds = new Set<string>();
@@ -109,10 +130,11 @@ export function StoreImportPanel() {
       setSkippedMerged(skipped.length);
 
       const rows: PreviewRow[] = parsed.filter(p => !mergedIds.has(p.id)).map(p => {
-        const existing = existingMap.get(p.id);
+        const existing = existingMap.get(p.id) ?? (p.storeNo ? existingByStoreNo.get(p.storeNo) : undefined);
         if (!existing) return { state: 'new' as const, parsed: p };
-        const changed = existing.name !== p.name || existing.status !== p.status || existing.address !== p.address;
-        return { state: changed ? 'changed' as const : 'unchanged' as const, parsed: p, existing };
+        const changed = existing.name !== p.name || existing.status !== p.status ||
+          existing.address !== p.address || existing.region !== p.region;
+        return { state: changed ? 'changed' as const : 'unchanged' as const, parsed: p, existing, targetId: existing.id };
       });
       setPreview(rows);
       toast.success(`FC다움에서 ${parsed.length}개 매장 불러옴${noCode.length > 0 ? ` (매장코드 미발급 ${noCode.length}개 제외)` : ''}`);
@@ -136,6 +158,8 @@ export function StoreImportPanel() {
     const existingSnap = await getDocs(collection(salesDb, 'stores'));
     const existingMap = new Map<string, Store>();
     existingSnap.forEach(d => existingMap.set(d.id, { id: d.id, ...d.data() } as Store));
+    // FC다움 동기화로 먼저 생성된 매장은 문서ID가 storeId라 관리번호로는 못 찾음 → storeNo로도 매칭
+    const existingByStoreNo = buildStoreNoMap(existingMap);
     let mergedIds = new Set<string>();
     try {
       const mergedSnap = await getDoc(doc(salesDb, 'store_settings', 'merged_ids'));
@@ -146,11 +170,11 @@ export function StoreImportPanel() {
     setSkippedMerged(skipped.length);
 
     const rows: PreviewRow[] = parsed.filter(p => !mergedIds.has(p.id)).map(p => {
-      const existing = existingMap.get(p.id);
+      const existing = existingMap.get(p.id) ?? (p.storeNo ? existingByStoreNo.get(p.storeNo) : undefined);
       if (!existing) return { state: 'new' as const, parsed: p };
       const changed = existing.name !== p.name || existing.status !== p.status ||
-        existing.openDate !== p.openDate || existing.address !== p.address;
-      return { state: changed ? 'changed' as const : 'unchanged' as const, parsed: p, existing };
+        existing.openDate !== p.openDate || existing.address !== p.address || existing.region !== p.region;
+      return { state: changed ? 'changed' as const : 'unchanged' as const, parsed: p, existing, targetId: existing.id };
     });
     setPreview(rows);
     e.target.value = '';
@@ -177,7 +201,8 @@ export function StoreImportPanel() {
         } as Store;
         // undefined 제거
         const clean = Object.fromEntries(Object.entries(store).filter(([, v]) => v !== undefined));
-        batch.set(doc(salesDb, 'stores', r.parsed.id), clean, { merge: true });
+        // storeNo로 매칭된 기존 매장이면 그 문서에 병합 — 문서ID가 다른 새 문서를 만들지 않음
+        batch.set(doc(salesDb, 'stores', r.targetId ?? r.parsed.id), clean, { merge: true });
       });
       await batch.commit();
       toast.success(`${writable.length}개 매장 저장 완료`);
